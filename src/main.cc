@@ -14,7 +14,8 @@
 #include "concurrentqueue.h"
 
 // 引入市场数据结构
-#include "include/market_data_structs.h" 
+#include "include/market_data_structs.h"
+#include "include/history_data_replayer.h" 
 
 // ==========================================
 // 1. 市场数据消息类型
@@ -228,57 +229,47 @@ int main() {
     ShardedEngine engine;
     PrintStrategy s1("Trend_Follower");
 
-    // 注册策略
-    engine.register_strategy("600000.SH", &s1); // 上证指数
-    engine.register_strategy("000001.SZ", &s1); // 深证成指
+    // 注册策略 - 使用测试数据中的股票
+    engine.register_strategy("002603.SZ", &s1);
 
     engine.start();
 
-    // 模拟 4 个并发的行情推送线程
-    std::vector<std::thread> api_threads;
-    for(int i=0; i<4; ++i) {
-        api_threads.emplace_back([&engine, i](){
-            for(int j=0; j<50; ++j) {
-                // 模拟股票行情数据
-                MDStockStruct stock{};
-                std::strncpy(stock.htscsecurityid, "600000.SH", sizeof(stock.htscsecurityid) - 1);
-                stock.mddate = 20260109;
-                stock.mdtime = 93000 + j;
-                stock.lastpx = 3000000 + j * 1000;  // 价格：30.00 + j * 0.01
-                stock.totalvolumetrade = 1000000 + j * 100;
-                engine.on_market_tick(stock);
+    // 使用历史数据回放器
+    HistoryDataReplayer replayer(ShardedEngine::SHARD_COUNT);
 
-                // 模拟委托数据
-                MDOrderStruct order{};
-                std::strncpy(order.htscsecurityid, "600000.SH", sizeof(order.htscsecurityid) - 1);
-                order.mddate = 20260109;
-                order.mdtime = 93000 + j;
-                order.orderprice = 3000000 + j * 1000;
-                order.orderqty = 100 + j;
-                engine.on_market_order(order);
+    std::cout << "Loading history data files..." << std::endl;
 
-                // 模拟成交数据
-                MDTransactionStruct txn{};
-                std::strncpy(txn.htscsecurityid, "000001.SZ", sizeof(txn.htscsecurityid) - 1);
-                txn.mddate = 20260109;
-                txn.mdtime = 93000 + j;
-                txn.tradeprice = 2000000 + j * 500;
-                txn.tradeqty = 200 + j;
-                txn.trademoney = txn.tradeprice * txn.tradeqty;
-                engine.on_market_transaction(txn);
-
-                std::this_thread::sleep_for(std::chrono::microseconds(100)); // 模拟高速行情
-            }
-        });
+    if (!replayer.load_order_file("test_data/MD_ORDER_StockType_002603.SZ.csv")) {
+        std::cerr << "Failed to load order file!" << std::endl;
+        engine.stop();
+        return 1;
     }
 
-    for(auto& t : api_threads) t.join();
+    if (!replayer.load_transaction_file("test_data/MD_TRANSACTION_StockType_002603.SZ.csv")) {
+        std::cerr << "Failed to load transaction file!" << std::endl;
+        engine.stop();
+        return 1;
+    }
+
+    std::cout << "Loaded " << replayer.event_count() << " events." << std::endl;
+
+    replayer.set_order_callback([&engine](const MDOrderStruct& order) {
+        engine.on_market_order(order);
+    });
+
+    replayer.set_transaction_callback([&engine](const MDTransactionStruct& txn) {
+        engine.on_market_transaction(txn);
+    });
+
+    std::cout << "Starting replay..." << std::endl;
+    replayer.replay();  // 多线程并发回放
+    std::cout << "Replay completed." << std::endl;
 
     // 给一点时间让消费者处理完
     std::this_thread::sleep_for(std::chrono::seconds(1));
     engine.stop();
 
-    std::cout << "\n测试完成！处理了股票行情、委托和成交三种数据类型。" << std::endl;
+    std::cout << "\n测试完成！历史数据回放结束。" << std::endl;
 
     return 0;
 }
