@@ -61,25 +61,21 @@ struct MDStockStruct {
     // Channel information 只深圳有
     int32_t channelno;                    // Channel number
 
-    // Order book depth - Buy side (fixed size)
+    // Order book depth - Buy side
     int64_t buypricequeue[10];            // Buy price levels (top 10)
     int64_t buyorderqtyqueue[10];         // Buy order quantities (top 10)
 
-    // Order book depth - Sell side (fixed size)
+    // Order book depth - Sell side
     int64_t sellpricequeue[10];           // Sell price levels (top 10)
     int64_t sellorderqtyqueue[10];        // Sell order quantities (top 10)
 
-    // Order queue data (variable length)
-    int64_t* buyorderqueue;               // Buy order queue (pointer to array)
-    size_t buyorderqueue_size;            // Actual size of buy order queue
-    int64_t* sellorderqueue;              // Sell order queue (pointer to array)
-    size_t sellorderqueue_size;           // Actual size of sell order queue
+    // Order queue data (top 50)
+    int64_t buyorderqueue[50];            // Buy order queue
+    int64_t sellorderqueue[50];           // Sell order queue
 
-    // Number of orders at each level (variable length)
-    int64_t* buynumordersqueue;           // Buy number of orders queue (pointer to array)
-    size_t buynumordersqueue_size;        // Actual size of buy num orders queue
-    int64_t* sellnumordersqueue;          // Sell number of orders queue (pointer to array)
-    size_t sellnumordersqueue_size;       // Actual size of sell num orders queue
+    // Number of orders at each level (top 50)
+    int64_t buynumordersqueue[50];        // Buy number of orders queue
+    int64_t sellnumordersqueue[50];       // Sell number of orders queue
 
     // Data scaling factor
     int32_t datamultiplepowerof10;        // Data multiplier power of 10
