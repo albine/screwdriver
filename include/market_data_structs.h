@@ -101,8 +101,9 @@ struct MDOrderStruct {
     int32_t orderbsflag;                  // Buy/Sell flag
     int32_t channelno;                    // Channel number
 
-    // Order tracking 上海专有orderno 
+    // Order tracking 上海专有orderno tradedqty
     int64_t orderno;                      // Order number
+    int64_t tradedqty;                    // 已交易数量，上海专用
     // 注：applseqnum === orderindex
     int64_t applseqnum;                   // Application sequence number
 
