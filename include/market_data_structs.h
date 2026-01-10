@@ -91,7 +91,6 @@ struct MDOrderStruct {
     char htscsecurityid[40];              // Security identifier
     int32_t mddate;                       // Market data date
     int32_t mdtime;                       // Market data time
-    int64_t datatimestamp;                // Data timestamp
     int32_t securityidsource;             // Source of security ID (enum value)
 
     // Order identification and details
@@ -102,8 +101,9 @@ struct MDOrderStruct {
     int32_t orderbsflag;                  // Buy/Sell flag
     int32_t channelno;                    // Channel number
 
-    // Order tracking
+    // Order tracking 上海专有orderno 
     int64_t orderno;                      // Order number
+    // 注：applseqnum === orderindex
     int64_t applseqnum;                   // Application sequence number
 
     int32_t datamultiplepowerof10;        // Data multiplier power of 10
@@ -128,12 +128,14 @@ struct MDTransactionStruct {
     int64_t tradesellno;                  // Trade sell number
 
     // Trade details
+    int32_t tradetype;                    // trade type
     int32_t tradebsflag;                  // Buy/Sell flag
     int64_t tradeprice;                   // Trade price
     int64_t tradeqty;                     // Trade quantity
     int64_t trademoney;                   // Trade money/value
 
     // Sequence and channel
+    // 注：applseqnum === tradeindex
     int64_t applseqnum;                   // Application sequence number
     int32_t channelno;                    // Channel number
 

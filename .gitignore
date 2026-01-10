@@ -1,0 +1,8 @@
+venv/
+
+# Binary files
+*.o
+*.so
+*.a
+engine
+fastfish
