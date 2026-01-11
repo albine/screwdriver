@@ -14,9 +14,12 @@
 #include "concurrentqueue.h"
 
 // 引入市场数据结构
-#include "include/market_data_structs.h"
-#include "include/history_data_replayer.h"
-#include "src/FastOrderBook.h" 
+#include "market_data_structs.h"
+#include "history_data_replayer.h"
+#include "../src/FastOrderBook.h"
+
+// 引入日志模块
+#include "logger.h" 
 
 // ==========================================
 // 1. 市场数据消息类型
@@ -231,6 +234,14 @@ private:
 // 5. 测试入口
 // ==========================================
 int main() {
+    // 初始化日志系统
+    hft::logger::LogConfig log_config;
+    log_config.log_dir = "logs";
+    log_config.log_file = "trading.log";
+    log_config.console_output = true;
+    log_config.use_rdtsc = true;
+    auto* logger = hft::logger::init(log_config);
+
     ShardedEngine engine;
     PrintStrategy strategy("DemoStrat");
 
@@ -238,13 +249,13 @@ int main() {
     std::string symbol = "002603.SZ";
     engine.register_strategy(symbol, &strategy);
 
-    std::cout << "Starting engine..." << std::endl;
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting engine...");
     engine.start();
 
     // 回放数据
     HistoryDataReplayer replayer(1);
-    std::cout << "Loading data..." << std::endl;
-    
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Loading data...");
+
     // 注意：确保 test_data 目录下有对应文件
     replayer.load_order_file("test_data/MD_ORDER_StockType_002603.SZ.csv");
     replayer.load_transaction_file("test_data/MD_TRANSACTION_StockType_002603.SZ.csv");
@@ -256,14 +267,16 @@ int main() {
         engine.on_market_transaction(txn);
     });
 
-    std::cout << "Replaying " << replayer.event_count() << " events..." << std::endl;
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Replaying {} events...", replayer.event_count());
     replayer.replay();
 
     // 等待队列排空 (简单的 sleep 演示，生产环境应用 latch 或 callback)
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    std::cout << "Stopping engine..." << std::endl;
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Stopping engine...");
     engine.stop();
 
+    // 关闭日志系统
+    hft::logger::shutdown();
     return 0;
 }
