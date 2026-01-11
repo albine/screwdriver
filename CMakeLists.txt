@@ -35,3 +35,14 @@ target_link_libraries(test_logger
     Threads::Threads
     quill::quill
 )
+
+# FastOrderBook历史数据回放测试
+add_executable(test_fastorderbook
+    test_fastorderbook.cpp
+    src/FastOrderBook.cpp
+)
+target_include_directories(test_fastorderbook PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_fastorderbook
+    Threads::Threads
+    quill::quill
+)

@@ -1,5 +1,6 @@
 #include "FastOrderBook.h"
 #include <cstring>         // for memset if needed
+#include <algorithm>       // for std::find
 
 // 日志模块
 #include "logger.h"
@@ -165,6 +166,9 @@ bool FastOrderBook::update_volume_internal(uint64_t seq, uint32_t delta_vol) {
     // 2. 扣减量
     if (node.volume < delta_vol) {
          // 异常情况：成交量大于剩余量
+         LOG_M_ERROR(hft::logger::get_logger(),
+             "Volume underflow! seq={}, node.volume={}, delta_vol={}, price={}, side={}",
+             seq, node.volume, delta_vol, node.sort_price, static_cast<int>(node.side));
          node.volume = 0; 
     } else {
         node.volume -= delta_vol;
@@ -196,19 +200,33 @@ bool FastOrderBook::update_volume_internal(uint64_t seq, uint32_t delta_vol) {
         uint32_t lvl_idx = node.sort_price - min_price_;
         
         if (node.side == Side::Buy) {
-            if ((int32_t)lvl_idx == best_bid_idx_ && lvl_ptr->total_volume == 0) {
-                update_best_bid_cursor(); // 触发线性扫描
+            if ((int32_t)lvl_idx == best_bid_idx_) {
+                // 检查该档位是否还有买单
+                bool has_bid = (lvl_ptr->head_order_idx != -1) &&
+                               (pool_.get(lvl_ptr->head_order_idx).side == Side::Buy);
+                if (!has_bid) {
+                    update_best_bid_cursor(); // 触发线性扫描
+                }
             }
         } else {
-            if ((int32_t)lvl_idx == best_ask_idx_ && lvl_ptr->total_volume == 0) {
-                update_best_ask_cursor(); // 触发线性扫描
+            if ((int32_t)lvl_idx == best_ask_idx_) {
+                // 检查该档位是否还有卖单
+                bool has_ask = (lvl_ptr->head_order_idx != -1) &&
+                               (pool_.get(lvl_ptr->head_order_idx).side == Side::Sell);
+                if (!has_ask) {
+                    update_best_ask_cursor(); // 触发线性扫描
+                }
             }
         }
     } 
     else if (node.type == OrderType::Market) {
-        // 市价单移除逻辑 (Lazy delete 策略：在 vector 中标记或交换删除)
-        // 这里为了简化演示，假设有一个 remove_from_market_vec 函数
-        // remove_from_market_vec(node_idx);
+        // 市价单移除逻辑：从 market_orders_ vector 中移除
+        auto it = std::find(market_orders_.begin(), market_orders_.end(), node_idx);
+        if (it != market_orders_.end()) {
+            // swap-and-pop 策略：O(1) 删除，不保持顺序
+            *it = market_orders_.back();
+            market_orders_.pop_back();
+        }
     }
 
     // 6. 回收资源
@@ -267,8 +285,13 @@ void FastOrderBook::update_best_bid_cursor() {
     // 只有当 best_bid_idx 指向的 Level 空了才调用这里
     // 买盘：价格从高向低扫
     while (best_bid_idx_ >= 0) {
-        if (levels_[best_bid_idx_].total_volume > 0) {
-            return; // 找到了新的支撑位
+        const Level& lvl = levels_[best_bid_idx_];
+        // 检查该档位是否有买单（通过链表头节点的方向判断）
+        if (lvl.total_volume > 0 && lvl.head_order_idx != -1) {
+            const OrderNode& head = pool_.get(lvl.head_order_idx);
+            if (head.side == Side::Buy) {
+                return; // 找到了新的支撑位
+            }
         }
         best_bid_idx_--;
     }
@@ -280,8 +303,13 @@ void FastOrderBook::update_best_ask_cursor() {
     // 注意边界检查
     int32_t max_idx = (int32_t)levels_.size() - 1;
     while (best_ask_idx_ <= max_idx && best_ask_idx_ != -1) {
-        if (levels_[best_ask_idx_].total_volume > 0) {
-            return; // 找到了新的压力位
+        const Level& lvl = levels_[best_ask_idx_];
+        // 检查该档位是否有卖单（通过链表头节点的方向判断）
+        if (lvl.total_volume > 0 && lvl.head_order_idx != -1) {
+            const OrderNode& head = pool_.get(lvl.head_order_idx);
+            if (head.side == Side::Sell) {
+                return; // 找到了新的压力位
+            }
         }
         best_ask_idx_++;
     }
@@ -327,6 +355,49 @@ uint64_t FastOrderBook::get_ask_volume_in_range(uint32_t start_price, uint32_t e
     }
     
     return total;
+}
+
+// 获取买盘前N档 (价格从高到低)
+std::vector<std::pair<uint32_t, uint64_t>> FastOrderBook::get_bid_levels(int n) const {
+    std::vector<std::pair<uint32_t, uint64_t>> result;
+    result.reserve(n);
+
+    // 从 best_bid_idx_ 开始向下扫描
+    int32_t idx = best_bid_idx_;
+    while (idx >= 0 && (int)result.size() < n) {
+        const Level& lvl = levels_[idx];
+        // 检查该档位是否有买单
+        if (lvl.total_volume > 0 && lvl.head_order_idx != -1) {
+            const OrderNode& head = pool_.get(lvl.head_order_idx);
+            if (head.side == Side::Buy) {
+                result.emplace_back(min_price_ + idx, lvl.total_volume);
+            }
+        }
+        idx--;
+    }
+    return result;
+}
+
+// 获取卖盘前N档 (价格从低到高)
+std::vector<std::pair<uint32_t, uint64_t>> FastOrderBook::get_ask_levels(int n) const {
+    std::vector<std::pair<uint32_t, uint64_t>> result;
+    result.reserve(n);
+
+    int32_t max_idx = (int32_t)levels_.size() - 1;
+    // 从 best_ask_idx_ 开始向上扫描
+    int32_t idx = best_ask_idx_;
+    while (idx >= 0 && idx <= max_idx && (int)result.size() < n) {
+        const Level& lvl = levels_[idx];
+        // 检查该档位是否有卖单
+        if (lvl.total_volume > 0 && lvl.head_order_idx != -1) {
+            const OrderNode& head = pool_.get(lvl.head_order_idx);
+            if (head.side == Side::Sell) {
+                result.emplace_back(min_price_ + idx, lvl.total_volume);
+            }
+        }
+        idx++;
+    }
+    return result;
 }
 
 Level* FastOrderBook::get_level_ptr(uint32_t price) {

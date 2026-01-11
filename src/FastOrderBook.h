@@ -117,6 +117,10 @@ public:
     // 计算价格区间内的累积挂单量 (用于打板策略，极速数组扫描)
     uint64_t get_ask_volume_in_range(uint32_t start_price, uint32_t end_price) const;
 
+    // 获取买卖N档数据 (价格, 量)
+    std::vector<std::pair<uint32_t, uint64_t>> get_bid_levels(int n) const;
+    std::vector<std::pair<uint32_t, uint64_t>> get_ask_levels(int n) const;
+
 private:
     // --------------------------------------------------------
     // 内部数据成员

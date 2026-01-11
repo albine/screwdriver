@@ -173,8 +173,10 @@ private:
         order.orderqty = extract_int_value(line, "OrderQty");
         order.orderbsflag = static_cast<int32_t>(extract_int_value(line, "OrderBSFlag"));
         order.channelno = static_cast<int32_t>(extract_int_value(line, "ChannelNo"));
+        order.orderno = extract_int_value(line, "OrderNO");
         order.applseqnum = extract_int_value(line, "ApplSeqNum");
         order.datamultiplepowerof10 = static_cast<int32_t>(extract_int_value(line, "DataMultiplePowerOf10"));
+        order.tradedqty = extract_int_value(line, "TradedQty");
 
         return true;
     }
