@@ -1,9 +1,9 @@
-#include "FastOrderBook.h" 
-#include <iostream>
+#include "FastOrderBook.h"
 #include <cstring>         // for memset if needed
 
-// 简单的日志宏，生产环境请替换为异步高性能日志(如 spdlog)
-#define LOG_ERROR(msg) std::cerr << "[ERROR] " << msg << std::endl
+// 日志模块
+#include "logger.h"
+#define LOG_MODULE MOD_ORDERBOOK
 
 // 确保价格在合法范围内
 #define CHECK_PRICE_RANGE(p) \
@@ -42,22 +42,23 @@ FastOrderBook::FastOrderBook(uint32_t code, ObjectPool<OrderNode>& pool, uint32_
 bool FastOrderBook::on_order(const MDOrderStruct& order) {
     // 映射 MDOrderStruct.ordertype 到内部 OrderType
     // 约定 (基于 OrderBook.cpp): 1=Market, 2=Limit, 3=Best, 4=Cancel
+    // 注意：使用orderno作为订单唯一标识，因为成交回报中使用orderno
     switch (order.ordertype) {
         case 1: // Market Order
-            return add_order(order.applseqnum, OrderType::Market, 
-                             (order.orderbsflag == 1 ? Side::Buy : Side::Sell), 
+            return add_order(order.orderno, OrderType::Market,
+                             (order.orderbsflag == 1 ? Side::Buy : Side::Sell),
                              (uint32_t)order.orderprice, (uint32_t)order.orderqty);
         case 2: // Limit Order
-            return add_order(order.applseqnum, OrderType::Limit, 
-                             (order.orderbsflag == 1 ? Side::Buy : Side::Sell), 
+            return add_order(order.orderno, OrderType::Limit,
+                             (order.orderbsflag == 1 ? Side::Buy : Side::Sell),
                              (uint32_t)order.orderprice, (uint32_t)order.orderqty);
         case 3: // Best Order
-            return add_order(order.applseqnum, OrderType::Best, 
-                             (order.orderbsflag == 1 ? Side::Buy : Side::Sell), 
+            return add_order(order.orderno, OrderType::Best,
+                             (order.orderbsflag == 1 ? Side::Buy : Side::Sell),
                              (uint32_t)order.orderprice, (uint32_t)order.orderqty);
         case 4:  // Cancel (Standard)
         case 10: // ShanghaiCancel
-            return cancel_order(order.applseqnum, (uint32_t)order.orderqty);
+            return cancel_order(order.orderno, (uint32_t)order.orderqty);
         default:
             return false;
     }
@@ -67,7 +68,7 @@ bool FastOrderBook::add_order(uint64_t seq, OrderType type, Side side, uint32_t 
     // 1. 从内存池申请节点 (Zero Allocation)
     int32_t node_idx = pool_.alloc();
     if (node_idx < 0) {
-        LOG_ERROR("Memory pool exhausted!");
+        LOG_M_ERROR(hft::logger::get_logger(), "Memory pool exhausted!");
         return false;
     }
 
@@ -368,7 +369,7 @@ bool FastOrderBook::on_transaction(const MDTransactionStruct& txn) {
         // 买方主动成交：只更新卖方订单
         // 如果 tradebuyno 对应委托存在，报错
         if (order_index_.find(txn.tradebuyno) != order_index_.end()) {
-            LOG_ERROR("Shanghai trade: tradebuyno should not exist when bsflag is Buy");
+            LOG_M_ERROR(hft::logger::get_logger(), "Shanghai trade: tradebuyno should not exist when bsflag is Buy");
         }
         result = update_volume_internal(txn.tradesellno, (uint32_t)txn.tradeqty);
     }
@@ -376,7 +377,7 @@ bool FastOrderBook::on_transaction(const MDTransactionStruct& txn) {
         // 卖方主动成交：只更新买方订单
         // 如果 tradesellno 对应委托存在，报错
         if (order_index_.find(txn.tradesellno) != order_index_.end()) {
-            LOG_ERROR("Shanghai trade: tradesellno should not exist when bsflag is Sell");
+            LOG_M_ERROR(hft::logger::get_logger(), "Shanghai trade: tradesellno should not exist when bsflag is Sell");
         }
         result = update_volume_internal(txn.tradebuyno, (uint32_t)txn.tradeqty);
     }
