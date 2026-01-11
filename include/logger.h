@@ -47,6 +47,31 @@ namespace logger {
 #define MOD_GATEWAY   "Gateway"
 #define MOD_MARKET    "Market"
 
+// ============ 业务日志类型标识（4字符固定宽度） ============
+#define BIZ_SESS "SESS"  // 会话（登录/登出/心跳）
+#define BIZ_ORDR "ORDR"  // 下单
+#define BIZ_FILL "FILL"  // 成交回报
+#define BIZ_CNCL "CNCL"  // 撤单
+#define BIZ_RJCT "RJCT"  // 拒绝
+#define BIZ_POSN "POSN"  // 持仓变化
+#define BIZ_ACCT "ACCT"  // 账户/资金
+
+// 业务日志宏
+#define LOG_BIZ(logger, type, fmt, ...) \
+    LOG_INFO(logger, "[" type "] " fmt, ##__VA_ARGS__)
+
+// ============ 文件级模块日志宏 ============
+// 使用方法：在.cpp文件任意位置定义 LOG_MODULE，然后使用 LOG_M_* 宏
+// 例如：
+//   #include "logger.h"
+//   #define LOG_MODULE MOD_ORDERBOOK
+//   LOG_M_INFO(logger, "price={}", 100);  // 输出: [OrderBook] price=100
+//
+#define LOG_M_DEBUG(logger, fmt, ...)   LOG_MODULE_DEBUG(logger, LOG_MODULE, fmt, ##__VA_ARGS__)
+#define LOG_M_INFO(logger, fmt, ...)    LOG_MODULE_INFO(logger, LOG_MODULE, fmt, ##__VA_ARGS__)
+#define LOG_M_WARNING(logger, fmt, ...) LOG_MODULE_WARNING(logger, LOG_MODULE, fmt, ##__VA_ARGS__)
+#define LOG_M_ERROR(logger, fmt, ...)   LOG_MODULE_ERROR(logger, LOG_MODULE, fmt, ##__VA_ARGS__)
+
 /**
  * @brief 日志配置参数
  */
@@ -77,13 +102,20 @@ inline quill::Logger* init(const LogConfig& config = LogConfig{}) {
     // RDTSC重同步间隔（默认500ms）
     backend_options.rdtsc_resync_interval = std::chrono::milliseconds{500};
 
+    // 自定义日志等级名称（统一4字符）
+    // 索引: 0=TRACE_L3, 1=TRACE_L2, 2=TRACE_L1, 3=DEBUG, 4=INFO, 5=NOTICE, 6=WARNING, 7=ERROR, 8=CRITICAL, 9=BACKTRACE, 10=NONE, 11=DYNAMIC
+    backend_options.log_level_descriptions[3] = "DBUG";  // DEBUG -> DBUG
+    backend_options.log_level_descriptions[4] = "INFO";  // INFO (保持)
+    backend_options.log_level_descriptions[6] = "WARN";  // WARNING -> WARN
+    backend_options.log_level_descriptions[7] = "ERR!";  // ERROR -> ERR!
+
     // 启动后台线程
     quill::Backend::start(backend_options);
 
     // 日志格式：纳秒精度时间戳 + 等级 + 线程ID + 消息
-    // 格式: 2025-01-11 09:30:00.123456789 [INFO ] [12345] message
+    // 格式: 2025-01-11 09:30:00.123456789 [INFO] [12345] message
     std::string pattern =
-        "%(time) [%(log_level:<7)] [%(thread_id)] %(message)";
+        "%(time) [%(log_level)] [%(thread_id)] %(message)";
     std::string time_format = "%Y-%m-%d %H:%M:%S.%Qns";  // 纳秒精度
 
     std::vector<std::shared_ptr<quill::Sink>> sinks;
@@ -140,6 +172,76 @@ inline void flush() {
 inline void shutdown() {
     flush();
     quill::Backend::stop();
+}
+
+// ============ 业务日志器 ============
+
+/**
+ * @brief 业务日志配置参数
+ */
+struct BizLogConfig {
+    std::string log_dir = "logs";              // 日志目录
+    std::string log_file = "business.log";     // 业务日志文件名
+    size_t max_file_size = 100 * 1024 * 1024;  // 单文件最大100MB
+    size_t max_backup_files = 10;              // 最多保留10个备份
+    bool console_output = false;               // 业务日志默认不输出到控制台
+};
+
+/**
+ * @brief 初始化业务日志器
+ *
+ * @param config 业务日志配置
+ * @return quill::Logger* 业务日志器指针
+ *
+ * 业务日志独立于程序日志，用于记录：
+ * - 登录/登出
+ * - 下单/撤单
+ * - 成交回报
+ * - 持仓/资金变化
+ */
+inline quill::Logger* init_biz(const BizLogConfig& config = BizLogConfig{}) {
+    // 业务日志格式：纳秒精度时间戳 + 消息（不需要日志等级和线程ID）
+    // 格式: 2025-01-11 09:30:00.123456789 [ORDR] 下单 id=1001 ...
+    std::string pattern = "%(time) %(message)";
+    std::string time_format = "%Y-%m-%d %H:%M:%S.%Qns";
+
+    std::vector<std::shared_ptr<quill::Sink>> sinks;
+
+    // 控制台输出（可选）
+    if (config.console_output) {
+        auto console_sink = quill::Frontend::create_or_get_sink<quill::ConsoleSink>("biz_console");
+        sinks.push_back(console_sink);
+    }
+
+    // 文件轮转输出
+    std::string log_path = config.log_dir + "/" + config.log_file;
+    quill::RotatingFileSinkConfig file_config;
+    file_config.set_open_mode('w');
+    file_config.set_filename_append_option(quill::FilenameAppendOption::StartDateTime);
+    file_config.set_rotation_max_file_size(config.max_file_size);
+    file_config.set_max_backup_files(static_cast<uint32_t>(config.max_backup_files));
+
+    auto file_sink = quill::Frontend::create_or_get_sink<quill::RotatingFileSink>(
+        log_path,
+        file_config
+    );
+    sinks.push_back(file_sink);
+
+    // 创建业务日志器
+    quill::Logger* biz_logger = quill::Frontend::create_or_get_logger(
+        "biz",
+        std::move(sinks),
+        quill::PatternFormatterOptions{pattern, time_format}
+    );
+
+    return biz_logger;
+}
+
+/**
+ * @brief 获取业务日志器
+ */
+inline quill::Logger* get_biz_logger() {
+    return quill::Frontend::get_logger("biz");
 }
 
 }  // namespace logger

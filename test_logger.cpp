@@ -29,6 +29,33 @@ int main() {
     LOG_MODULE_WARNING(logger, MOD_STRATEGY, "Latency spike detected, latency_ns={}", 1500);
     LOG_MODULE_ERROR(logger, MOD_GATEWAY, "Connection failed, reason={}", "timeout");
 
+    // ============ 测试业务日志 ============
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Initializing business logger...");
+
+    // 初始化业务日志（输出到独立文件，同时输出到控制台方便测试）
+    hft::logger::BizLogConfig biz_config;
+    biz_config.log_dir = "logs";
+    biz_config.log_file = "business.log";
+    biz_config.console_output = true;  // 测试时输出到控制台
+    auto* biz_logger = hft::logger::init_biz(biz_config);
+
+    // 模拟业务流程
+    LOG_BIZ(biz_logger, BIZ_SESS, "登录成功 account={} broker={}", "12345", "中信证券");
+    LOG_BIZ(biz_logger, BIZ_ACCT, "资金查询 available={} frozen={}", 1000000.50, 50000.00);
+    LOG_BIZ(biz_logger, BIZ_ORDR, "下单 id={} symbol={} side={} price={} qty={}",
+            1001, "000001.SZ", "BUY", 10.50, 1000);
+    LOG_BIZ(biz_logger, BIZ_FILL, "成交 id={} filled_qty={} filled_price={} status={}",
+            1001, 500, 10.50, "PARTIAL");
+    LOG_BIZ(biz_logger, BIZ_FILL, "成交 id={} filled_qty={} filled_price={} status={}",
+            1001, 500, 10.50, "FILLED");
+    LOG_BIZ(biz_logger, BIZ_ORDR, "下单 id={} symbol={} side={} price={} qty={}",
+            1002, "600000.SH", "SELL", 8.88, 2000);
+    LOG_BIZ(biz_logger, BIZ_RJCT, "拒绝 id={} reason={}", 1002, "insufficient_position");
+    LOG_BIZ(biz_logger, BIZ_CNCL, "撤单 id={} canceled_qty={}", 1003, 500);
+    LOG_BIZ(biz_logger, BIZ_POSN, "持仓变化 symbol={} qty={} avg_cost={}",
+            "000001.SZ", 1000, 10.50);
+    LOG_BIZ(biz_logger, BIZ_SESS, "登出 account={}", "12345");
+
     // 测试高频日志（模拟HFT场景）
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting HFT simulation...");
     auto start = std::chrono::high_resolution_clock::now();
