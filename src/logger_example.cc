@@ -1,9 +1,14 @@
 /**
  * @file logger_example.cc
- * @brief HFT Logger 使用示例
+ * @brief HFT Logger 使用示例 (基于 Quill)
  *
- * 编译: cmake --build build
- * 运行: ./build/logger_example
+ * 编译:
+ *   mkdir -p build && cd build
+ *   cmake ..
+ *   make logger_example
+ *
+ * 运行:
+ *   ./build/logger_example
  */
 
 #include <iostream>
@@ -18,8 +23,8 @@
 void process_market_data(const MDStockStruct& stock) {
     TRACK_LATENCY("process_market_data");
 
-    LOG_DEBUGF(hft::LogCategory::MARKET_DATA,
-        "Received tick: %s price=%ld vol=%ld",
+    LOG_DEBUG(hft::LogCategory::MARKET_DATA,
+        "Received tick: {} price={} vol={}",
         stock.htscsecurityid, stock.lastpx, stock.totalvolumetrade);
 
     // 模拟处理延迟
@@ -30,22 +35,22 @@ void process_market_data(const MDStockStruct& stock) {
 void send_order(const char* symbol, int64_t price, int64_t qty, bool is_buy) {
     TRACK_LATENCY("send_order");
 
-    LOG_INFOF(hft::LogCategory::ORDER,
-        "Sending %s order: %s @ %ld x %ld",
+    LOG_INFO(hft::LogCategory::ORDER,
+        "Sending {} order: {} @ {} x {}",
         is_buy ? "BUY" : "SELL", symbol, price, qty);
 
     // 模拟网络延迟
     std::this_thread::sleep_for(std::chrono::microseconds(50));
 
-    LOG_INFOF(hft::LogCategory::ORDER,
-        "Order sent successfully: %s", symbol);
+    LOG_INFO(hft::LogCategory::ORDER,
+        "Order sent successfully: {}", symbol);
 }
 
 // 模拟风控检查
 bool check_risk(const char* symbol, int64_t qty) {
     if (qty > 10000) {
-        LOG_WARNINGF(hft::LogCategory::RISK,
-            "Order quantity %ld exceeds limit for %s", qty, symbol);
+        LOG_WARNING(hft::LogCategory::RISK,
+            "Order quantity {} exceeds limit for {}", qty, symbol);
         return false;
     }
     return true;
@@ -53,8 +58,8 @@ bool check_risk(const char* symbol, int64_t qty) {
 
 // 模拟策略执行
 void strategy_worker(int strategy_id) {
-    LOG_INFOF(hft::LogCategory::STRATEGY,
-        "Strategy %d started", strategy_id);
+    LOG_INFO(hft::LogCategory::STRATEGY,
+        "Strategy {} started", strategy_id);
 
     for (int i = 0; i < 10; ++i) {
         // 模拟接收行情
@@ -76,8 +81,8 @@ void strategy_worker(int strategy_id) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    LOG_INFOF(hft::LogCategory::STRATEGY,
-        "Strategy %d finished", strategy_id);
+    LOG_INFO(hft::LogCategory::STRATEGY,
+        "Strategy {} finished", strategy_id);
 }
 
 // 演示不同日志级别
@@ -88,23 +93,30 @@ void demonstrate_log_levels() {
     LOG_INFO(hft::LogCategory::SYSTEM, "This is an INFO message - normal operation");
     LOG_WARNING(hft::LogCategory::SYSTEM, "This is a WARNING message - non-fatal issue");
     LOG_ERROR(hft::LogCategory::SYSTEM, "This is an ERROR message - requires attention");
+    LOG_CRITICAL(hft::LogCategory::SYSTEM, "This is a CRITICAL message - system failure");
 }
 
 // 演示格式化日志
 void demonstrate_formatted_logging() {
-    std::cout << "\n=== 演示格式化日志 ===\n" << std::endl;
+    std::cout << "\n=== 演示格式化日志 (fmtlib 风格) ===\n" << std::endl;
 
     const char* symbol = "600000.SH";
     int64_t price = 1234567;  // 123.4567
     int64_t quantity = 1000;
     double latency_us = 45.678;
 
-    LOG_INFOF(hft::LogCategory::TRADE,
-        "Trade executed: %s @ %ld x %ld, latency=%.2fus",
+    // Quill 使用 fmtlib 风格的格式化
+    LOG_INFO(hft::LogCategory::TRADE,
+        "Trade executed: {} @ {} x {}, latency={:.2f}us",
         symbol, price, quantity, latency_us);
 
-    LOG_DEBUGF(hft::LogCategory::NETWORK,
-        "Connection established: host=%s port=%d", "192.168.1.100", 8080);
+    LOG_DEBUG(hft::LogCategory::NETWORK,
+        "Connection established: host={} port={}", "192.168.1.100", 8080);
+
+    // 更多格式化示例
+    LOG_INFO(hft::LogCategory::ORDER,
+        "Order stats: success_rate={:.2%}, avg_latency={:.3f}ms",
+        0.9876, 0.123);
 }
 
 // 演示多线程日志
@@ -127,28 +139,36 @@ void demonstrate_latency_tracking() {
 
     {
         TRACK_LATENCY("fast_operation");
-        // 快速操作
+        // 快速操作 - 会记录 DEBUG 级别
         std::this_thread::sleep_for(std::chrono::microseconds(10));
     }
 
     {
+        TRACK_LATENCY("medium_operation");
+        // 中等操作 - 会记录 INFO 级别
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+    }
+
+    {
         TRACK_LATENCY("slow_operation");
-        // 慢操作会触发 WARNING
+        // 慢操作 - 会触发 WARNING
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 }
 
 int main() {
-    // 初始化日志器
-    hft::AsyncLogger::Config config;
-    config.min_level = hft::LogLevel::DEBUG;
+    // 初始化 Quill 日志器
+    hft::HftLogger::Config config;
+    config.min_level = quill::LogLevel::Debug;
     config.enable_console = true;
     config.log_file_path = "trading.log";
-    config.flush_interval_ms = 50;
+    // 自定义格式 (可选)
+    // config.log_pattern = "[%(time)] [%(log_level)] [%(logger)] %(message)";
+    // config.timestamp_pattern = "%H:%M:%S.%Qns";
 
-    hft::AsyncLogger::instance().init(config);
+    hft::init_logger(config);
 
-    LOG_INFO(hft::LogCategory::SYSTEM, "=== HFT Logger Example Started ===");
+    LOG_INFO(hft::LogCategory::SYSTEM, "=== HFT Logger Example Started (Powered by Quill) ===");
 
     // 运行各种演示
     demonstrate_log_levels();
@@ -158,7 +178,7 @@ int main() {
 
     // 演示运行时级别调整
     std::cout << "\n=== 调整日志级别为 INFO ===\n" << std::endl;
-    hft::AsyncLogger::instance().set_level(hft::LogLevel::INFO);
+    hft::HftLogger::instance().set_level(quill::LogLevel::Info);
 
     LOG_DEBUG(hft::LogCategory::SYSTEM, "This DEBUG message will NOT appear");
     LOG_INFO(hft::LogCategory::SYSTEM, "This INFO message WILL appear");
@@ -166,7 +186,7 @@ int main() {
     LOG_INFO(hft::LogCategory::SYSTEM, "=== HFT Logger Example Completed ===");
 
     // 关闭日志器（确保所有消息都被写入）
-    hft::AsyncLogger::instance().shutdown();
+    hft::shutdown_logger();
 
     std::cout << "\n日志已保存到 trading.log 文件" << std::endl;
 
