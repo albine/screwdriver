@@ -6,3 +6,7 @@ build/
 *.a
 engine
 fastfish
+build_centos7/
+logs/
+test_data/
+test_data_cleaned/

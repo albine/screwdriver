@@ -13,3 +13,11 @@ done
 1.2 git上传~/.claude/plans/rippling-jingling-otter.md
 1.3 从市价单删除的性能
 1.4 更新游标时判断链表的性能
+
+隔夜之后重新分账户的股数是怎么传的
+有碎股的必须排除掉
+
+20260113
+下载行情 script/download_market_data.sh 600759.SH
+转换成csv/xlsx script/replayer_format_to_xlsx.py 600759.SH
+

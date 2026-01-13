@@ -1,0 +1,155 @@
+0112
+
+ 修复总结
+
+  1. ✅ 修复了 StrategyEngine 的消息乱序bug
+
+  - 问题: on_market_order() 和 on_market_transaction() 各自定义了独立的 thread_local ProducerToken 数组，导致50%的消息(15,635/31,228)被乱序处理
+  - 修复: 在 strategy_engine.h:92 添加共享的 get_producer_tokens() 方法，确保所有消息使用同一个token数组
+  - 验证: test_transaction_order 显示 0 个乱序消息，OrderBook状态完全正确
+
+  2. ✅ 修复了 engine 目标编译问题
+
+  添加的include路径:
+  - fastfish/include/mdc_gateway_client/include - SDK客户端接口
+  - fastfish/include/protobuf-3.1.0/include - Protobuf头文件
+  - fastfish/src/protobuf - 生成的protobuf消息类
+
+  添加的库链接:
+  - aeron_client_shared, aeron_driver - 消息传输
+  - ACE, ACE_SSL - 网络框架
+  - protobuf - 序列化
+  - mdc_gateway_client - fastfish SDK核心库
+  - ssl, crypto - SSL/TLS支持
+
+  ABI兼容性修复:
+  - 添加 -D_GLIBCXX_USE_CXX11_ABI=0 编译选项以匹配fastfish库的ABI
+
+  3. ✅ 更新了main.cpp使用正确的fastfish SDK API
+
+  修改的API调用:
+  - MdcClientFactory::create() → ClientFactory::Instance()->CreateClient()
+  - client->SetMessageHandle() → client->RegistHandle()
+  - client->Login() → client->LoginByServiceDiscovery()
+  - client->Subscribe() → client->SubscribeByID()
+  - MdcClientFactory::destroy() → ClientFactory::Uninstance()
+
+  编译结果
+
+  ls -lh build/engine
+  -rwxr-xr-x 1 pc pc 534K Jan 12 14:23 build/engine
+
+  engine可执行文件已成功构建，可以通过配置正确的网关地址和凭证来运行实盘交易引擎。
+
+  3. 修改总结
+
+  添加的功能：
+  1. 在策略中保存最后看到的盘口快照（买卖十档）
+  2. 在 on_order 和 on_transaction 中都更新盘口数据（因为两者都会改变订单簿）
+  3. 新增 print_final_book() 方法输出收盘后的最终十档盘口
+  4. 在统计报告后自动调用显示最终盘口
+
+  运行结果验证
+
+  收盘后最终订单簿：
+  ============================================================
+  收盘后最终订单簿 (ApplSeqNum: 35842646)
+  ============================================================
+
+  --- 卖盘 (Ask) ---
+    (空)
+  ----------------------------------------
+  --- 买盘 (Bid) ---
+    买 1: 9.7900 元     8299800
+    买 2: 9.7800 元       13400
+    买 3: 9.7700 元       14500
+    买 4: 9.7600 元       16300
+    买 5: 9.7500 元       21300
+    买 6: 9.7400 元        5900
+    买 7: 9.7300 元        7500
+    买 8: 9.7200 元       13800
+    买 9: 9.7100 元       23000
+    买10: 9.7000 元      177800
+  ============================================================
+
+  与 test_fastorderbook 结果对比： ✅ 完全一致
+  - 买一价: 9.79元，量: 8,299,800
+  - 卖盘为空
+  - 所有十档价格和数量完全匹配
+
+  现在运行 ./build/test_strategy_simple 即可看到完整的收盘后十档盘口！
+
+4. 修改总结
+
+  1. 添加头文件
+
+  #include "udp_client_interface.h"
+
+  2. 主要API变更
+  原代码 (ClientInterface): ClientFactory::Instance()->CreateClient(true,
+     cert_folder.c_str())
+  新代码 (UdpClientInterface): ClientFactory::Instance()->CreateUdpClient()
+  ────────────────────────────────────────
+  原代码 (ClientInterface): client->set_handle_pool_thread_count(1)
+  新代码 (UdpClientInterface): udp_client->SetWorkPoolThreadCount(50)
+  ────────────────────────────────────────
+  原代码 (ClientInterface): client->LoginByServiceDiscovery(ip,
+     port, user, password, false, 
+    backup_list)
+  新代码 (UdpClientInterface): udp_client->LoginById(ip, port,
+     user, password, backup_list)
+  ────────────────────────────────────────
+  原代码 (ClientInterface): client->SubscribeByID(action_type,
+     &request)
+  新代码 (UdpClientInterface): udp_client->SubscribeBySourceType(interface_ip,
+     source_type.get())
+  3. 关键改动
+
+  创建UDP客户端：
+  using namespace com::htsc::mdc::udp;
+  UdpClientInterface* udp_client = ClientFactory::Instance()->CreateUdpClient();
+
+  增加interface_ip参数（UDP客户端需要）：
+  std::string interface_ip = "127.0.0.1";  // UDP客户端本地接口IP
+
+  使用SubscribeBySourceType订阅全市场数据：
+  - 订阅上海股票（XSHG）的 TICK、ORDER、TRANSACTION 数据
+  - 订阅深圳股票（XSHE）的 TICK、ORDER、TRANSACTION 数据
+
+  4. 配置参数
+
+  std::string user = "MDCBETA2000231";
+  std::string password = "F4u_+.uFse3Vy";
+  std::string ip = "221.6.6.131";
+  int port = 9242;
+  std::string interface_ip = "127.0.0.1";
+
+  5. 编译结果
+
+  -rwxr-xr-x 1 pc pc 533K Jan 12 14:44 engine
+
+  所有修改已完成，engine可执行文件已成功编译。现在使用UDP客户端连接到行情网关，可以接收全市场股票的实时数据。
+
+
+5.完美！✅ 共享库路径问题已经解决。
+
+  问题分析
+
+  原因：
+  - engine 链接的 libmdc_gateway_client.so 等库本身还依赖其他库（libaeron_client_shared.so, libACE.so等）
+  - 这些依赖库不在系统标准库路径中
+  - 虽然设置了 RUNPATH，但只对直接依赖生效，对间接依赖无效
+
+  解决方案：
+  1. ✅ 已在 CMakeLists.txt 中设置 RUNPATH（部分有效）
+  2. ✅ 创建了 run_engine.sh 脚本自动设置 LD_LIBRARY_PATH
+
+  运行方式
+
+  推荐方式（使用脚本）：
+  ./run_engine.sh
+
+  手动方式：
+  LD_LIBRARY_PATH=/home/pc/screwdriver/fastfish/libs:$LD_LIBRARY_PATH ./build/engine
+
+  现在可以正常运行engine了！程序会连接到配置的行情网关并开始接收实时市场数据。

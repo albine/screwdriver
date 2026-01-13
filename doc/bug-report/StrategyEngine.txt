@@ -1,0 +1,97 @@
+================================================================
+StrategyEngine 消息乱序Bug修复总结
+================================================================
+
+问题描述：
+---------
+test_strategy_debug 输出的 OrderBook 状态错误：
+- 买一量错误（应该是 8,299,800，实际是 17M-38M 且每次运行都不同）
+- 卖盘有残留数据（应该为空）
+- 买一价 > 卖一价（不可能的状态！）
+
+根本原因：
+---------
+strategy_engine.h 中的3个 on_market_* 方法各自定义了独立的
+`static thread_local` ProducerToken 数组：
+
+```cpp
+// ❌ 错误代码（3个方法各有自己的 token 数组）
+void on_market_tick(...) {
+    static thread_local std::array<...> tokens;  // Token数组 #1
+    ...
+}
+
+void on_market_order(...) {
+    static thread_local std::array<...> tokens;  // Token数组 #2
+    ...
+}
+
+void on_market_transaction(...) {
+    static thread_local std::array<...> tokens;  // Token数组 #3
+    ...
+}
+```
+
+这导致同一个线程针对同一个队列创建了不同的 ProducerToken。
+根据 moodycamel::ConcurrentQueue 的实现，不同 token 入队的消息
+之间不保证严格的 FIFO 顺序，即使是来自同一个线程！
+
+结果：
+- 回放线程按正确顺序调用 on_market_order() 和 on_market_transaction()
+- 但由于使用了不同的 token，消息被乱序入队
+- Worker线程以错误的顺序处理消息
+- 成交消息在对应委托之前被处理，导致 OrderBook 状态错误
+
+证据：
+-----
+1. test_data_order（直接回放，无队列）: 0个乱序消息 ✅
+2. test_transaction_order（经过队列，修复前）: 15,635个乱序消息(50%) ❌
+3. test_transaction_order（经过队列，修复后）: 0个乱序消息 ✅
+
+修复方案：
+---------
+将3个独立的 token 数组合并为一个共享的 thread_local 数组：
+
+```cpp
+// ✅ 正确代码（所有方法共享同一个 token 数组）
+std::array<...>& get_producer_tokens() {
+    static thread_local std::array<...> tokens;  // 唯一的 token 数组
+    return tokens;
+}
+
+void on_market_tick(...) {
+    auto& tokens = get_producer_tokens();
+    ...
+}
+
+void on_market_order(...) {
+    auto& tokens = get_producer_tokens();
+    ...
+}
+
+void on_market_transaction(...) {
+    auto& tokens = get_producer_tokens();
+    ...
+}
+```
+
+修复效果：
+---------
+修复前：
+- 买一: 9.79元, 量: 18,113,946 ❌
+- 卖一: 8.08元, 量: 1,900 ❌（买价>卖价，不可能！）
+- 结果每次运行都不同
+
+修复后：
+- 买一: 9.79元, 量: 8,299,800 ✅
+- 卖盘: 空 ✅
+- 结果稳定，与 test_fastorderbook 一致
+
+教训：
+-----
+使用 moodycamel::ConcurrentQueue 的 ProducerToken 时，
+如果需要保证同一线程的多个入队操作之间的 FIFO 顺序，
+必须确保它们使用同一个 Token！
+
+每个独立的 static thread_local 变量都会创建独立的实例，
+即使它们的类型和初始化代码完全相同。

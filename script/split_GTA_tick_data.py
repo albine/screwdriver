@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-将SSEL2 Tick历史数据文件拆分为逐笔委托和逐笔成交两个文件
+将国泰安的SSEL2 Tick历史数据文件拆分为逐笔委托和逐笔成交两个文件
 """
 
 import pandas as pd

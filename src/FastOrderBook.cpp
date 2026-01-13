@@ -2,20 +2,31 @@
 #include <cstring>         // for memset if needed
 #include <algorithm>       // for std::find
 
-// 日志模块
-#include "logger.h"
-#define LOG_MODULE MOD_ORDERBOOK
+// 日志模块 - 条件编译
+#ifdef USE_QUILL_LOGGER
+    #include "logger.h"
+    #define LOG_MODULE MOD_ORDERBOOK
+#else
+    // 简化版日志宏（无操作）
+    #define LOG_M_ERROR(logger, ...) do {} while(0)
+    #define LOG_MODULE_ERROR(logger, module, ...) do {} while(0)
+    namespace hft { namespace logger { inline void* get_logger() { return nullptr; } }}
+#endif
+
+// 价格档位间隔：0.01元 * 10000 = 100
+// 例如：9.99元 = 99900，10.00元 = 100000，间隔100
+constexpr uint32_t TICK_SIZE = 100;
 
 // 确保价格在合法范围内
 #define CHECK_PRICE_RANGE(p) \
-    if ((p) < min_price_ || (p) > (min_price_ + levels_.size() - 1)) return false;
+    if ((p) < min_price_ || (p) > (min_price_ + (levels_.size() - 1) * TICK_SIZE)) return false;
 
 FastOrderBook::FastOrderBook(uint32_t code, ObjectPool<OrderNode>& pool, uint32_t min_price, uint32_t max_price)
     : stock_code_(code), pool_(pool), min_price_(min_price) {
-    
+
     // 1. 计算价格覆盖范围 (例如 跌停价~涨停价)
-    // 多加1是为了包含 max_price 本身
-    size_t capacity = max_price - min_price + 1;
+    // 每个档位间隔TICK_SIZE (100)，多加1是为了包含 max_price 本身
+    size_t capacity = (max_price - min_price) / TICK_SIZE + 1;
     
     // 2. 预分配 Level 数组 (Direct Array Mapping)
     // 关键：这里只分配内存，不构造内部对象，因为 Level 是 POD
@@ -118,8 +129,8 @@ bool FastOrderBook::add_order(uint64_t seq, OrderType type, Side side, uint32_t 
     CHECK_PRICE_RANGE(target_price); // 边界检查
 
     // 5. 挂入 Level 链表
-    // 计算数组下标：Offset Mapping
-    uint32_t lvl_idx = target_price - min_price_;
+    // 计算数组下标：Offset Mapping，每TICK_SIZE为一档
+    uint32_t lvl_idx = (target_price - min_price_) / TICK_SIZE;
     Level& lvl = levels_[lvl_idx];
     
     // 设置 Level 的价格 (如果是第一次用到)
@@ -194,10 +205,10 @@ bool FastOrderBook::update_volume_internal(uint64_t seq, uint32_t delta_vol) {
     if (is_limit_type && lvl_ptr) {
         // 从 Level 链表摘除
         remove_node_from_level(*lvl_ptr, node_idx, node);
-        
+
         // 5. 关键：检查是否需要移动最优价游标
         // 只有当删除的单子属于最优价档位，且该档位变空时才需要扫描
-        uint32_t lvl_idx = node.sort_price - min_price_;
+        uint32_t lvl_idx = (node.sort_price - min_price_) / TICK_SIZE;
         
         if (node.side == Side::Buy) {
             if ((int32_t)lvl_idx == best_bid_idx_) {
@@ -320,40 +331,41 @@ void FastOrderBook::update_best_ask_cursor() {
 // 获取最优买价
 std::optional<uint32_t> FastOrderBook::get_best_bid() const {
     if (best_bid_idx_ == -1) return std::nullopt;
-    return min_price_ + best_bid_idx_;
+    return min_price_ + best_bid_idx_ * TICK_SIZE;
 }
 
 // 获取最优卖价
 std::optional<uint32_t> FastOrderBook::get_best_ask() const {
     if (best_ask_idx_ == -1) return std::nullopt;
-    return min_price_ + best_ask_idx_;
+    return min_price_ + best_ask_idx_ * TICK_SIZE;
 }
 
 // 获取某价格档位挂单量 (O(1) Array Access)
 uint64_t FastOrderBook::get_volume_at_price(uint32_t price) const {
-    if (price < min_price_ || price >= min_price_ + levels_.size()) return 0;
-    return levels_[price - min_price_].total_volume;
+    if (price < min_price_ || price > min_price_ + (levels_.size() - 1) * TICK_SIZE) return 0;
+    return levels_[(price - min_price_) / TICK_SIZE].total_volume;
 }
 
 // 区间总量查询 (SIMD 友好的内存连续扫描)
 uint64_t FastOrderBook::get_ask_volume_in_range(uint32_t start_price, uint32_t end_price) const {
     // 简单的边界裁剪
+    uint32_t max_price = min_price_ + (levels_.size() - 1) * TICK_SIZE;
     if (start_price < min_price_) start_price = min_price_;
-    if (end_price >= min_price_ + levels_.size()) end_price = min_price_ + levels_.size() - 1;
-    
+    if (end_price > max_price) end_price = max_price;
+
     if (start_price > end_price) return 0;
 
-    uint32_t start_idx = start_price - min_price_;
-    uint32_t end_idx = end_price - min_price_;
-    
+    uint32_t start_idx = (start_price - min_price_) / TICK_SIZE;
+    uint32_t end_idx = (end_price - min_price_) / TICK_SIZE;
+
     uint64_t total = 0;
-    
+
     // 这是一个极度紧凑的循环
     // 编译器会自动进行循环展开 (Loop Unrolling) 和 SIMD 优化
     for (uint32_t i = start_idx; i <= end_idx; ++i) {
         total += levels_[i].total_volume;
     }
-    
+
     return total;
 }
 
@@ -370,7 +382,7 @@ std::vector<std::pair<uint32_t, uint64_t>> FastOrderBook::get_bid_levels(int n) 
         if (lvl.total_volume > 0 && lvl.head_order_idx != -1) {
             const OrderNode& head = pool_.get(lvl.head_order_idx);
             if (head.side == Side::Buy) {
-                result.emplace_back(min_price_ + idx, lvl.total_volume);
+                result.emplace_back(min_price_ + idx * TICK_SIZE, lvl.total_volume);
             }
         }
         idx--;
@@ -392,7 +404,7 @@ std::vector<std::pair<uint32_t, uint64_t>> FastOrderBook::get_ask_levels(int n) 
         if (lvl.total_volume > 0 && lvl.head_order_idx != -1) {
             const OrderNode& head = pool_.get(lvl.head_order_idx);
             if (head.side == Side::Sell) {
-                result.emplace_back(min_price_ + idx, lvl.total_volume);
+                result.emplace_back(min_price_ + idx * TICK_SIZE, lvl.total_volume);
             }
         }
         idx++;
@@ -401,8 +413,8 @@ std::vector<std::pair<uint32_t, uint64_t>> FastOrderBook::get_ask_levels(int n) 
 }
 
 Level* FastOrderBook::get_level_ptr(uint32_t price) {
-    if (price < min_price_ || price >= min_price_ + levels_.size()) return nullptr;
-    return &levels_[price - min_price_];
+    if (price < min_price_ || price > min_price_ + (levels_.size() - 1) * TICK_SIZE) return nullptr;
+    return &levels_[(price - min_price_) / TICK_SIZE];
 }
 
 // 处理逐笔成交消息
@@ -438,17 +450,33 @@ bool FastOrderBook::on_transaction(const MDTransactionStruct& txn) {
 
     if (bsflag == TradeBSFlag::Buy) {
         // 买方主动成交：只更新卖方订单
-        // 如果 tradebuyno 对应委托存在，报错
-        if (order_index_.find(txn.tradebuyno) != order_index_.end()) {
-            LOG_M_ERROR(hft::logger::get_logger(), "Shanghai trade: tradebuyno should not exist when bsflag is Buy");
+        // 如果 tradebuyno 对应委托存在，说明买方委托先于成交到达（乱序）
+        auto it = order_index_.find(txn.tradebuyno);
+        if (it != order_index_.end()) {
+            const OrderNode& order = pool_.get(it->second);
+            LOG_M_ERROR(hft::logger::get_logger(),
+                "Shanghai out-of-order: tradebuyno exists when bsflag=Buy | "
+                "txn: seq={}, security={}, buyno={}, sellno={}, price={}, qty={}, type={} | "
+                "order: seq={}, price={}, vol={}, side={}, type={}",
+                txn.applseqnum, txn.htscsecurityid, txn.tradebuyno, txn.tradesellno,
+                txn.tradeprice, txn.tradeqty, txn.tradetype,
+                order.seq, order.sort_price, order.volume, static_cast<int>(order.side), static_cast<int>(order.type));
         }
         result = update_volume_internal(txn.tradesellno, (uint32_t)txn.tradeqty);
     }
     else if (bsflag == TradeBSFlag::Sell) {
         // 卖方主动成交：只更新买方订单
-        // 如果 tradesellno 对应委托存在，报错
-        if (order_index_.find(txn.tradesellno) != order_index_.end()) {
-            LOG_M_ERROR(hft::logger::get_logger(), "Shanghai trade: tradesellno should not exist when bsflag is Sell");
+        // 如果 tradesellno 对应委托存在，说明卖方委托先于成交到达（乱序）
+        auto it = order_index_.find(txn.tradesellno);
+        if (it != order_index_.end()) {
+            const OrderNode& order = pool_.get(it->second);
+            LOG_M_ERROR(hft::logger::get_logger(),
+                "Shanghai out-of-order: tradesellno exists when bsflag=Sell | "
+                "txn: seq={}, security={}, buyno={}, sellno={}, price={}, qty={}, type={} | "
+                "order: seq={}, price={}, vol={}, side={}, type={}",
+                txn.applseqnum, txn.htscsecurityid, txn.tradebuyno, txn.tradesellno,
+                txn.tradeprice, txn.tradeqty, txn.tradetype,
+                order.seq, order.sort_price, order.volume, static_cast<int>(order.side), static_cast<int>(order.type));
         }
         result = update_volume_internal(txn.tradebuyno, (uint32_t)txn.tradeqty);
     }

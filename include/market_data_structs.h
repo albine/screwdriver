@@ -70,12 +70,17 @@ struct MDStockStruct {
     int64_t sellorderqtyqueue[10];        // Sell order quantities (top 10)
 
     // Order queue data (top 50)
+    // 必须增加 count 字段，否则消费者不知道读到哪里结束
     int64_t buyorderqueue[50];            // Buy order queue
     int64_t sellorderqueue[50];           // Sell order queue
+    int32_t buyorderqueue_count; // <--- 新增
+    int32_t sellorderqueue_count; // <--- 新增
 
     // Number of orders at each level (top 50)
     int64_t buynumordersqueue[50];        // Buy number of orders queue
     int64_t sellnumordersqueue[50];       // Sell number of orders queue
+    int32_t buynumordersqueue_count; // <--- 新增
+    int32_t sellnumordersqueue_count; // <--- 新增
 
     // Data scaling factor
     int32_t datamultiplepowerof10;        // Data multiplier power of 10
@@ -92,6 +97,7 @@ struct MDOrderStruct {
     int32_t mddate;                       // Market data date
     int32_t mdtime;                       // Market data time
     int32_t securityidsource;             // Source of security ID (enum value)
+    int32_t securitytype;                 // Type of security (enum value)
 
     // Order identification and details
     int64_t orderindex;                   // Order index

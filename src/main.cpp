@@ -1,64 +1,30 @@
 #include <iostream>
-#include <vector>
-#include <thread>
-#include <atomic>
 #include <string>
-#include <functional>
-#include <unordered_map>
+#include <thread>
+#include <chrono>
 #include <cstring>
-#include <memory> // for unique_ptr
-#include <variant> // for std::variant
+#include <cstdlib>
+#include <map>
+#include <memory>
 
-// 引入 moodycamel 头文件
-// 实际编译时请确保该文件在 include 路径下
-#include "concurrentqueue.h"
+// 引入策略引擎和适配器
+#include "strategy_engine.h"
+#include "backtest_adapter.h"
+#include "live_market_adapter.h"
 
-// 引入市场数据结构
-#include "market_data_structs.h"
-#include "history_data_replayer.h"
-#include "../src/FastOrderBook.h"
+// 引入策略
+#include "PriceLevelVolumeStrategy.h"
 
 // 引入日志模块
-#include "logger.h" 
+#include "logger.h"
+
+// 引入 fastfish SDK 所需头文件
+#include "parameter_define.h"
+#include "udp_client_interface.h"
 
 // ==========================================
-// 1. 市场数据消息类型
+// 示例策略
 // ==========================================
-// 使用 variant 支持三种市场数据类型，同时保持全局顺序
-using MarketMessage = std::variant<MDStockStruct, MDOrderStruct, MDTransactionStruct>;
-
-// ==========================================
-// 2. Symbol Hash 函数
-// ==========================================
-// 用户自定义的快速 hash 函数，用于 symbol 到 shard 的路由
-inline int stock_id_fast(const char* symbol, int shard_count) {
-    // 简单但高效的 hash 实现
-    uint64_t hash = 0;
-    for (const char* p = symbol; *p && (p - symbol) < 40; ++p) {
-        hash = hash * 31 + static_cast<unsigned char>(*p);
-    }
-    return static_cast<int>(hash % shard_count);
-}
-
-// ==========================================
-// 3. 策略基类
-// ==========================================
-class Strategy {
-public:
-    virtual ~Strategy() = default;
-
-    // 行情数据回调
-    virtual void on_tick(const MDStockStruct& stock) {}
-
-    // 委托数据回调 - 接收 MDOrderStruct 和当前的 OrderBook
-    virtual void on_order(const MDOrderStruct& order, const FastOrderBook& book) {}
-
-    // 成交数据回调 - 接收 MDTransactionStruct 和当前的 OrderBook
-    virtual void on_transaction(const MDTransactionStruct& transaction, const FastOrderBook& book) {}
-
-    std::string name;
-};
-
 class PrintStrategy : public Strategy {
 public:
     PrintStrategy(std::string n) { name = n; }
@@ -68,14 +34,14 @@ public:
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
-        // 示例：每 1000 个订单打印一次最优报价
+        // 每 1000 个订单打印一次最优报价
         if (order.applseqnum % 1000 == 0) {
-             auto bid = book.get_best_bid();
-             auto ask = book.get_best_ask();
-             std::cout << "[Strat:" << name << "] OrderSeq:" << order.applseqnum 
-                       << " BestBid:" << (bid ? std::to_string(*bid) : "None")
-                       << " BestAsk:" << (ask ? std::to_string(*ask) : "None")
-                       << std::endl;
+            auto bid = book.get_best_bid();
+            auto ask = book.get_best_ask();
+            std::cout << "[Strat:" << name << "] OrderSeq:" << order.applseqnum
+                      << " BestBid:" << (bid ? std::to_string(*bid) : "None")
+                      << " BestAsk:" << (ask ? std::to_string(*ask) : "None")
+                      << std::endl;
         }
     }
 
@@ -85,198 +51,216 @@ public:
 };
 
 // ==========================================
-// 4. 基于 Moodycamel 的分片交易引擎
+// 回测模式
 // ==========================================
-class ShardedEngine {
-public:
-    // 假设我们将全市场切分为 4 个 Shard
-    static const int SHARD_COUNT = 4;
+void run_backtest_mode(quill::Logger* logger) {
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "=== Backtest Mode ===");
 
-private:
-    std::vector<std::unique_ptr<moodycamel::ConcurrentQueue<MarketMessage>>> queues_;
-    std::vector<std::thread> workers_;
-    std::atomic<bool> running_{true};
+    // 创建策略引擎
+    StrategyEngine engine;
 
-    // 策略注册表：[shard_id][symbol] -> 策略列表
-    using StrategyMap = std::unordered_map<std::string, std::vector<Strategy*>>;
-    std::vector<StrategyMap> registry_;
+    // 创建价格档位挂单量监控策略
+    // 策略会自动从TICK数据中获取昨收价和开盘价
+    PriceLevelVolumeStrategy strategy("600759_PriceLevel");
 
-public:
-    ShardedEngine() : registry_(SHARD_COUNT) {
-        // 初始化队列
-        for (int i = 0; i < SHARD_COUNT; ++i) {
-            queues_.push_back(std::make_unique<moodycamel::ConcurrentQueue<MarketMessage>>(65536));
-        }
+    // 注册策略
+    std::string symbol = "600759.SH";
+    engine.register_strategy(symbol, &strategy);
+
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine...");
+    engine.start();
+
+    // 创建回测适配器
+    BacktestAdapter adapter(&engine, StrategyEngine::SHARD_COUNT);
+
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Loading historical data for {}...", symbol);
+
+    if (!adapter.load_tick_file("test_data/MD_TICK_StockType_600759.SH.csv")) {
+        LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to load TICK file");
+        return;
     }
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "TICK events loaded: {}", adapter.event_count());
 
-    // 辅助函数：从 MarketMessage 中提取 symbol
-    static const char* get_symbol(const MarketMessage& msg) {
-        return std::visit([](auto&& data) -> const char* {
-            return data.htscsecurityid;  // 所有三种结构都有此字段
-        }, msg);
-    }
+    adapter.load_order_file("test_data/MD_ORDER_StockType_600759.SH.csv");
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Total events after ORDER: {}", adapter.event_count());
 
-    // --- 初始化 ---
-    void register_strategy(std::string symbol, Strategy* strat) {
-        int shard_id = get_shard_id(symbol);
-        registry_[shard_id][symbol].push_back(strat);
-    }
+    adapter.load_transaction_file("test_data/MD_TRANSACTION_StockType_600759.SH.csv");
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Total events after TRANSACTION: {}", adapter.event_count());
 
-    void start() {
-        for (int i = 0; i < SHARD_COUNT; ++i) {
-            workers_.emplace_back([this, i]() {
-                this->worker_loop(i);
-            });
-        }
-    }
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Replaying {} events...", adapter.event_count());
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting replay...");
+    adapter.replay();
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Replay completed");
 
-    void stop() {
-        running_ = false;
-        for (auto& t : workers_) {
-            if (t.joinable()) t.join();
-        }
-    }
+    // 等待队列排空
+    std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    // --- 生产端 (极度热路径) ---
-    void on_market_tick(const MDStockStruct& stock) {
-        int shard_id = get_shard_id(stock.htscsecurityid);
-        queues_[shard_id]->enqueue(MarketMessage{stock});
-    }
-
-    void on_market_order(const MDOrderStruct& order) {
-        int shard_id = get_shard_id(order.htscsecurityid);
-        queues_[shard_id]->enqueue(MarketMessage{order});
-    }
-
-    void on_market_transaction(const MDTransactionStruct& transaction) {
-        int shard_id = get_shard_id(transaction.htscsecurityid);
-        queues_[shard_id]->enqueue(MarketMessage{transaction});
-    }
-
-private:
-    int get_shard_id(const char* symbol) {
-        return stock_id_fast(symbol, SHARD_COUNT);
-    }
-
-    int get_shard_id(const std::string& symbol) {
-        return stock_id_fast(symbol.c_str(), SHARD_COUNT);
-    }
-
-    // --- 消费端 (Worker) ---
-    void worker_loop(int shard_id) {
-        auto* q = queues_[shard_id].get();
-        auto& local_strat_map = registry_[shard_id];
-
-        // 1. 线程局部对象池 (Thread Local Object Pool)
-        // 每个 Shard 独享一个 Pool，无锁且高效
-        ObjectPool<OrderNode> local_pool(200000); 
-
-        // 2. 本地订单簿管理
-        // Symbol -> OrderBook (unique_ptr to manage lifetime)
-        std::unordered_map<std::string, std::unique_ptr<FastOrderBook>> books;
-
-        moodycamel::ConsumerToken c_token(*q);
-        MarketMessage msg;
-
-        while (running_) {
-            if (q->try_dequeue(c_token, msg)) {
-                const char* symbol = get_symbol(msg);
-                std::string sym_str(symbol);
-
-                // 获取或创建 OrderBook
-                FastOrderBook* book = nullptr;
-                auto book_it = books.find(sym_str);
-                if (book_it == books.end()) {
-                    // 默认价格范围 0 - 1,000,000 (0.00 - 100.00)
-                    // 实际生产中应根据昨收价或 Tick 动态调整
-                    auto new_book = std::make_unique<FastOrderBook>(0, local_pool, 0, 1000000);
-                    book = new_book.get();
-                    books[sym_str] = std::move(new_book);
-                } else {
-                    book = book_it->second.get();
-                }
-
-                // 处理消息并通知策略
-                auto strat_it = local_strat_map.find(sym_str);
-                bool has_strats = (strat_it != local_strat_map.end());
-
-                std::visit([&](auto&& data) {
-                    using T = std::decay_t<decltype(data)>;
-
-                    if constexpr (std::is_same_v<T, MDStockStruct>) {
-                        // Tick 数据通常不直接更新逐笔重建的 OrderBook，除非用于校验
-                        if (has_strats) {
-                            for (auto* strat : strat_it->second) strat->on_tick(data);
-                        }
-                    } 
-                    else if constexpr (std::is_same_v<T, MDOrderStruct>) {
-                        book->on_order(data);
-                        if (has_strats) {
-                            for (auto* strat : strat_it->second) strat->on_order(data, *book);
-                        }
-                    } 
-                    else if constexpr (std::is_same_v<T, MDTransactionStruct>) {
-                        book->on_transaction(data);
-                        if (has_strats) {
-                            for (auto* strat : strat_it->second) strat->on_transaction(data, *book);
-                        }
-                    }
-                }, msg);
-
-            } else {
-                std::this_thread::yield();
-            }
-        }
-    }
-};
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Stopping strategy engine...");
+    engine.stop();
+}
 
 // ==========================================
-// 5. 测试入口
+// 实盘模式
 // ==========================================
-int main() {
-    // 初始化日志系统
-    hft::logger::LogConfig log_config;
-    log_config.log_dir = "logs";
-    log_config.log_file = "trading.log";
-    log_config.console_output = true;
-    log_config.use_rdtsc = true;
-    auto* logger = hft::logger::init(log_config);
+void run_live_mode(quill::Logger* logger) {
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "=== Live Trading Mode ===");
 
-    ShardedEngine engine;
-    PrintStrategy strategy("DemoStrat");
+    // 创建策略引擎
+    StrategyEngine engine;
+    PrintStrategy strategy("LiveStrat");
 
     // 注册策略
     std::string symbol = "002603.SZ";
     engine.register_strategy(symbol, &strategy);
 
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting engine...");
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine...");
     engine.start();
 
-    // 回放数据
-    HistoryDataReplayer replayer(1);
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Loading data...");
+    // 创建实盘数据适配器
+    LiveMarketAdapter adapter("market_data", &engine);
 
-    // 注意：确保 test_data 目录下有对应文件
-    replayer.load_order_file("test_data/MD_ORDER_StockType_002603.SZ.csv");
-    replayer.load_transaction_file("test_data/MD_TRANSACTION_StockType_002603.SZ.csv");
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Connecting to market data gateway...");
 
-    replayer.set_order_callback([&](const MDOrderStruct& order) {
-        engine.on_market_order(order);
-    });
-    replayer.set_transaction_callback([&](const MDTransactionStruct& txn) {
-        engine.on_market_transaction(txn);
-    });
+    // 创建 UDP 客户端 (模仿 fastfish/src/main.cc 的 test_udp_client 实现)
+    using namespace com::htsc::mdc::gateway;
+    using namespace com::htsc::mdc::udp;
 
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Replaying {} events...", replayer.event_count());
-    replayer.replay();
+    // 从环境变量读取配置参数
+    const char* env_user = std::getenv("FF_USER");
+    const char* env_password = std::getenv("FF_PASSWORD");
+    const char* env_ip = std::getenv("FF_IP");
+    const char* env_port = std::getenv("FF_PORT");
+    const char* env_interface_ip = std::getenv("FF_CERT_DIR");
 
-    // 等待队列排空 (简单的 sleep 演示，生产环境应用 latch 或 callback)
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    if (!env_user || !env_password || !env_ip || !env_port || !env_interface_ip) {
+        LOG_MODULE_ERROR(logger, MOD_ENGINE, "Missing required environment variables. Please set FF_USER, FF_PASSWORD, FF_IP, FF_PORT, FF_CERT_DIR");
+        engine.stop();
+        hft::logger::shutdown();
+        return;
+    }
 
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Stopping engine...");
+    std::string user = env_user;
+    std::string password = env_password;
+    std::string ip = env_ip;
+    int port = std::stoi(env_port);
+    std::string interface_ip = env_interface_ip;  // UDP客户端本地接口IP
+
+    // 创建UDP客户端
+    UdpClientInterface* udp_client = ClientFactory::Instance()->CreateUdpClient();
+
+    if (!udp_client) {
+        LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create UDP client");
+        engine.stop();
+        hft::logger::shutdown();
+        return;
+    }
+
+    // 设置工作线程池大小
+    udp_client->SetWorkPoolThreadCount(50);
+
+    // 注册消息处理器
+    udp_client->RegistHandle(&adapter);
+
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Logging in to gateway at {}:{}...", ip, port);
+
+    // 登录（使用备份服务器列表）
+    std::map<std::string, int> backup_list;
+    backup_list.insert(std::pair<std::string, int>("168.9.65.25", 18088));
+    // backup_list.insert(std::pair<std::string, int>("backup_ip_2", 18088));
+
+    int ret = udp_client->LoginById(ip, port, user, password, backup_list);
+    if (ret != 0) {
+        LOG_MODULE_ERROR(logger, MOD_ENGINE, "Login failed with error code: {}", ret);
+        ClientFactory::Uninstance();
+        engine.stop();
+        hft::logger::shutdown();
+        return;
+    }
+
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Login successful");
+
+    // 订阅市场数据 - 订阅指定股票类型
+    std::unique_ptr<SubscribeBySourceType> source_type(new SubscribeBySourceType());
+
+    // 订阅上海股票的TICK、ORDER、TRANSACTION数据
+    SubscribeBySourceTypeDetail* detail_shg = source_type->add_subscribebysourcetypedetail();
+    SecuritySourceType* security_source_shg = new SecuritySourceType();
+    security_source_shg->set_securitytype(StockType);
+    security_source_shg->set_securityidsource(XSHG);
+    detail_shg->set_allocated_securitysourcetypes(security_source_shg);
+    detail_shg->add_marketdatatypes(MD_TICK);
+    detail_shg->add_marketdatatypes(MD_ORDER);
+    detail_shg->add_marketdatatypes(MD_TRANSACTION);
+
+    // 订阅深圳股票的TICK、ORDER、TRANSACTION数据
+    SubscribeBySourceTypeDetail* detail_she = source_type->add_subscribebysourcetypedetail();
+    SecuritySourceType* security_source_she = new SecuritySourceType();
+    security_source_she->set_securitytype(StockType);
+    security_source_she->set_securityidsource(XSHE);
+    detail_she->set_allocated_securitysourcetypes(security_source_she);
+    detail_she->add_marketdatatypes(MD_TICK);
+    detail_she->add_marketdatatypes(MD_ORDER);
+    detail_she->add_marketdatatypes(MD_TRANSACTION);
+
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Subscribing to market data (StockType, XSHG+XSHE)...");
+    ret = udp_client->SubscribeBySourceType(interface_ip, source_type.get());
+    if (ret != 0) {
+        LOG_MODULE_ERROR(logger, MOD_ENGINE, "Subscribe failed with error code: {}", ret);
+        ClientFactory::Uninstance();
+        engine.stop();
+        hft::logger::shutdown();
+        return;
+    }
+
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Subscription successful");
+
+    // 保持运行直到用户中断
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Running... Press Ctrl+C to stop");
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    // 清理（注意：这段代码在正常情况下不会执行，因为上面是无限循环）
+    // 实际应该通过信号处理器来优雅关闭
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Stopping strategy engine...");
     engine.stop();
+    ClientFactory::Uninstance();
+}
 
-    // 关闭日志系统
+// ==========================================
+// 主入口
+// ==========================================
+int main(int argc, char* argv[]) {
+    // 根据命令行参数选择模式
+    std::string mode = "backtest"; // 默认回测模式
+
+    if (argc > 1) {
+        mode = argv[1];
+    }
+
+    std::cout << "Starting in " << mode << " mode..." << std::endl;
+
+    // 统一初始化日志系统（根据模式设置日志文件名）
+    hft::logger::LogConfig log_config;
+    log_config.log_dir = "logs";
+    log_config.log_file = (mode == "backtest") ? "backtest.log" : "live_trading.log";
+    log_config.console_output = true;
+    log_config.use_rdtsc = true;
+    auto* logger = hft::logger::init(log_config);
+
+    // 根据模式运行
+    if (mode == "backtest") {
+        run_backtest_mode(logger);
+    } else if (mode == "live") {
+        run_live_mode(logger);
+    } else {
+        std::cerr << "Unknown mode: " << mode << std::endl;
+        std::cerr << "Usage: " << argv[0] << " [backtest|live]" << std::endl;
+        hft::logger::shutdown();
+        return 1;
+    }
+
+    // 统一关闭日志系统
     hft::logger::shutdown();
     return 0;
 }
