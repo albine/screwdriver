@@ -56,21 +56,21 @@ namespace logger {
 #define BIZ_POSN "POSN"  // 持仓变化
 #define BIZ_ACCT "ACCT"  // 账户/资金
 
-// 业务日志宏
-#define LOG_BIZ(logger, type, fmt, ...) \
-    LOG_INFO(logger, "[" type "] " fmt, ##__VA_ARGS__)
+// 业务日志宏（自动使用业务日志器）
+#define LOG_BIZ(type, fmt, ...) \
+    LOG_INFO(hft::logger::get_biz_logger(), "[" type "] " fmt, ##__VA_ARGS__)
 
 // ============ 文件级模块日志宏 ============
 // 使用方法：在.cpp文件任意位置定义 LOG_MODULE，然后使用 LOG_M_* 宏
 // 例如：
 //   #include "logger.h"
 //   #define LOG_MODULE MOD_ORDERBOOK
-//   LOG_M_INFO(logger, "price={}", 100);  // 输出: [OrderBook] price=100
+//   LOG_M_INFO("price={}", 100);  // 输出: [OrderBook] price=100
 //
-#define LOG_M_DEBUG(logger, fmt, ...)   LOG_MODULE_DEBUG(logger, LOG_MODULE, fmt, ##__VA_ARGS__)
-#define LOG_M_INFO(logger, fmt, ...)    LOG_MODULE_INFO(logger, LOG_MODULE, fmt, ##__VA_ARGS__)
-#define LOG_M_WARNING(logger, fmt, ...) LOG_MODULE_WARNING(logger, LOG_MODULE, fmt, ##__VA_ARGS__)
-#define LOG_M_ERROR(logger, fmt, ...)   LOG_MODULE_ERROR(logger, LOG_MODULE, fmt, ##__VA_ARGS__)
+#define LOG_M_DEBUG(fmt, ...)   LOG_MODULE_DEBUG(hft::logger::get_logger(), LOG_MODULE, fmt, ##__VA_ARGS__)
+#define LOG_M_INFO(fmt, ...)    LOG_MODULE_INFO(hft::logger::get_logger(), LOG_MODULE, fmt, ##__VA_ARGS__)
+#define LOG_M_WARNING(fmt, ...) LOG_MODULE_WARNING(hft::logger::get_logger(), LOG_MODULE, fmt, ##__VA_ARGS__)
+#define LOG_M_ERROR(fmt, ...)   LOG_MODULE_ERROR(hft::logger::get_logger(), LOG_MODULE, fmt, ##__VA_ARGS__)
 
 /**
  * @brief 日志配置参数
@@ -243,6 +243,9 @@ inline quill::Logger* init_biz(const BizLogConfig& config = BizLogConfig{}) {
 inline quill::Logger* get_biz_logger() {
     return quill::Frontend::get_logger("biz");
 }
+
+// ============ 类型别名（隐藏 quill 实现细节） ============
+using Logger = quill::Logger;
 
 }  // namespace logger
 }  // namespace hft

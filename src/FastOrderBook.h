@@ -2,8 +2,10 @@
 #include <cstdint>
 #include <unordered_map>
 #include <optional>
+#include <string>
 #include "market_data_structs.h"
 #include "ObjectPool.h"
+#include "logger.h"
 
 // 强类型枚举，单字节存储
 enum class OrderType : int32_t {
@@ -120,6 +122,9 @@ public:
     // 获取买卖N档数据 (价格, 量)
     std::vector<std::pair<uint32_t, uint64_t>> get_bid_levels(int n) const;
     std::vector<std::pair<uint32_t, uint64_t>> get_ask_levels(int n) const;
+
+    // 打印N档盘口信息（用于调试）
+    void print_orderbook(int n = 10, const std::string& context = "") const;
 
 private:
     // --------------------------------------------------------

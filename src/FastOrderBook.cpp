@@ -2,16 +2,8 @@
 #include <cstring>         // for memset if needed
 #include <algorithm>       // for std::find
 
-// 日志模块 - 条件编译
-#ifdef USE_QUILL_LOGGER
-    #include "logger.h"
-    #define LOG_MODULE MOD_ORDERBOOK
-#else
-    // 简化版日志宏（无操作）
-    #define LOG_M_ERROR(logger, ...) do {} while(0)
-    #define LOG_MODULE_ERROR(logger, module, ...) do {} while(0)
-    namespace hft { namespace logger { inline void* get_logger() { return nullptr; } }}
-#endif
+// 日志模块
+#define LOG_MODULE MOD_ORDERBOOK
 
 // 价格档位间隔：0.01元 * 10000 = 100
 // 例如：9.99元 = 99900，10.00元 = 100000，间隔100
@@ -80,7 +72,7 @@ bool FastOrderBook::add_order(uint64_t seq, OrderType type, Side side, uint32_t 
     // 1. 从内存池申请节点 (Zero Allocation)
     int32_t node_idx = pool_.alloc();
     if (node_idx < 0) {
-        LOG_M_ERROR(hft::logger::get_logger(), "Memory pool exhausted!");
+        LOG_M_ERROR("Memory pool exhausted!");
         return false;
     }
 
@@ -177,8 +169,7 @@ bool FastOrderBook::update_volume_internal(uint64_t seq, uint32_t delta_vol) {
     // 2. 扣减量
     if (node.volume < delta_vol) {
          // 异常情况：成交量大于剩余量
-         LOG_M_ERROR(hft::logger::get_logger(),
-             "Volume underflow! seq={}, node.volume={}, delta_vol={}, price={}, side={}",
+         LOG_M_ERROR("Volume underflow! seq={}, node.volume={}, delta_vol={}, price={}, side={}",
              seq, node.volume, delta_vol, node.sort_price, static_cast<int>(node.side));
          node.volume = 0; 
     } else {
@@ -454,8 +445,7 @@ bool FastOrderBook::on_transaction(const MDTransactionStruct& txn) {
         auto it = order_index_.find(txn.tradebuyno);
         if (it != order_index_.end()) {
             const OrderNode& order = pool_.get(it->second);
-            LOG_M_ERROR(hft::logger::get_logger(),
-                "Shanghai out-of-order: tradebuyno exists when bsflag=Buy | "
+            LOG_M_ERROR("Shanghai out-of-order: tradebuyno exists when bsflag=Buy | "
                 "txn: seq={}, security={}, buyno={}, sellno={}, price={}, qty={}, type={} | "
                 "order: seq={}, price={}, vol={}, side={}, type={}",
                 txn.applseqnum, txn.htscsecurityid, txn.tradebuyno, txn.tradesellno,
@@ -470,8 +460,7 @@ bool FastOrderBook::on_transaction(const MDTransactionStruct& txn) {
         auto it = order_index_.find(txn.tradesellno);
         if (it != order_index_.end()) {
             const OrderNode& order = pool_.get(it->second);
-            LOG_M_ERROR(hft::logger::get_logger(),
-                "Shanghai out-of-order: tradesellno exists when bsflag=Sell | "
+            LOG_M_ERROR("Shanghai out-of-order: tradesellno exists when bsflag=Sell | "
                 "txn: seq={}, security={}, buyno={}, sellno={}, price={}, qty={}, type={} | "
                 "order: seq={}, price={}, vol={}, side={}, type={}",
                 txn.applseqnum, txn.htscsecurityid, txn.tradebuyno, txn.tradesellno,
@@ -486,4 +475,38 @@ bool FastOrderBook::on_transaction(const MDTransactionStruct& txn) {
     }
 
     return result;
+}
+
+// 打印N档盘口信息（用于调试）
+void FastOrderBook::print_orderbook(int n, const std::string& context) const {
+    if (!context.empty()) {
+        LOG_M_INFO("========================================");
+        LOG_M_INFO("{}", context);
+    }
+
+    // 打印卖十档（从高到低价格）
+    LOG_M_INFO("--- SELL SIDE (ASK) ---");
+    auto ask_levels = get_ask_levels(n);
+    for (int i = ask_levels.size() - 1; i >= 0; --i) {
+        LOG_M_INFO("  Sell{}: Price={} ({}元) Volume={}",
+                   ask_levels.size() - i,
+                   ask_levels[i].first,
+                   ask_levels[i].first / 10000.0,
+                   ask_levels[i].second);
+    }
+
+    // 打印买十档（从高到低价格）
+    LOG_M_INFO("--- BUY SIDE (BID) ---");
+    auto bid_levels = get_bid_levels(n);
+    for (size_t i = 0; i < bid_levels.size(); ++i) {
+        LOG_M_INFO("  Buy{}: Price={} ({}元) Volume={}",
+                   i + 1,
+                   bid_levels[i].first,
+                   bid_levels[i].first / 10000.0,
+                   bid_levels[i].second);
+    }
+
+    if (!context.empty()) {
+        LOG_M_INFO("========================================");
+    }
 }

@@ -13,7 +13,13 @@
 #include "live_market_adapter.h"
 
 // 引入策略
-#include "PriceLevelVolumeStrategy.h"
+#include "strategy/PriceLevelVolumeStrategy.h"
+#include "strategy/TestStrategy.h"
+#include "strategy/PrintStrategy.h"
+
+// 引入配置和策略工厂
+#include "backtest_config.h"
+#include "strategy_factory.h"
 
 // 引入日志模块
 #include "logger.h"
@@ -23,72 +29,129 @@
 #include "udp_client_interface.h"
 
 // ==========================================
-// 示例策略
+// 策略注册
 // ==========================================
-class PrintStrategy : public Strategy {
-public:
-    PrintStrategy(std::string n) { name = n; }
+void register_all_strategies() {
+    auto& factory = StrategyFactory::instance();
 
-    void on_tick(const MDStockStruct& stock) override {
-        // Simple tick print
-    }
+    factory.register_strategy("PriceLevelVolumeStrategy",
+        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
+            return std::make_unique<PriceLevelVolumeStrategy>(symbol + "_PriceLevel");
+        });
 
-    void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
-        // 每 1000 个订单打印一次最优报价
-        if (order.applseqnum % 1000 == 0) {
-            auto bid = book.get_best_bid();
-            auto ask = book.get_best_ask();
-            std::cout << "[Strat:" << name << "] OrderSeq:" << order.applseqnum
-                      << " BestBid:" << (bid ? std::to_string(*bid) : "None")
-                      << " BestAsk:" << (ask ? std::to_string(*ask) : "None")
-                      << std::endl;
-        }
-    }
+    factory.register_strategy("TestStrategy",
+        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
+            return std::make_unique<TestStrategy>(symbol + "_Test");
+        });
 
-    void on_transaction(const MDTransactionStruct& txn, const FastOrderBook& book) override {
-        // Transaction logic
-    }
-};
+    factory.register_strategy("PerformanceStrategy",
+        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
+            return std::make_unique<PerformanceStrategy>(symbol + "_Perf");
+        });
+
+    factory.register_strategy("PrintStrategy",
+        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
+            return std::make_unique<PrintStrategy>(symbol + "_Print");
+        });
+}
 
 // ==========================================
 // 回测模式
 // ==========================================
-void run_backtest_mode(quill::Logger* logger) {
+void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "config/backtest.conf") {
     LOG_MODULE_INFO(logger, MOD_ENGINE, "=== Backtest Mode ===");
+
+    // 注册所有策略
+    register_all_strategies();
+
+    // 解析配置文件
+    auto configs = parse_backtest_config(config_file);
+    if (configs.empty()) {
+        LOG_MODULE_ERROR(logger, MOD_ENGINE, "No valid configurations found in {}", config_file);
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "Config format: stock_code,strategy_name (e.g., 600759,PriceLevelVolumeStrategy)");
+        return;
+    }
+
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Loaded {} backtest configurations from {}", configs.size(), config_file);
 
     // 创建策略引擎
     StrategyEngine engine;
 
-    // 创建价格档位挂单量监控策略
-    // 策略会自动从TICK数据中获取昨收价和开盘价
-    PriceLevelVolumeStrategy strategy("600759_PriceLevel");
+    // 存储策略实例（需要保持生命周期）
+    std::vector<std::unique_ptr<Strategy>> strategies;
+    std::vector<std::string> valid_symbols;
 
-    // 注册策略
-    std::string symbol = "600759.SH";
-    engine.register_strategy(symbol, &strategy);
+    auto& factory = StrategyFactory::instance();
 
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine...");
+    // 为每个配置创建策略并检查数据
+    for (const auto& cfg : configs) {
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "Processing: {} with strategy {}", cfg.symbol, cfg.strategy_name);
+
+        // 检查策略是否存在
+        if (!factory.has_strategy(cfg.strategy_name)) {
+            LOG_MODULE_WARNING(logger, MOD_ENGINE, "Unknown strategy: {}, skipping {}", cfg.strategy_name, cfg.symbol);
+            auto available = factory.get_registered_strategies();
+            std::string avail_str;
+            for (const auto& s : available) avail_str += s + " ";
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "Available strategies: {}", avail_str);
+            continue;
+        }
+
+        // 检查/下载数据
+        if (!check_data_exists(cfg.symbol)) {
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "Data not found for {}, attempting download...", cfg.symbol);
+            if (!download_market_data(cfg.symbol)) {
+                LOG_MODULE_WARNING(logger, MOD_ENGINE, "Failed to download data for {}, skipping", cfg.symbol);
+                continue;
+            }
+            if (!check_data_exists(cfg.symbol)) {
+                LOG_MODULE_WARNING(logger, MOD_ENGINE, "Data still not available for {}, skipping", cfg.symbol);
+                continue;
+            }
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "Data downloaded successfully for {}", cfg.symbol);
+        }
+
+        // 创建策略实例
+        try {
+            auto strategy = factory.create(cfg.strategy_name, cfg.symbol);
+            engine.register_strategy(cfg.symbol, strategy.get());
+            strategies.push_back(std::move(strategy));
+            valid_symbols.push_back(cfg.symbol);
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "Registered strategy {} for {}", cfg.strategy_name, cfg.symbol);
+        } catch (const std::exception& e) {
+            LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create strategy: {}", e.what());
+        }
+    }
+
+    if (valid_symbols.empty()) {
+        LOG_MODULE_ERROR(logger, MOD_ENGINE, "No valid symbols to backtest");
+        return;
+    }
+
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine with {} symbols...", valid_symbols.size());
     engine.start();
 
     // 创建回测适配器
     BacktestAdapter adapter(&engine, StrategyEngine::SHARD_COUNT);
 
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Loading historical data for {}...", symbol);
+    // 为每个股票加载数据
+    for (const auto& symbol : valid_symbols) {
+        std::string tick_file = "test_data/MD_TICK_StockType_" + symbol + ".csv";
+        std::string order_file = "test_data/MD_ORDER_StockType_" + symbol + ".csv";
+        std::string txn_file = "test_data/MD_TRANSACTION_StockType_" + symbol + ".csv";
 
-    if (!adapter.load_tick_file("test_data/MD_TICK_StockType_600759.SH.csv")) {
-        LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to load TICK file");
-        return;
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "Loading data for {}...", symbol);
+
+        if (!adapter.load_tick_file(tick_file)) {
+            LOG_MODULE_WARNING(logger, MOD_ENGINE, "Failed to load TICK file for {}", symbol);
+        }
+        adapter.load_order_file(order_file);
+        adapter.load_transaction_file(txn_file);
+
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "Total events after loading {}: {}", symbol, adapter.event_count());
     }
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "TICK events loaded: {}", adapter.event_count());
-
-    adapter.load_order_file("test_data/MD_ORDER_StockType_600759.SH.csv");
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Total events after ORDER: {}", adapter.event_count());
-
-    adapter.load_transaction_file("test_data/MD_TRANSACTION_StockType_600759.SH.csv");
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Total events after TRANSACTION: {}", adapter.event_count());
 
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Replaying {} events...", adapter.event_count());
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting replay...");
     adapter.replay();
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Replay completed");
 
@@ -247,6 +310,13 @@ int main(int argc, char* argv[]) {
     log_config.console_output = true;
     log_config.use_rdtsc = true;
     auto* logger = hft::logger::init(log_config);
+
+    // 初始化业务日志器（交易信号等业务日志单独输出）
+    hft::logger::BizLogConfig biz_config;
+    biz_config.log_dir = "logs";
+    biz_config.log_file = (mode == "backtest") ? "backtest_biz.log" : "live_biz.log";
+    biz_config.console_output = false;  // 业务日志不输出到控制台
+    hft::logger::init_biz(biz_config);
 
     // 根据模式运行
     if (mode == "backtest") {

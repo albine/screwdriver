@@ -96,34 +96,34 @@ public:
     void on_start() override {
         logger_ = hft::logger::get_logger();
 
-        LOG_M_INFO(logger_, "========================================");
-        LOG_M_INFO(logger_, "PriceLevelVolumeStrategy started: {}", name);
-        LOG_M_INFO(logger_, "Configuration:");
-        LOG_M_INFO(logger_, "  - Window Size: 200ms rolling");
-        LOG_M_INFO(logger_, "  - Monitoring: Preclose price level");
-        LOG_M_INFO(logger_, "  - n = Avg volume in window");
-        LOG_M_INFO(logger_, "  - delta_n = Sum of buy trades in window");
-        LOG_M_INFO(logger_, "  - Trigger: delta_n >= n");
+        LOG_M_INFO("========================================");
+        LOG_M_INFO("PriceLevelVolumeStrategy started: {}", name);
+        LOG_M_INFO("Configuration:");
+        LOG_M_INFO("  - Window Size: 200ms rolling");
+        LOG_M_INFO("  - Monitoring: Preclose price level");
+        LOG_M_INFO("  - n = Avg volume in window");
+        LOG_M_INFO("  - delta_n = Sum of buy trades in window");
+        LOG_M_INFO("  - Trigger: delta_n >= n");
 
         if (state_ == MonitoringState::MONITORING) {
-            LOG_M_INFO(logger_, "  - Preclose Price: {} ({}元)", preclose_price_, price_to_yuan(preclose_price_));
-            LOG_M_INFO(logger_, "  - Open Price: {} ({}元)", open_price_, price_to_yuan(open_price_));
-            LOG_M_INFO(logger_, "  - State: MONITORING (initialized from parameters)");
+            LOG_M_INFO("  - Preclose Price: {} ({}元)", preclose_price_, price_to_yuan(preclose_price_));
+            LOG_M_INFO("  - Open Price: {} ({}元)", open_price_, price_to_yuan(open_price_));
+            LOG_M_INFO("  - State: MONITORING (initialized from parameters)");
         }
 
-        LOG_M_INFO(logger_, "========================================");
+        LOG_M_INFO("========================================");
     }
 
     void on_stop() override {
-        LOG_M_INFO(logger_, "========================================");
-        LOG_M_INFO(logger_, "PriceLevelVolumeStrategy stopped: {}", name);
-        LOG_M_INFO(logger_, "Statistics:");
-        LOG_M_INFO(logger_, "  - Ticks: {}", tick_count_.load());
-        LOG_M_INFO(logger_, "  - Orders: {}", order_count_.load());
-        LOG_M_INFO(logger_, "  - Transactions: {}", transaction_count_.load());
-        LOG_M_INFO(logger_, "  - Buy Trades (at preclose): {}", buy_trade_count_.load());
-        LOG_M_INFO(logger_, "  - Signal Triggered: {}", signal_triggered_);
-        LOG_M_INFO(logger_, "========================================");
+        LOG_M_INFO("========================================");
+        LOG_M_INFO("PriceLevelVolumeStrategy stopped: {}", name);
+        LOG_M_INFO("Statistics:");
+        LOG_M_INFO("  - Ticks: {}", tick_count_.load());
+        LOG_M_INFO("  - Orders: {}", order_count_.load());
+        LOG_M_INFO("  - Transactions: {}", transaction_count_.load());
+        LOG_M_INFO("  - Buy Trades (at preclose): {}", buy_trade_count_.load());
+        LOG_M_INFO("  - Signal Triggered: {}", signal_triggered_);
+        LOG_M_INFO("========================================");
     }
 
     // ==========================================
@@ -136,7 +136,7 @@ public:
             // 记录昨收价（注意：价格是乘以10000的整数）
             preclose_price_ = static_cast<uint32_t>(stock.preclosepx);
 
-            LOG_M_INFO(logger_, "Initialized preclose_price={} ({}元)",
+            LOG_M_INFO("Initialized preclose_price={} ({}元)",
                        preclose_price_,
                        price_to_yuan(preclose_price_));
 
@@ -148,7 +148,7 @@ public:
             if (stock.openpx > 0 && stock.openpx < stock.preclosepx) {
                 open_price_ = static_cast<uint32_t>(stock.openpx);
 
-                LOG_M_INFO(logger_, "Monitoring condition MET: openpx={} ({}元) < preclosepx={} ({}元)",
+                LOG_M_INFO("Monitoring condition MET: openpx={} ({}元) < preclosepx={} ({}元)",
                            open_price_,
                            price_to_yuan(open_price_),
                            preclose_price_,
@@ -165,6 +165,15 @@ public:
         if (state_ != MonitoringState::MONITORING && state_ != MonitoringState::SIGNAL_TRIGGERED) {
             return;
         }
+
+        // 调试：打印特定委托后的十档盘口
+        // if (order.orderindex == 707223) {
+        //     char context[256];
+        //     std::snprintf(context, sizeof(context),
+        //                   "DEBUG: After processing OrderIndex=%llu\nOrder Info: Price=%lld Qty=%lld BSFlag=%d Type=%d",
+        //                   order.orderindex, order.orderprice, order.orderqty, order.orderbsflag, order.ordertype);
+        //     book.print_orderbook(logger_, 10, std::string(context));
+        // }
 
         // 查询昨收价档位的当前挂单量
         // 注意：FastOrderBook已经在Strategy回调前更新了订单簿
@@ -184,6 +193,11 @@ public:
 
         if (state_ != MonitoringState::MONITORING && state_ != MonitoringState::SIGNAL_TRIGGERED) {
             return;
+        }
+
+        // 调试：打印特定委托后的十档盘口
+        if (txn.tradeindex == 439514) {
+            book.print_orderbook(10, "tradeindex=439514");
         }
 
         // 查询昨收价档位的当前挂单量
@@ -258,7 +272,7 @@ private:
             const auto& latest = window_.back();
 
             // 输出详细日志
-            LOG_BIZ(logger_, "SIGNAL",
+            LOG_BIZ("SIGNAL",
                     "BUY SIGNAL | Time={} | Price={} | "
                     "n(avg_volume)={:.0f} | delta_n(buy_trades)={} | "
                     "current_volume={} | window_size={}",
@@ -269,17 +283,17 @@ private:
                     latest.volume,
                     window_.size());
 
-            LOG_M_INFO(logger_, "========================================");
-            LOG_M_INFO(logger_, "SIGNAL TRIGGERED at {}",
+            LOG_M_INFO("========================================");
+            LOG_M_INFO("SIGNAL TRIGGERED at {}",
                        format_mdtime(latest.mdtime));
-            LOG_M_INFO(logger_, "Price Level: {} ({}元)",
+            LOG_M_INFO("Price Level: {} ({}元)",
                        preclose_price_,
                        price_to_yuan(preclose_price_));
-            LOG_M_INFO(logger_, "n (Avg Volume in 200ms): {:.0f}", n);
-            LOG_M_INFO(logger_, "delta_n (Buy Trades in 200ms): {}", delta_n);
-            LOG_M_INFO(logger_, "Current Volume: {}", latest.volume);
-            LOG_M_INFO(logger_, "Window Size: {} snapshots", window_.size());
-            LOG_M_INFO(logger_, "========================================");
+            LOG_M_INFO("n (Avg Volume in 200ms): {:.0f}", n);
+            LOG_M_INFO("delta_n (Buy Trades in 200ms): {}", delta_n);
+            LOG_M_INFO("Current Volume: {}", latest.volume);
+            LOG_M_INFO("Window Size: {} snapshots", window_.size());
+            LOG_M_INFO("========================================");
         }
     }
 
