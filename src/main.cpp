@@ -16,6 +16,7 @@
 #include "strategy/PriceLevelVolumeStrategy.h"
 #include "strategy/TestStrategy.h"
 #include "strategy/PrintStrategy.h"
+#include "strategy/OpeningRangeBreakoutStrategy.h"
 
 // 引入配置和策略工厂
 #include "backtest_config.h"
@@ -53,6 +54,11 @@ void register_all_strategies() {
         [](const std::string& symbol) -> std::unique_ptr<Strategy> {
             return std::make_unique<PrintStrategy>(symbol + "_Print");
         });
+
+    factory.register_strategy("OpeningRangeBreakoutStrategy",
+        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
+            return std::make_unique<OpeningRangeBreakoutStrategy>(symbol + "_ORB");
+        });
 }
 
 // ==========================================
@@ -77,8 +83,7 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
     // 创建策略引擎
     StrategyEngine engine;
 
-    // 存储策略实例（需要保持生命周期）
-    std::vector<std::unique_ptr<Strategy>> strategies;
+    // 有效股票列表（用于后续加载数据）
     std::vector<std::string> valid_symbols;
 
     auto& factory = StrategyFactory::instance();
@@ -111,11 +116,10 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
             LOG_MODULE_INFO(logger, MOD_ENGINE, "Data downloaded successfully for {}", cfg.symbol);
         }
 
-        // 创建策略实例
+        // 创建策略实例并转移所有权给 engine
         try {
             auto strategy = factory.create(cfg.strategy_name, cfg.symbol);
-            engine.register_strategy(cfg.symbol, strategy.get());
-            strategies.push_back(std::move(strategy));
+            engine.register_strategy(cfg.symbol, std::move(strategy));  // 转移所有权
             valid_symbols.push_back(cfg.symbol);
             LOG_MODULE_INFO(logger, MOD_ENGINE, "Registered strategy {} for {}", cfg.strategy_name, cfg.symbol);
         } catch (const std::exception& e) {
@@ -165,18 +169,59 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
 // ==========================================
 // 实盘模式
 // ==========================================
-void run_live_mode(quill::Logger* logger) {
+void run_live_mode(quill::Logger* logger, const std::string& config_file = "config/live.conf") {
     LOG_MODULE_INFO(logger, MOD_ENGINE, "=== Live Trading Mode ===");
+
+    // 注册所有策略
+    register_all_strategies();
+
+    // 解析配置文件
+    auto configs = parse_backtest_config(config_file);
+    if (configs.empty()) {
+        LOG_MODULE_ERROR(logger, MOD_ENGINE, "No valid configurations found in {}", config_file);
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "Config format: stock_code,strategy_name (e.g., 600759,PriceLevelVolumeStrategy)");
+        return;
+    }
+
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Loaded {} live trading configurations from {}", configs.size(), config_file);
 
     // 创建策略引擎
     StrategyEngine engine;
-    PrintStrategy strategy("LiveStrat");
 
-    // 注册策略
-    std::string symbol = "002603.SZ";
-    engine.register_strategy(symbol, &strategy);
+    auto& factory = StrategyFactory::instance();
 
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine...");
+    // 为每个配置创建策略
+    std::vector<std::string> valid_symbols;
+    for (const auto& cfg : configs) {
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "Processing: {} with strategy {}", cfg.symbol, cfg.strategy_name);
+
+        // 检查策略是否存在
+        if (!factory.has_strategy(cfg.strategy_name)) {
+            LOG_MODULE_WARNING(logger, MOD_ENGINE, "Unknown strategy: {}, skipping {}", cfg.strategy_name, cfg.symbol);
+            auto available = factory.get_registered_strategies();
+            std::string avail_str;
+            for (const auto& s : available) avail_str += s + " ";
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "Available strategies: {}", avail_str);
+            continue;
+        }
+
+        // 创建策略实例并转移所有权给 engine
+        try {
+            auto strategy = factory.create(cfg.strategy_name, cfg.symbol);
+            engine.register_strategy(cfg.symbol, std::move(strategy));
+            valid_symbols.push_back(cfg.symbol);
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "Registered strategy {} for {}", cfg.strategy_name, cfg.symbol);
+        } catch (const std::exception& e) {
+            LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create strategy: {}", e.what());
+        }
+    }
+
+    if (valid_symbols.empty()) {
+        LOG_MODULE_ERROR(logger, MOD_ENGINE, "No valid symbols to monitor");
+        return;
+    }
+
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine with {} symbols...", valid_symbols.size());
     engine.start();
 
     // 创建实盘数据适配器

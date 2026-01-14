@@ -24,6 +24,7 @@ PACK_ONLY=false
 BUILD_DIR="${SCRIPT_DIR}/build"
 LIBS_DIR="${SCRIPT_DIR}/fastfish/libs"
 CONFIG_DIR="${SCRIPT_DIR}/fastfish/config/prod"
+STRATEGY_CONFIG_DIR="${SCRIPT_DIR}/config"  # 策略配置文件目录
 CERT_DIR="${SCRIPT_DIR}/fastfish/cert"
 
 # Required shared libraries
@@ -102,9 +103,17 @@ check_prerequisites() {
         fi
     done
 
-    # Check config file
+    # Check config files
     if [[ ! -f "${CONFIG_DIR}/htsc-insight-cpp-config.conf" ]]; then
-        log_warn "Config file not found at ${CONFIG_DIR}/htsc-insight-cpp-config.conf"
+        log_warn "Gateway config file not found at ${CONFIG_DIR}/htsc-insight-cpp-config.conf"
+    fi
+
+    if [[ ! -f "${STRATEGY_CONFIG_DIR}/backtest.conf" ]]; then
+        log_warn "Strategy config file not found: ${STRATEGY_CONFIG_DIR}/backtest.conf"
+    fi
+
+    if [[ ! -f "${STRATEGY_CONFIG_DIR}/live.conf" ]]; then
+        log_warn "Strategy config file not found: ${STRATEGY_CONFIG_DIR}/live.conf"
     fi
 
     # Check certificates
@@ -150,10 +159,21 @@ create_package() {
     done
     cd "${SCRIPT_DIR}"
 
-    # Copy config file
+    # Copy config files
     if [[ -f "${CONFIG_DIR}/htsc-insight-cpp-config.conf" ]]; then
-        log_info "Copying config file..."
+        log_info "Copying gateway config file..."
         cp "${CONFIG_DIR}/htsc-insight-cpp-config.conf" "${DEPLOY_ROOT}/config/"
+    fi
+
+    # Copy strategy config files (backtest.conf, live.conf)
+    if [[ -d "${STRATEGY_CONFIG_DIR}" ]]; then
+        log_info "Copying strategy config files..."
+        if [[ -f "${STRATEGY_CONFIG_DIR}/backtest.conf" ]]; then
+            cp "${STRATEGY_CONFIG_DIR}/backtest.conf" "${DEPLOY_ROOT}/config/"
+        fi
+        if [[ -f "${STRATEGY_CONFIG_DIR}/live.conf" ]]; then
+            cp "${STRATEGY_CONFIG_DIR}/live.conf" "${DEPLOY_ROOT}/config/"
+        fi
     fi
 
     # Copy certificates

@@ -15,11 +15,11 @@
 //
 // 使用方法:
 // 1. 在策略头文件末尾使用 REGISTER_STRATEGY 宏注册
-// 2. 调用 StrategyFactory::create("StrategyName", "600759.SH") 创建实例
+// 2. 调用 StrategyFactory::create("StrategyName") 创建实例
 
 class StrategyFactory {
 public:
-    using CreatorFunc = std::function<std::unique_ptr<Strategy>(const std::string& symbol)>;
+    using CreatorFunc = std::function<std::unique_ptr<Strategy>(const std::string&)>;
 
     // 获取单例
     static StrategyFactory& instance() {
@@ -69,8 +69,10 @@ class StrategyRegistrar {
 public:
     explicit StrategyRegistrar(const std::string& name) {
         StrategyFactory::instance().register_strategy(name,
-            [](const std::string& symbol) -> std::unique_ptr<Strategy> {
-                return std::make_unique<T>(symbol + "_" + typeid(T).name());
+            [name]() -> std::unique_ptr<Strategy> {
+                auto strat = std::make_unique<T>();
+                strat->name = name;
+                return strat;
             });
     }
 };

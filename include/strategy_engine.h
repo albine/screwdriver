@@ -81,8 +81,12 @@ private:
     std::vector<std::unique_ptr<moodycamel::ConcurrentQueue<MarketMessage>>> queues_;
     std::vector<std::thread> workers_;
     std::atomic<bool> running_{true};
+    std::atomic<bool> stopped_{false};
 
-    // 策略注册表：[shard_id][symbol] -> 策略列表
+    // 策略所有权管理：Engine 拥有所有策略
+    std::unordered_map<std::string, std::unique_ptr<Strategy>> owned_strategies_;
+
+    // 策略注册表：[shard_id][symbol] -> 策略列表（快速查找用的裸指针）
     using StrategyMap = std::unordered_map<std::string, std::vector<Strategy*>>;
     std::vector<StrategyMap> registry_;
 
@@ -112,10 +116,40 @@ public:
         }, msg);
     }
 
-    // 注册策略
-    void register_strategy(const std::string& symbol, Strategy* strat) {
+    // 注册策略（转移所有权）
+    void register_strategy(const std::string& symbol, std::unique_ptr<Strategy> strat) {
+        if (!strat) {
+            return;  // 忽略空指针
+        }
+
         int shard_id = get_shard_id(symbol);
-        registry_[shard_id][symbol].push_back(strat);
+        Strategy* raw_ptr = strat.get();
+
+        // 1. 保存所有权
+        owned_strategies_[symbol] = std::move(strat);
+
+        // 2. 注册裸指针到分片（用于快速查找）
+        registry_[shard_id][symbol].push_back(raw_ptr);
+    }
+
+    // 运行时移除策略（可选功能）
+    void unregister_strategy(const std::string& symbol) {
+        int shard_id = get_shard_id(symbol);
+
+        // 1. 从 registry 移除
+        auto& strat_map = registry_[shard_id];
+        auto it = strat_map.find(symbol);
+        if (it != strat_map.end()) {
+            strat_map.erase(it);
+        }
+
+        // 2. 释放所有权（自动调用析构）
+        owned_strategies_.erase(symbol);
+    }
+
+    // 获取策略数量
+    size_t strategy_count() const {
+        return owned_strategies_.size();
     }
 
     // 启动引擎
@@ -139,6 +173,12 @@ public:
 
     // 停止引擎
     void stop() {
+        // 防止重复调用
+        bool expected = false;
+        if (!stopped_.compare_exchange_strong(expected, true)) {
+            return;  // 已经停止过了
+        }
+
         running_ = false;
         for (auto& t : workers_) {
             if (t.joinable()) t.join();

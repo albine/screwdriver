@@ -189,6 +189,24 @@ private:
         return std::stoll(val);
     }
 
+    // 解析重复key数组字段，格式: key: val1 key: val2 key: val3 ...
+    void extract_repeated_int_array(const std::string& line, const std::string& key, int64_t* arr, size_t max_size) {
+        std::string search_key = key + ": ";
+        size_t pos = 0;
+        size_t idx = 0;
+
+        while (idx < max_size && (pos = line.find(search_key, pos)) != std::string::npos) {
+            pos += search_key.length();
+            size_t end = line.find(' ', pos);
+            if (end == std::string::npos) end = line.length();
+            std::string val = line.substr(pos, end - pos);
+            if (!val.empty()) {
+                arr[idx++] = std::stoll(val);
+            }
+            pos = end;
+        }
+    }
+
     // 处理SecurityIDSource枚举（可能是名称或数字）
     int32_t extract_securityidsource(const std::string& line, const std::string& key) {
         std::string val = extract_string_value(line, key);
@@ -224,6 +242,11 @@ private:
         order.applseqnum = extract_int_value(line, "ApplSeqNum");
         order.datamultiplepowerof10 = static_cast<int32_t>(extract_int_value(line, "DataMultiplePowerOf10"));
         order.tradedqty = extract_int_value(line, "TradedQty");
+
+        // 证券状态（上海专有）
+        std::string security_status = extract_string_value(line, "SecurityStatus");
+        std::strncpy(order.securitystatus, security_status.c_str(), sizeof(order.securitystatus) - 1);
+        order.securitystatus[sizeof(order.securitystatus) - 1] = '\0';
 
         return true;
     }
@@ -291,7 +314,11 @@ private:
         stock.channelno = static_cast<int32_t>(extract_int_value(line, "ChannelNo"));
         stock.datamultiplepowerof10 = static_cast<int32_t>(extract_int_value(line, "DataMultiplePowerOf10"));
 
-        // 注：买卖盘口等其他字段可以按需解析，这里只解析关键字段
+        // 买卖盘口（10档）
+        extract_repeated_int_array(line, "BuyPriceQueue", stock.buypricequeue, 10);
+        extract_repeated_int_array(line, "BuyOrderQtyQueue", stock.buyorderqtyqueue, 10);
+        extract_repeated_int_array(line, "SellPriceQueue", stock.sellpricequeue, 10);
+        extract_repeated_int_array(line, "SellOrderQtyQueue", stock.sellorderqtyqueue, 10);
 
         return true;
     }

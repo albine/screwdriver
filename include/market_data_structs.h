@@ -114,6 +114,9 @@ struct MDOrderStruct {
     int64_t applseqnum;                   // Application sequence number
 
     int32_t datamultiplepowerof10;        // Data multiplier power of 10
+
+    // Security status 上海专有
+    char securitystatus[16];              // 证券状态，如 "OCALL"
 };
 
 // ============================================================================
