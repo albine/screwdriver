@@ -18,19 +18,33 @@ This is a high-frequency trading engine for China stock market (Shanghai/Shenzhe
 
 ## Build Standards
 
-### CRITICAL: Always Use the Build Script
+### CRITICAL: Understand Two Build Scenarios
 
-**DO NOT** use raw `cmake` or `make` commands directly. **ALWAYS** use:
+This project has **TWO different build scenarios**:
 
-```bash
-./build.sh [target]
-```
+| Scenario | Script | Purpose | Output |
+|----------|--------|---------|--------|
+| **Local Testing** | `./build.sh` | 本地开发和回测测试 | 本地可执行文件（仅限本地运行） |
+| **Production Deploy** | `./docker-build.sh` | 生产环境部署 | CentOS 7 兼容的二进制文件 |
 
-**Why?**
-- Sets `LD_LIBRARY_PATH` correctly for fastfish libraries
-- Uses consistent build configuration
-- Handles ABI compatibility (`-D_GLIBCXX_USE_CXX11_ABI=0`)
-- Ensures proper RPATH settings
+**Key Differences**:
+- **Local build** (`build.sh`): 快速编译，用于本地回测，但可能因 glibc 版本不兼容无法在生产服务器运行
+- **Docker build** (`docker-build.sh`): 在 CentOS 7 容器中编译，确保生产环境兼容性，但编译较慢
+
+### When to Use Which Build
+
+**Use `./build.sh` when:**
+- ✅ Developing locally (修改代码后快速验证)
+- ✅ Running backtest on local machine (本地回测)
+- ✅ Testing strategies locally (测试策略)
+- ✅ Quick iteration during development (快速迭代开发)
+
+**Use `./docker-build.sh` when:**
+- ✅ Preparing for production deployment (准备生产部署)
+- ✅ Building for CentOS 7 server (目标是 CentOS 7 服务器)
+- ✅ Final build before deploy (部署前的最终构建)
+
+**DO NOT use raw `cmake` or `make` commands** - always use the appropriate build script.
 
 ### Build Targets
 
@@ -44,11 +58,12 @@ This is a high-frequency trading engine for China stock market (Shanghai/Shenzhe
 
 ### Build Examples
 
+**Local Development (本地开发):**
 ```bash
-# Build main engine (most common)
+# Build main engine for local testing
 ./build.sh engine
 
-# Build and run tests
+# Build and run tests locally
 ./build.sh test_fastorderbook
 ./build/test_fastorderbook
 
@@ -59,19 +74,35 @@ This is a high-frequency trading engine for China stock market (Shanghai/Shenzhe
 ./build.sh --debug engine
 ```
 
-### When Claude Should Build
+**Production Deployment (生产部署):**
+```bash
+# Build for CentOS 7 production server
+./docker-build.sh
 
-Claude should **automatically** build when:
-1. ✅ Modifying any `.cpp` or `.h` files
+# Then deploy
+./deploy.sh
+```
+
+### When Claude Should Build (Automatically)
+
+Claude should **automatically build locally** (`./build.sh`) when:
+1. ✅ Modifying any `.cpp` or `.h` files (to verify compilation)
 2. ✅ Creating new strategy files in `src/strategy/`
-3. ✅ Changing `CMakeLists.txt`
-4. ✅ User asks to "test" or "run" the engine
+3. ✅ Changing `CMakeLists.txt` (use `--clean`)
+4. ✅ User asks to "test" or "run backtest"
 5. ✅ After fixing compilation errors
 
 Claude should **NOT** build when:
 - ❌ Only reading/analyzing code
 - ❌ Modifying configuration files (`.conf`, `.py`)
 - ❌ Editing documentation
+- ❌ User only asks general questions
+
+**Production Build Decision**:
+- Claude should **suggest** `./docker-build.sh` only when:
+  - User explicitly mentions "deploy" or "production"
+  - User asks to prepare for server deployment
+- For normal development, **always use** `./build.sh`
 
 ---
 
@@ -160,17 +191,27 @@ After running backtest, check logs:
 
 ### Building for Production
 
-Use Docker build for CentOS 7 compatibility:
+**IMPORTANT**: Production server is CentOS 7 (glibc 2.17). **MUST** use Docker build:
+
 ```bash
 ./docker-build.sh
 ```
 
-This ensures binary runs on remote CentOS 7 servers (GLIBC compatibility).
+**Why Docker?**
+- Ensures GLIBC 2.17 compatibility (CentOS 7 requirement)
+- Local build may use GLIBC 2.32+ which will fail on production server
+- Cross-compiles in CentOS 7 container environment
+
+**Build Process**:
+1. Builds Docker image from `fastfish/docker/Dockerfile`
+2. Compiles in CentOS 7 container (with correct GCC/GLIBC)
+3. Copies result to `build_centos7/engine`
+4. Also copies to `build/engine` for deployment
 
 ### Deploying to Remote Server
 
 ```bash
-# Package and deploy
+# Package and deploy (full workflow)
 ./deploy.sh
 
 # Package only (no upload)
@@ -180,11 +221,20 @@ This ensures binary runs on remote CentOS 7 servers (GLIBC compatibility).
 ./deploy.sh --host market-m --dest /path/to/dest
 ```
 
-**DO NOT** manually deploy. The script:
-- Packages binary + libraries + configs + certs
-- Creates deployment structure
-- Generates `run.sh` startup script
+**DO NOT** manually deploy. The `deploy.sh` script:
+- Packages `build/engine` binary
+- Includes all shared libraries from `fastfish/libs/`
+- Includes configs from `config/` and `fastfish/config/prod/`
+- Includes SSL certificates from `fastfish/cert/`
+- Creates deployment structure with `run.sh`
 - Handles library symbolic links
+- Uploads to remote server via rsync
+
+**Deployment Checklist**:
+1. ✅ Run `./docker-build.sh` (not `./build.sh`!)
+2. ✅ Verify binary exists: `ls -lh build/engine`
+3. ✅ Run `./deploy.sh`
+4. ✅ SSH to server and test: `./run.sh backtest`
 
 ---
 
@@ -276,27 +326,53 @@ Or use the build script which sets this automatically.
 
 ### Daily Development Workflow
 
+**Local Development & Testing:**
 ```bash
 # 1. Modify code
 vim src/strategy/MyStrategy.h
 
-# 2. Build
+# 2. Build locally
 ./build.sh engine
 
-# 3. Test locally
+# 3. Test with backtest
 python run_backtest.py 20260114
 
 # 4. Check logs
 tail -f logs/backtest_biz.log
 ```
 
+**Production Deployment:**
+```bash
+# 1. Final code review and commit
+git commit -am "Add new strategy"
+
+# 2. Build for production (CentOS 7)
+./docker-build.sh
+
+# 3. Deploy to server
+./deploy.sh
+
+# 4. SSH to server and verify
+ssh market-m
+cd /home/jiace/project/trading-engine
+./run.sh backtest
+```
+
 ### Claude's Automatic Actions
 
+**During Local Development:**
 When Claude modifies code, it should:
-1. ✅ Immediately build using `./build.sh [target]`
+1. ✅ Immediately build using `./build.sh [target]` (for verification)
 2. ✅ Fix any compilation errors
-3. ✅ Suggest running backtest to verify
+3. ✅ Suggest running backtest to verify functionality
 4. ✅ Check logs if user reports issues
+
+**For Production Deployment:**
+Claude should:
+1. ✅ Remind user to use `./docker-build.sh` (not `./build.sh`)
+2. ✅ Suggest testing locally first with `./build.sh` + backtest
+3. ✅ Guide through deployment checklist
+4. ✅ Never assume local build works on production server
 
 ---
 

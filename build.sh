@@ -1,7 +1,12 @@
 #!/bin/bash
 #
-# Trading Engine CMake Build Script
-# 标准化构建流程，自动设置环境变量和编译选项
+# Trading Engine - Local Build Script
+# 用于本地开发和回测测试
+#
+# 注意：
+#   - 本脚本编译的二进制文件仅用于本地运行（回测）
+#   - 如需部署到生产服务器（CentOS 7），请使用: ./docker-build.sh
+#   - 原因：生产服务器 glibc 版本较低，需要在 CentOS 7 容器中编译
 #
 
 set -e  # 任何命令失败时退出
@@ -45,9 +50,15 @@ while [[ $# -gt 0 ]]; do
             CLEAN=true
             shift
             ;;
+        --prod)
+            print_error "For production build, use: ./docker-build.sh"
+            exit 1
+            ;;
         -h|--help)
             cat << EOF
 Usage: $0 [options] [target]
+
+⚠️  LOCAL BUILD ONLY - For production deployment, use: ./docker-build.sh
 
 Options:
     --debug         Build with Debug configuration (default: Release)
@@ -79,7 +90,10 @@ EOF
 done
 
 # 显示构建信息
-print_status "Trading Engine Build System"
+print_status "Trading Engine Build System (Local)"
+print_warning "This build is for LOCAL TESTING ONLY"
+print_warning "For production deployment, use: ./docker-build.sh"
+echo ""
 print_status "Project Root: $PROJECT_ROOT"
 print_status "Build Type: $BUILD_TYPE"
 if [ -n "$TARGET" ]; then
@@ -140,9 +154,14 @@ done
 
 # 提示如何运行
 echo ""
-print_status "To run the engine:"
-echo "  # Backtest mode:"
+print_status "To run locally (backtest mode):"
+echo "  # Method 1: Use Python helper (recommended)"
+echo "  python run_backtest.py 20260114"
+echo ""
+echo "  # Method 2: Run directly"
+echo "  export LD_LIBRARY_PATH=\$PWD/fastfish/libs:\$LD_LIBRARY_PATH"
 echo "  ./build/engine backtest"
 echo ""
-echo "  # Or use the Python helper:"
-echo "  python run_backtest.py 20260114"
+print_warning "For production deployment:"
+echo "  1. Build with Docker: ./docker-build.sh"
+echo "  2. Deploy to server: ./deploy.sh"

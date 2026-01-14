@@ -14,8 +14,17 @@
 /**
  * Opening Range Breakout Strategy - Adapted for current trading engine
  *
- * Gap Down Scenario: Buy when price recovers above previous close
- * Gap Up Scenario: Buy on breakout after consolidation period
+ * 策略逻辑：
+ * - Gap Down Scenario: 低开后，价格回升突破前收盘价时买入
+ * - Gap Up Scenario: 高开后，经过整理期突破时买入
+ *
+ * 参数配置：
+ * - Opening range period: 开盘后观察期（默认 30 分钟）
+ * - Breakout threshold: 突破确认阈值
+ *
+ * 风险控制：
+ * - 仅在开盘时段执行（9:30-11:30, 13:00-15:00）
+ * - 单日单次交易限制
  */
 class OpeningRangeBreakoutStrategy : public Strategy {
 private:

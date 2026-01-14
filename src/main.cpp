@@ -17,6 +17,7 @@
 #include "strategy/TestStrategy.h"
 #include "strategy/PrintStrategy.h"
 #include "strategy/OpeningRangeBreakoutStrategy.h"
+#include "strategy/GapUpVolumeBreakoutStrategy.h"
 
 // 引入配置和策略工厂
 #include "backtest_config.h"
@@ -58,6 +59,11 @@ void register_all_strategies() {
     factory.register_strategy("OpeningRangeBreakoutStrategy",
         [](const std::string& symbol) -> std::unique_ptr<Strategy> {
             return std::make_unique<OpeningRangeBreakoutStrategy>(symbol + "_ORB");
+        });
+
+    factory.register_strategy("GapUpVolumeBreakoutStrategy",
+        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
+            return std::make_unique<GapUpVolumeBreakoutStrategy>(symbol + "_GUVB");
         });
 }
 
