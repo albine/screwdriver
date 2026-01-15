@@ -2,10 +2,13 @@
 #define TEST_STRATEGY_H
 
 #include "strategy_base.h"
-#include <iostream>
+#include "logger.h"
 #include <iomanip>
 #include <chrono>
 #include <atomic>
+#include <random>
+
+#define LOG_MODULE MOD_STRATEGY
 
 // ==========================================
 // 测试策略 - 用于验证订单簿正确性
@@ -33,11 +36,23 @@ private:
     };
     BookSnapshot last_snapshot_;
 
+    // 记录上次打印的分钟，避免重复打印
+    int32_t last_print_minute_ = -1;
+
+    // 随机偏移（-1到+1分钟），避免多策略同时打印
+    int32_t random_offset_minute_ = 0;
+
 public:
-    explicit TestStrategy(const std::string& name, uint64_t sample_interval = 10000)
+    explicit TestStrategy(const std::string& name, uint64_t sample_interval = 100000)
         : sample_interval_(sample_interval) {
         this->name = name;
         start_time_ = std::chrono::steady_clock::now();
+
+        // 生成-1到+1分钟的随机偏移
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(-1, 1);
+        random_offset_minute_ = dis(gen);
     }
 
     void on_tick(const MDStockStruct& stock) override {
@@ -45,24 +60,27 @@ public:
 
         // 定期打印 Tick 统计
         if (tick_count_ % sample_interval_ == 0) {
-            std::cout << "[" << name << "] Processed " << tick_count_
-                      << " ticks, LastPx: " << (stock.lastpx / 10000.0)
-                      << " Volume: " << stock.totalvolumetrade
-                      << std::endl;
+            LOG_M_INFO("[{}] Processed {} ticks, LastPx: {:.4f} Volume: {}",
+                       name, tick_count_.load(), stock.lastpx / 10000.0, stock.totalvolumetrade);
         }
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
         order_count_++;
 
-        // 定期打印订单簿状态
-        if (order_count_ % sample_interval_ == 0) {
-            print_book_status(book, order);
+        // 按时间打印订单簿
+        if (should_print_book(order.mdtime)) {
+            print_book_with_time(book, order.mdtime);
         }
     }
 
     void on_transaction(const MDTransactionStruct& txn, const FastOrderBook& book) override {
         transaction_count_++;
+
+        // 按时间打印订单簿
+        if (should_print_book(txn.mdtime)) {
+            print_book_with_time(book, txn.mdtime);
+        }
 
         // 定期验证订单簿合法性
         if (transaction_count_ % sample_interval_ == 0) {
@@ -75,41 +93,87 @@ public:
         auto end_time = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time_);
 
-        std::cout << "\n=== " << name << " 统计报告 ===" << std::endl;
-        std::cout << "运行时间: " << duration.count() << " ms" << std::endl;
-        std::cout << "处理消息总数: " << (order_count_ + transaction_count_ + tick_count_) << std::endl;
-        std::cout << "  - 委托消息: " << order_count_ << std::endl;
-        std::cout << "  - 成交消息: " << transaction_count_ << std::endl;
-        std::cout << "  - Tick 消息: " << tick_count_ << std::endl;
+        LOG_M_INFO("=== {} 统计报告 ===", name);
+        LOG_M_INFO("运行时间: {} ms", duration.count());
+        LOG_M_INFO("处理消息总数: {}", order_count_.load() + transaction_count_.load() + tick_count_.load());
+        LOG_M_INFO("  - 委托消息: {}", order_count_.load());
+        LOG_M_INFO("  - 成交消息: {}", transaction_count_.load());
+        LOG_M_INFO("  - Tick 消息: {}", tick_count_.load());
 
         if (duration.count() > 0) {
             uint64_t total_msgs = order_count_ + transaction_count_ + tick_count_;
             double throughput = (total_msgs * 1000.0) / duration.count();
-            std::cout << "吞吐量: " << std::fixed << std::setprecision(0)
-                      << throughput << " msg/s" << std::endl;
+            LOG_M_INFO("吞吐量: {:.0f} msg/s", throughput);
         }
 
-        std::cout << "\n=== 最终订单簿状态 ===" << std::endl;
-        print_book_levels(book, 10);
+        LOG_M_INFO("=== 最终订单簿状态 ===");
+        book.print_orderbook(10, "");
     }
 
 private:
-    // 打印订单簿状态
-    void print_book_status(const FastOrderBook& book, const MDOrderStruct& order) {
-        auto best_bid = book.get_best_bid();
-        auto best_ask = book.get_best_ask();
+    // 获取当前系统时间（微秒时间戳）
+    int64_t get_system_time_us() const {
+        auto now = std::chrono::system_clock::now();
+        auto duration = now.time_since_epoch();
+        return std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+    }
 
-        std::cout << "[" << name << "] Order #" << order_count_
-                  << " | ApplSeqNum: " << order.applseqnum
-                  << " | BestBid: " << (best_bid ? std::to_string(*best_bid / 10000.0) : "None")
-                  << " | BestAsk: " << (best_ask ? std::to_string(*best_ask / 10000.0) : "None");
+    // 检查是否需要打印订单簿
+    bool should_print_book(int32_t mdtime) {
+        int hour = mdtime / 10000000;
+        int minute = (mdtime / 100000) % 100;
+        int second = (mdtime / 1000) % 100;
 
-        // 检查买卖价格是否合法
-        if (best_bid && best_ask && *best_bid >= *best_ask) {
-            std::cout << " ⚠️ WARNING: Bid >= Ask!" << std::endl;
-        } else {
-            std::cout << std::endl;
+        // 固定时间点: 9:28:00, 11:35:00, 15:05:00 (不加偏移)
+        if ((hour == 9 && minute == 28 && second == 0) ||
+            (hour == 11 && minute == 35 && second == 0) ||
+            (hour == 15 && minute == 5 && second == 0)) {
+            int current_minute = hour * 60 + minute;
+            if (current_minute != last_print_minute_) {
+                last_print_minute_ = current_minute;
+                return true;
+            }
         }
+
+        // 盘中每10分钟（加随机偏移，避免拥挤）
+        // 上午: 9:30-11:30, 下午: 13:00-15:00
+        bool is_trading_time = (hour == 9 && minute >= 30) ||
+                               (hour == 10) ||
+                               (hour == 11 && minute <= 30) ||
+                               (hour == 13) ||
+                               (hour == 14) ||
+                               (hour == 15 && minute == 0);
+
+        if (is_trading_time && second == 0) {
+            // 检查是否是 (整10分钟 + offset)
+            int target_minute = (minute / 10) * 10 + random_offset_minute_;
+            // 处理边界
+            if (target_minute < 0) target_minute += 10;
+            if (target_minute >= 60) target_minute -= 10;
+
+            if (minute == target_minute) {
+                int current_minute = hour * 60 + minute;
+                if (current_minute != last_print_minute_) {
+                    last_print_minute_ = current_minute;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // 打印订单簿状态（带时间戳和10档）
+    void print_book_with_time(const FastOrderBook& book, int32_t mdtime) {
+        int64_t sys_time_us = get_system_time_us();
+
+        LOG_M_INFO("========================================");
+        LOG_M_INFO("OrderBook Snapshot | SysTime: {} us | MDTime: {}", sys_time_us, mdtime);
+
+        // 使用 FastOrderBook::print_orderbook() 打印10档
+        book.print_orderbook(10, "");
+
+        LOG_M_INFO("========================================");
     }
 
     // 验证订单簿合法性
@@ -119,10 +183,8 @@ private:
 
         // 检查 1: 买一价 < 卖一价
         if (best_bid && best_ask && *best_bid >= *best_ask) {
-            std::cerr << "❌ ERROR: Invalid book state at Txn #" << transaction_count_
-                      << " | BestBid: " << (*best_bid / 10000.0)
-                      << " >= BestAsk: " << (*best_ask / 10000.0)
-                      << std::endl;
+            LOG_M_ERROR("Invalid book state at Txn #{} | BestBid: {:.4f} >= BestAsk: {:.4f}",
+                        transaction_count_.load(), *best_bid / 10000.0, *best_ask / 10000.0);
         }
 
         // 检查 2: 成交价格应该在买卖价之间（如果存在）
@@ -138,43 +200,8 @@ private:
 
         // 定期打印验证通过信息
         if (transaction_count_ % (sample_interval_ * 10) == 0) {
-            std::cout << "✅ Validation passed at Txn #" << transaction_count_ << std::endl;
+            LOG_M_INFO("Validation passed at Txn #{}", transaction_count_.load());
         }
-    }
-
-    // 打印订单簿档位
-    void print_book_levels(const FastOrderBook& book, int n) {
-        auto bids = book.get_bid_levels(n);
-        auto asks = book.get_ask_levels(n);
-
-        std::cout << "\n--- 卖盘 (Ask) ---" << std::endl;
-        if (asks.empty()) {
-            std::cout << "  (空)" << std::endl;
-        } else {
-            // 倒序打印卖盘（价格从高到低）
-            for (auto it = asks.rbegin(); it != asks.rend(); ++it) {
-                std::cout << "  卖" << std::distance(asks.rbegin(), it) + 1
-                          << ": " << std::fixed << std::setprecision(4)
-                          << (it->first / 10000.0) << " 元  "
-                          << it->second << std::endl;
-            }
-        }
-
-        std::cout << "-------------------" << std::endl;
-
-        std::cout << "--- 买盘 (Bid) ---" << std::endl;
-        if (bids.empty()) {
-            std::cout << "  (空)" << std::endl;
-        } else {
-            int level = 1;
-            for (const auto& [price, volume] : bids) {
-                std::cout << "  买" << level++
-                          << ": " << std::fixed << std::setprecision(4)
-                          << (price / 10000.0) << " 元  "
-                          << volume << std::endl;
-            }
-        }
-        std::cout << std::endl;
     }
 };
 
@@ -208,16 +235,14 @@ public:
         auto end_time = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time_);
 
-        std::cout << "\n=== " << name << " 性能报告 ===" << std::endl;
-        std::cout << "总消息数: " << message_count_ << std::endl;
-        std::cout << "运行时间: " << duration.count() << " ms" << std::endl;
+        LOG_M_INFO("=== {} 性能报告 ===", name);
+        LOG_M_INFO("总消息数: {}", message_count_.load());
+        LOG_M_INFO("运行时间: {} ms", duration.count());
 
         if (duration.count() > 0) {
             double throughput = (message_count_ * 1000.0) / duration.count();
-            std::cout << "吞吐量: " << std::fixed << std::setprecision(0)
-                      << throughput << " msg/s" << std::endl;
-            std::cout << "平均延迟: " << std::fixed << std::setprecision(2)
-                      << (duration.count() * 1000.0 / message_count_) << " μs/msg" << std::endl;
+            LOG_M_INFO("吞吐量: {:.0f} msg/s", throughput);
+            LOG_M_INFO("平均延迟: {:.2f} us/msg", duration.count() * 1000.0 / message_count_);
         }
     }
 };
