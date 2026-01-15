@@ -26,9 +26,13 @@
 // 引入日志模块
 #include "logger.h"
 
+// 引入 ZMQ 通信模块
+#include "zmq_client.h"
+
 // 引入 fastfish SDK 所需头文件
 #include "parameter_define.h"
 #include "udp_client_interface.h"
+#include "base_define.h"  // init_env() / fini_env()
 
 // ==========================================
 // 策略注册
@@ -173,6 +177,26 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
 }
 
 // ==========================================
+// 全局 ZMQ 客户端（用于发送信号）
+// ==========================================
+static std::unique_ptr<ZmqClient> g_zmq_client;
+
+// 发送交易信号到外部系统
+void send_signal(const std::string& signal_type, const json& data) {
+    if (g_zmq_client && g_zmq_client->is_running()) {
+        json payload;
+        payload["type"] = signal_type;
+        payload["data"] = data;
+        payload["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+
+        std::string req_id = signal_type + "_" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count());
+        g_zmq_client->send(req_id, payload);
+    }
+}
+
+// ==========================================
 // 实盘模式
 // ==========================================
 void run_live_mode(quill::Logger* logger, const std::string& config_file = "config/live.conf") {
@@ -229,6 +253,24 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
 
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine with {} symbols...", valid_symbols.size());
     engine.start();
+
+    // 初始化 ZMQ 客户端（可通过 DISABLE_ZMQ=1 禁用）
+    // 注意：某些系统上 ZMQ 可能因 signaler 问题导致 abort
+    const char* disable_zmq = std::getenv("DISABLE_ZMQ");
+    if (disable_zmq && std::string(disable_zmq) == "1") {
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client disabled via DISABLE_ZMQ=1");
+    } else {
+        const char* zmq_endpoint = std::getenv("ZMQ_ENDPOINT");
+        std::string endpoint = zmq_endpoint ? zmq_endpoint : "tcp://localhost:13380";
+
+        g_zmq_client = std::make_unique<ZmqClient>(endpoint);
+
+        if (g_zmq_client->start()) {
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client started, endpoint: {}", endpoint);
+        } else {
+            LOG_MODULE_WARNING(logger, MOD_ENGINE, "Failed to start ZMQ client, continuing without it");
+        }
+    }
 
     // 创建实盘数据适配器
     LiveMarketAdapter adapter("market_data", &engine);
@@ -305,6 +347,7 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
     detail_shg->add_marketdatatypes(MD_TICK);
     detail_shg->add_marketdatatypes(MD_ORDER);
     detail_shg->add_marketdatatypes(MD_TRANSACTION);
+    detail_shg->add_marketdatatypes(AD_ORDERBOOK_SNAPSHOT);  // OrderBook快照（备份）
 
     // 订阅深圳股票的TICK、ORDER、TRANSACTION数据
     SubscribeBySourceTypeDetail* detail_she = source_type->add_subscribebysourcetypedetail();
@@ -315,6 +358,7 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
     detail_she->add_marketdatatypes(MD_TICK);
     detail_she->add_marketdatatypes(MD_ORDER);
     detail_she->add_marketdatatypes(MD_TRANSACTION);
+    detail_she->add_marketdatatypes(AD_ORDERBOOK_SNAPSHOT);  // OrderBook快照（备份）
 
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Subscribing to market data (StockType, XSHG+XSHE)...");
     ret = udp_client->SubscribeBySourceType(interface_ip, source_type.get());
@@ -336,6 +380,12 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
 
     // 清理（注意：这段代码在正常情况下不会执行，因为上面是无限循环）
     // 实际应该通过信号处理器来优雅关闭
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Stopping ZMQ client...");
+    if (g_zmq_client) {
+        g_zmq_client->stop();
+        g_zmq_client.reset();
+    }
+
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Stopping strategy engine...");
     engine.stop();
     ClientFactory::Uninstance();
@@ -345,6 +395,9 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
 // 主入口
 // ==========================================
 int main(int argc, char* argv[]) {
+    // 初始化 FastFish SDK 环境 (ACE 框架)
+    com::htsc::mdc::gateway::init_env();
+
     // 根据命令行参数选择模式
     std::string mode = "backtest"; // 默认回测模式
 
@@ -383,5 +436,9 @@ int main(int argc, char* argv[]) {
 
     // 统一关闭日志系统
     hft::logger::shutdown();
+
+    // 清理 FastFish SDK 环境
+    com::htsc::mdc::gateway::fini_env();
+
     return 0;
 }

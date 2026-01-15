@@ -449,5 +449,5 @@ private:
         return std::string(buf);
     }
 };
-
+#undef LOG_MODULE
 #endif // GAP_UP_VOLUME_BREAKOUT_STRATEGY_H

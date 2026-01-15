@@ -354,5 +354,5 @@ private:
         return std::string(buf);
     }
 };
-
+#undef LOG_MODULE
 #endif // PRICE_LEVEL_VOLUME_STRATEGY_H

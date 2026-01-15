@@ -247,5 +247,5 @@ private:
     }
 
 };
-
+#undef LOG_MODULE
 #endif // OPENING_RANGE_BREAKOUT_STRATEGY_H

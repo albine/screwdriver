@@ -37,6 +37,9 @@ REQUIRED_LIBS=(
     "libaeron_driver.so"
     "libACE.so.6.4.3"
     "libACE_SSL.so.6.4.3"
+    "libzmq.so.5.0.0"
+    "libsodium.so.23.3.0"
+    "libpgm-5.2.so.0.0.122"
 )
 
 # Symbolic links to create
@@ -49,6 +52,11 @@ declare -A SYMLINKS=(
     ["libcrypto.so"]="libcrypto.so.1.0.2k"
     ["libACE.so"]="libACE.so.6.4.3"
     ["libACE_SSL.so"]="libACE_SSL.so.6.4.3"
+    ["libzmq.so.5"]="libzmq.so.5.0.0"
+    ["libzmq.so"]="libzmq.so.5.0.0"
+    ["libsodium.so.23"]="libsodium.so.23.3.0"
+    ["libsodium.so"]="libsodium.so.23.3.0"
+    ["libpgm-5.2.so.0"]="libpgm-5.2.so.0.0.122"
 )
 
 # ============================================

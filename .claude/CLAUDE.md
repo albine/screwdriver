@@ -187,6 +187,60 @@ After running backtest, check logs:
 
 ---
 
+## Logging Standards
+
+### File-Level Module Logging Macros
+
+本项目使用 Quill 高性能异步日志库。**必须使用文件级模块日志宏**，不要直接调用 `LOG_ERROR(logger, ...)` 等底层宏。
+
+**使用方法**：
+
+```cpp
+#include "logger.h"
+
+// 1. 在文件开头定义模块名（头文件守卫之后）
+#define LOG_MODULE "MyModule"
+
+// 2. 使用 LOG_M_* 宏记录日志
+LOG_M_DEBUG("debug message, value={}", value);
+LOG_M_INFO("info message");
+LOG_M_WARNING("warning message");
+LOG_M_ERROR("error message: {}", error_msg);
+
+// 3. 在文件末尾取消定义（#endif 之前）
+#undef LOG_MODULE
+```
+
+**输出格式**：
+```
+2026-01-15 09:30:00.123456789 [INFO] [12345] [MyModule] info message
+```
+
+**预定义模块名**（在 `logger.h` 中）：
+- `MOD_ENGINE` - "Engine"
+- `MOD_ORDERBOOK` - "OrderBook"
+- `MOD_STRATEGY` - "Strategy"
+- `MOD_GATEWAY` - "Gateway"
+- `MOD_MARKET` - "Market"
+
+**业务日志**（交易相关）：
+```cpp
+// 使用 LOG_BIZ 宏，自动写入业务日志文件
+LOG_BIZ(BIZ_ORDR, "下单 symbol={} price={}", symbol, price);
+LOG_BIZ(BIZ_FILL, "成交 order_id={} qty={}", order_id, qty);
+```
+
+**业务日志类型**：
+- `BIZ_SESS` - 会话（登录/登出）
+- `BIZ_ORDR` - 下单
+- `BIZ_FILL` - 成交回报
+- `BIZ_CNCL` - 撤单
+- `BIZ_RJCT` - 拒绝
+- `BIZ_POSN` - 持仓变化
+- `BIZ_ACCT` - 账户/资金
+
+---
+
 ## Deployment (Production)
 
 ### Building for Production
@@ -386,4 +440,4 @@ Claude should:
 
 ---
 
-Last Updated: 2026-01-14
+Last Updated: 2026-01-15

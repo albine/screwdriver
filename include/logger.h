@@ -115,7 +115,7 @@ inline quill::Logger* init(const LogConfig& config = LogConfig{}) {
     // 日志格式：纳秒精度时间戳 + 等级 + 线程ID + 消息
     // 格式: 2025-01-11 09:30:00.123456789 [INFO] [12345] message
     std::string pattern =
-        "%(time) [%(log_level)] [%(thread_id)] %(message)";
+        "%(time) [%(thread_id)] [%(log_level)] %(message)";
     std::string time_format = "%Y-%m-%d %H:%M:%S.%Qns";  // 纳秒精度
 
     std::vector<std::shared_ptr<quill::Sink>> sinks;

@@ -4,10 +4,13 @@
 #include "../fastfish/src/InsightHandle.h"
 #include "strategy_engine.h"
 #include "market_data_structs.h"
+#include "ADOrderbookSnapshot.pb.h"
+#include "logger.h"
 
 #include <cstring>
 #include <algorithm>
 #include <type_traits>
+#include <atomic>
 
     // ==========================================
 // 高性能拷贝宏
@@ -93,6 +96,15 @@ public:
                     MDTransactionStruct transaction;  // 栈上对象，不初始化
                     convert_to_transaction_fast(pb_txn, transaction);
                     engine_->on_market_transaction(transaction);
+                }
+                break;
+            }
+            case AD_ORDERBOOK_SNAPSHOT: {
+                if (data.has_orderbooksnapshot()) {
+                    const auto& snapshot = data.orderbooksnapshot();
+                    // 过滤非股票类型
+                    if (snapshot.securitytype() != StockType) break;
+                    on_orderbook_snapshot(snapshot);
                 }
                 break;
             }
@@ -369,6 +381,63 @@ private:
         // 3.3 订单数量队列 (上限 50 档)
         COPY_AND_COUNT(stock.buynumordersqueue, stock.buynumordersqueue_count, pb_stock.buynumordersqueue(), 50);
         COPY_AND_COUNT(stock.sellnumordersqueue, stock.sellnumordersqueue_count, pb_stock.sellnumordersqueue(), 50);
+    }
+
+    // ==========================================
+    // OrderBook Snapshot 处理（备份/对比用）
+    // ==========================================
+    void on_orderbook_snapshot(const com::htsc::mdc::insight::model::ADOrderbookSnapshot& snapshot) {
+        // 获取证券代码
+        const std::string& security_id = snapshot.htscsecurityid();
+
+        // 获取本地 OrderBook 进行对比
+        // 注意：engine_ 需要提供 get_orderbook() 方法来获取 FastOrderBook
+        // 如果没有该方法，这里只做日志记录
+
+        // 提取快照中的买卖一档信息
+        int64_t snapshot_bid1_price = 0;
+        int32_t snapshot_bid1_qty = 0;
+        int64_t snapshot_ask1_price = 0;
+        int32_t snapshot_ask1_qty = 0;
+
+        if (snapshot.buyentries_size() > 0) {
+            const auto& bid1 = snapshot.buyentries(0);
+            snapshot_bid1_price = bid1.price();
+            snapshot_bid1_qty = bid1.totalqty();
+        }
+
+        if (snapshot.sellentries_size() > 0) {
+            const auto& ask1 = snapshot.sellentries(0);
+            snapshot_ask1_price = ask1.price();
+            snapshot_ask1_qty = ask1.totalqty();
+        }
+
+        // 采样日志（每1000次记录一次，避免日志过多）
+        static std::atomic<uint64_t> snapshot_count{0};
+        uint64_t count = snapshot_count.fetch_add(1, std::memory_order_relaxed);
+
+        if (count % 1000 == 0) {
+            // 计算价格乘数
+            int32_t power = snapshot.datamultiplepowerof10();
+            double multiplier = 1.0;
+            if (power > 0) {
+                for (int i = 0; i < power; ++i) multiplier *= 10.0;
+            } else if (power < 0) {
+                for (int i = 0; i < -power; ++i) multiplier /= 10.0;
+            }
+
+            double bid1_px = snapshot_bid1_price * multiplier;
+            double ask1_px = snapshot_ask1_price * multiplier;
+
+            LOG_BIZ(BIZ_ORDR, "[OB_SNAPSHOT] symbol={} bid1={:.2f}x{} ask1={:.2f}x{} time={} levels={}x{}",
+                security_id, bid1_px, snapshot_bid1_qty, ask1_px, snapshot_ask1_qty,
+                snapshot.mdtime(), snapshot.buyentries_size(), snapshot.sellentries_size());
+        }
+
+        // TODO: 与本地 FastOrderBook 对比
+        // 如果发现差异，可以记录告警或触发重建
+        // engine_->compare_orderbook(security_id, snapshot_bid1_price, snapshot_bid1_qty,
+        //                            snapshot_ask1_price, snapshot_ask1_qty);
     }
 };
 

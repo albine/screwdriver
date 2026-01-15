@@ -23,6 +23,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(quill)
 
+# ============ nlohmann/json (FetchContent) ============
+FetchContent_Declare(
+    json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+)
+FetchContent_MakeAvailable(json)
+
+# ============ ZeroMQ ============
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(ZMQ REQUIRED libzmq)
+
 add_executable(engine
     src/main.cpp
     src/FastOrderBook.cpp
@@ -32,12 +44,15 @@ target_include_directories(engine PRIVATE
     ${CMAKE_SOURCE_DIR}/fastfish/include/protobuf-3.1.0/include
     ${CMAKE_SOURCE_DIR}/fastfish/src/protobuf
     ${CMAKE_SOURCE_DIR}/src
+    ${ZMQ_INCLUDE_DIRS}
 )
 # 重要：与 fastfish 库的 ABI 兼容性设置
-target_compile_definitions(engine PRIVATE _GLIBCXX_USE_CXX11_ABI=0 USE_QUILL_LOGGER)
+target_compile_definitions(engine PRIVATE _GLIBCXX_USE_CXX11_ABI=0)
 target_link_libraries(engine
     Threads::Threads
     quill::quill
+    nlohmann_json::nlohmann_json
+    ${ZMQ_LIBRARIES}
     aeron_client_shared
     aeron_driver
     ACE
@@ -53,90 +68,3 @@ set_target_properties(engine PROPERTIES
     INSTALL_RPATH "${CMAKE_SOURCE_DIR}/fastfish/libs"
     LINK_FLAGS "-Wl,-rpath,${CMAKE_SOURCE_DIR}/fastfish/libs"
 )
-
-# 日志模块测试程序
-add_executable(test_logger test/test_logger.cpp)
-target_link_libraries(test_logger
-    Threads::Threads
-    quill::quill
-)
-
-# FastOrderBook历史数据回放测试
-add_executable(test_fastorderbook
-    test/test_fastorderbook.cpp
-    src/FastOrderBook.cpp
-)
-target_include_directories(test_fastorderbook PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(test_fastorderbook
-    Threads::Threads
-    quill::quill
-)
-
-# 策略测试程序（暂时注释掉，因为依赖的源文件已删除）
-# add_executable(test_strategy_simple
-#     test/test_strategy_simple.cpp
-#     src/FastOrderBook.cpp
-#     src/Order.cpp
-#     src/Trade.cpp
-#     src/PriceLevel.cpp
-#     src/OrderBook.cpp
-# )
-# target_include_directories(test_strategy_simple PRIVATE ${CMAKE_SOURCE_DIR}/src)
-# target_link_libraries(test_strategy_simple
-#     Threads::Threads
-#     quill::quill
-# )
-# target_compile_definitions(test_strategy_simple PRIVATE USE_QUILL_LOGGER)
-
-# 调试测试程序（暂时注释掉，因为依赖的源文件已删除）
-# add_executable(test_strategy_debug
-#     test/test_strategy_debug.cpp
-#     src/FastOrderBook.cpp
-#     src/Order.cpp
-#     src/Trade.cpp
-#     src/PriceLevel.cpp
-#     src/OrderBook.cpp
-# )
-# target_include_directories(test_strategy_debug PRIVATE ${CMAKE_SOURCE_DIR}/src)
-# target_link_libraries(test_strategy_debug
-#     Threads::Threads
-#     quill::quill
-# )
-# target_compile_definitions(test_strategy_debug PRIVATE USE_QUILL_LOGGER)
-
-# 消息顺序追踪测试（暂时注释掉，因为依赖的源文件已删除）
-# add_executable(test_transaction_order
-#     test/test_transaction_order.cpp
-#     src/FastOrderBook.cpp
-#     src/Order.cpp
-#     src/Trade.cpp
-#     src/PriceLevel.cpp
-#     src/OrderBook.cpp
-# )
-# target_include_directories(test_transaction_order PRIVATE ${CMAKE_SOURCE_DIR}/src)
-# target_link_libraries(test_transaction_order
-#     Threads::Threads
-#     quill::quill
-# )
-# target_compile_definitions(test_transaction_order PRIVATE USE_QUILL_LOGGER)
-
-# 数据顺序检查测试（无队列）
-add_executable(test_data_order
-    test/test_data_order.cpp
-)
-target_include_directories(test_data_order PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(test_data_order
-    Threads::Threads
-)
-
-# 价格档位挂单量监控策略测试
-add_executable(test_price_level_strategy
-    test/test_price_level_strategy.cpp
-    src/FastOrderBook.cpp
-)
-target_include_directories(test_price_level_strategy PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(test_price_level_strategy
-    Threads::Threads
-    quill::quill
-)
-target_compile_definitions(test_price_level_strategy PRIVATE USE_QUILL_LOGGER)
