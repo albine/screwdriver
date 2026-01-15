@@ -12,7 +12,7 @@
 #include <array>
 #include "concurrentqueue.h"
 #include "market_data_structs.h"
-#include "../src/FastOrderBook.h"
+#include "strategy_base.h"
 
 // ==========================================
 // 分支预测优化宏
@@ -40,31 +40,6 @@ inline int stock_id_fast(const char* symbol, int shard_count) {
     }
     return static_cast<int>(hash % shard_count);
 }
-
-// ==========================================
-// 策略基类
-// ==========================================
-class Strategy {
-public:
-    virtual ~Strategy() = default;
-
-    // 增加初始化和停止回调
-    virtual void on_start() {} 
-    virtual void on_stop() {}
-
-    // 行情数据回调
-    virtual void on_tick(const MDStockStruct& stock) {}
-
-    // 委托数据回调
-    virtual void on_order(const MDOrderStruct& order, const FastOrderBook& book) {}
-
-    // 成交数据回调
-    virtual void on_transaction(const MDTransactionStruct& transaction, const FastOrderBook& book) {}
-
-    // 唯一标识符，用于移除策略
-    uint64_t id = 0;
-    std::string name;
-};
 
 // ==========================================
 // 策略引擎 - 基于 Moodycamel 的分片架构

@@ -1,7 +1,7 @@
 #ifndef OPENING_RANGE_BREAKOUT_STRATEGY_H
 #define OPENING_RANGE_BREAKOUT_STRATEGY_H
 
-#include "strategy_engine.h"
+#include "strategy_base.h"
 #include "market_data_structs.h"
 #include "logger.h"
 #include <map>

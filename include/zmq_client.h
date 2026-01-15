@@ -225,13 +225,13 @@ private:
             auto msg = zmq_ht_proto::AddHotStockMsg::from_json(payload);
             LOG_M_INFO("ADD_HOT_STOCK: symbol={}, target_price={}", msg.symbol, msg.target_price);
             // TODO: 调用策略引擎添加热门股票
-            send_response(req_id, zmq_ht_proto::Action::ACK, {{"success", true}, {"symbol", msg.symbol}});
+            // 不能response，没完没了了
 
         } else if (action == zmq_ht_proto::Action::REMOVE_HOT_STOCK) {
             auto msg = zmq_ht_proto::RemoveHotStockMsg::from_json(payload);
             LOG_M_INFO("REMOVE_HOT_STOCK: symbol={}", msg.symbol);
             // TODO: 调用策略引擎移除热门股票
-            send_response(req_id, zmq_ht_proto::Action::ACK, {{"success", true}, {"symbol", msg.symbol}});
+            // 不能response，没完没了了
 
         } else {
             LOG_M_WARNING("Unknown action: {}", action);

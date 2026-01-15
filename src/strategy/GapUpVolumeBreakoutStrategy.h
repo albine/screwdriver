@@ -1,7 +1,7 @@
 #ifndef GAP_UP_VOLUME_BREAKOUT_STRATEGY_H
 #define GAP_UP_VOLUME_BREAKOUT_STRATEGY_H
 
-#include "strategy_engine.h"
+#include "strategy_base.h"
 #include "market_data_structs.h"
 #include "logger.h"
 #include <map>

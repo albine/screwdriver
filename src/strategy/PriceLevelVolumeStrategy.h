@@ -1,7 +1,7 @@
 #ifndef PRICE_LEVEL_VOLUME_STRATEGY_H
 #define PRICE_LEVEL_VOLUME_STRATEGY_H
 
-#include "strategy_engine.h"
+#include "strategy_base.h"
 #include "logger.h"
 #include <iostream>
 #include <iomanip>

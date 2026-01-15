@@ -1,7 +1,7 @@
 #ifndef PRINT_STRATEGY_H
 #define PRINT_STRATEGY_H
 
-#include "strategy_engine.h"
+#include "strategy_base.h"
 #include <iostream>
 #include <string>
 

@@ -1,7 +1,7 @@
 #ifndef TEST_STRATEGY_H
 #define TEST_STRATEGY_H
 
-#include "strategy_engine.h"
+#include "strategy_base.h"
 #include <iostream>
 #include <iomanip>
 #include <chrono>
