@@ -20,6 +20,7 @@ namespace Action {
     // 业务消息
     constexpr const char* ADD_HOT_STOCK = "add_hot_stock";
     constexpr const char* REMOVE_HOT_STOCK = "remove_hot_stock";
+    constexpr const char* PLACE_ORDER = "place_order";
 }
 
 // ========== 消息结构体 ==========

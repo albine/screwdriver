@@ -128,6 +128,22 @@ public:
 
     bool is_running() const { return running_; }
 
+    // 发送下单消息到 ROUTER
+    void send_place_order(const std::string& symbol, double price) {
+        static int order_seq = 0;
+        json payload;
+        payload["action"] = zmq_ht_proto::Action::PLACE_ORDER;
+        payload["symbol"] = symbol;
+        payload["price"] = price;
+        payload["side"] = "buy";
+        payload["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+
+        std::string req_id = "order_" + std::to_string(++order_seq);
+        send(req_id, payload);
+        LOG_M_INFO("Sent place_order: symbol={}, price={}, side=buy", symbol, price);
+    }
+
 private:
     void recv_loop() {
         char buffer[65536];
