@@ -19,7 +19,8 @@
 
 class StrategyFactory {
 public:
-    using CreatorFunc = std::function<std::unique_ptr<Strategy>(const std::string&)>;
+    // 创建函数类型：接收 symbol 和可选 params 参数
+    using CreatorFunc = std::function<std::unique_ptr<Strategy>(const std::string&, const std::string&)>;
 
     // 获取单例
     static StrategyFactory& instance() {
@@ -27,18 +28,18 @@ public:
         return factory;
     }
 
-    // 注册策略创建函数
+    // 注册策略创建函数（带参数版本）
     void register_strategy(const std::string& name, CreatorFunc creator) {
         creators_[name] = std::move(creator);
     }
 
-    // 创建策略实例
-    std::unique_ptr<Strategy> create(const std::string& name, const std::string& symbol) const {
+    // 创建策略实例（带可选参数）
+    std::unique_ptr<Strategy> create(const std::string& name, const std::string& symbol, const std::string& params = "") const {
         auto it = creators_.find(name);
         if (it == creators_.end()) {
             throw std::runtime_error("Unknown strategy: " + name);
         }
-        return it->second(symbol);
+        return it->second(symbol, params);
     }
 
     // 检查策略是否已注册

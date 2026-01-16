@@ -1,0 +1,1050 @@
+
+╭─── Claude Code v2.1.9 ───────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│              Welcome back stramunger!              │ started                 │
+│                                                    │ Run /init to create a … │
+│                       ▐▛███▜▌                      │ ─────────────────────── │
+│                      ▝▜█████▛▘                     │ Recent activity         │
+│                        ▘▘ ▝▝                       │ No recent activity      │
+│                                                    │                         │
+│   Opus 4.5 · Claude Max · madingyu2@gmail.com's    │                         │
+│   Organization                                     │                         │
+│                   ~/screwdriver                    │                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+❯ Implement the following plan:                                             
+                                                                            
+  # 策略启用/禁用功能 - 数字 ID 优化                                        
+                                                                            
+  ## 背景                                                                   
+  基础功能已实现，现需要优化性能：用数字 ID 替代字符串处理。                
+                                                                            
+  ## 设计方案：数字唯一 ID                                                  
+                                                                            
+  ### ID 格式设计 (uint32_t)                                                
+                                                                            
+  ```                                                                       
+  位分配 (32位):                                                            
+  ┌────────────────┬─────┬──────────────┐                                   
+  │  stock_code    │ exg │ strategy_id  │                                   
+  │  bits 9-29     │ bit8│ bits 0-7     │                                   
+  │  (21 bits)     │     │ (8 bits)     │                                   
+  └────────────────┴─────┴──────────────┘                                   
+                                                                            
+  - bits 0-7:   strategy_id (0-255，最多256种策略)                          
+  - bit 8:      exchange (0=深圳, 1=上海)                                   
+  - bits 9-29:  stock_code (0-999999，6位数字)                              
+  ```                                                                       
+                                                                            
+  ### 核心思路                                                              
+  1. 每个策略类型分配一个 8-bit 数字 ID                                     
+  2. 股票代码 + 交易所 + 策略ID = 唯一 32-bit ID                            
+  3. 外部 API 继续用字符串，边界处转换                                      
+  4. 内部全部用数字 ID，避免字符串操作                                      
+                                                                            
+  ### 优点                                                                  
+  - **极快**: 数字比较/哈希比字符串快10倍以上                               
+  - **紧凑**: 4 bytes vs 112 bytes (symbol[48] + strategy_name[64])         
+  - **API兼容**: 外部接口不变                                               
+                                                                            
+  ## 需要修改的文件                                                         
+                                                                            
+  ### 1. `include/strategy_ids.h`（新建）                                   
+                                                                            
+  定义策略 ID 映射和转换函数：                                              
+                                                                            
+  ```cpp                                                                    
+  #ifndef STRATEGY_IDS_H                                                    
+  #define STRATEGY_IDS_H                                                    
+                                                                            
+  #include <cstdint>                                                        
+  #include <string>                                                         
+  #include <unordered_map>                                                  
+                                                                            
+  namespace StrategyIds {                                                   
+                                                                            
+  // ==========================================                             
+  // 策略类型 ID 定义 (8-bit, 0-255)                                        
+  // ==========================================                             
+  constexpr uint8_t UNKNOWN                         = 0;                    
+  constexpr uint8_t OPENING_RANGE_BREAKOUT          = 1;                    
+  constexpr uint8_t PRICE_LEVEL_VOLUME              = 2;                    
+  constexpr uint8_t GAP_UP_VOLUME_BREAKOUT          = 3;                    
+  constexpr uint8_t WEAK_TO_STRONG_RED_OPEN         = 4;                    
+  constexpr uint8_t BREAKOUT_PRICE_VOLUME           = 5;                    
+  constexpr uint8_t TEST_STRATEGY                   = 254;                  
+  constexpr uint8_t PRINT_STRATEGY                  = 255;                  
+                                                                            
+  // ==========================================                             
+  // 策略名称 <-> ID 映射                                                   
+  // ==========================================                             
+  inline uint8_t name_to_id(const std::string& name) {                      
+  static const std::unordered_map<std::string, uint8_t> map = {             
+  {"OpeningRangeBreakoutStrategy", OPENING_RANGE_BREAKOUT},                 
+  {"PriceLevelVolumeStrategy", PRICE_LEVEL_VOLUME},                         
+  {"GapUpVolumeBreakoutStrategy", GAP_UP_VOLUME_BREAKOUT},                  
+  {"WeakToStrongRedOpenStrategy", WEAK_TO_STRONG_RED_OPEN},                 
+  {"BreakoutPriceVolumeStrategy", BREAKOUT_PRICE_VOLUME},                   
+  {"TestStrategy", TEST_STRATEGY},                                          
+  {"PrintStrategy", PRINT_STRATEGY},                                        
+  };                                                                        
+  auto it = map.find(name);                                                 
+  return (it != map.end()) ? it->second : UNKNOWN;                          
+  }                                                                         
+                                                                            
+  inline const char* id_to_name(uint8_t id) {                               
+  switch (id) {                                                             
+  case OPENING_RANGE_BREAKOUT:   return                                     
+  "OpeningRangeBreakoutStrategy";                                           
+  case PRICE_LEVEL_VOLUME:       return "PriceLevelVolumeStrategy";         
+  case GAP_UP_VOLUME_BREAKOUT:   return                                     
+  "GapUpVolumeBreakoutStrategy";                                            
+  case WEAK_TO_STRONG_RED_OPEN:  return                                     
+  "WeakToStrongRedOpenStrategy";                                            
+  case BREAKOUT_PRICE_VOLUME:    return                                     
+  "BreakoutPriceVolumeStrategy";                                            
+  case TEST_STRATEGY:            return "TestStrategy";                     
+  case PRINT_STRATEGY:           return "PrintStrategy";                    
+  default:                       return "Unknown";                          
+  }                                                                         
+  }                                                                         
+                                                                            
+  // ==========================================                             
+  // 唯一 ID 构造/解析                                                      
+  // ==========================================                             
+                                                                            
+  // 从 symbol (如 "600759.SH" 或 "600759") 解析 stock_code 和 exchange bit 
+  inline bool parse_symbol(const std::string& symbol, uint32_t& stock_code, 
+  bool& is_shanghai) {                                                      
+  // 提取数字部分                                                           
+  size_t num_end = 0;                                                       
+  while (num_end < symbol.size() && symbol[num_end] >= '0' &&               
+  symbol[num_end] <= '9') {                                                 
+  num_end++;                                                                
+  }                                                                         
+  if (num_end == 0 || num_end > 6) return false;                            
+                                                                            
+  stock_code = static_cast<uint32_t>(std::stoul(symbol.substr(0,            
+  num_end)));                                                               
+                                                                            
+  // 判断交易所：'6'开头为上海                                              
+  is_shanghai = (symbol[0] == '6');                                         
+                                                                            
+  return true;                                                              
+  }                                                                         
+                                                                            
+  // 构造唯一 ID                                                            
+  inline uint32_t make_unique_id(uint32_t stock_code, bool is_shanghai,     
+  uint8_t strategy_id) {                                                    
+  // bits 0-7: strategy_id                                                  
+  // bit 8: exchange (1=SH, 0=SZ)                                           
+  // bits 9-29: stock_code                                                  
+  return (stock_code << 9) | (is_shanghai ? 0x100 : 0) | strategy_id;       
+  }                                                                         
+                                                                            
+  // 从字符串构造唯一 ID                                                    
+  inline uint32_t make_unique_id(const std::string& symbol, const           
+  std::string& strategy_name) {                                             
+  uint32_t stock_code;                                                      
+  bool is_shanghai;                                                         
+  if (!parse_symbol(symbol, stock_code, is_shanghai)) {                     
+  return 0;  // 无效                                                        
+  }                                                                         
+  uint8_t strategy_id = name_to_id(strategy_name);                          
+  return make_unique_id(stock_code, is_shanghai, strategy_id);              
+  }                                                                         
+                                                                            
+  // 解析唯一 ID                                                            
+  inline void parse_unique_id(uint32_t unique_id, uint32_t& stock_code,     
+  bool& is_shanghai, uint8_t& strategy_id) {                                
+  strategy_id = unique_id & 0xFF;                                           
+  is_shanghai = (unique_id >> 8) & 0x1;                                     
+  stock_code = (unique_id >> 9) & 0x1FFFFF;                                 
+  }                                                                         
+                                                                            
+  // 从唯一 ID 获取 symbol 字符串 (格式: "600759.SH")                       
+  inline std::string unique_id_to_symbol(uint32_t unique_id) {              
+  uint32_t stock_code;                                                      
+  bool is_shanghai;                                                         
+  uint8_t strategy_id;                                                      
+  parse_unique_id(unique_id, stock_code, is_shanghai, strategy_id);         
+                                                                            
+  char buf[16];                                                             
+  snprintf(buf, sizeof(buf), "%06u.%s", stock_code, is_shanghai ? "SH"      
+  : "SZ");                                                                  
+  return std::string(buf);                                                  
+  }                                                                         
+                                                                            
+  // 从 symbol 解析 shard_id (用于队列路由)                                 
+  inline int get_shard_id_from_symbol(const std::string& symbol, int        
+  shard_count) {                                                            
+  uint32_t stock_code;                                                      
+  bool is_shanghai;                                                         
+  if (!parse_symbol(symbol, stock_code, is_shanghai)) {                     
+  return 0;                                                                 
+  }                                                                         
+  // 用 stock_code + exchange bit 计算 hash                                 
+  uint32_t hash = (stock_code << 1) | (is_shanghai ? 1 : 0);                
+  return static_cast<int>(hash % shard_count);                              
+  }                                                                         
+                                                                            
+  } // namespace StrategyIds                                                
+                                                                            
+  #endif // STRATEGY_IDS_H                                                  
+  ```                                                                       
+                                                                            
+  ### 2. `include/strategy_engine.h` 修改                                   
+                                                                            
+  **a) 替换 ControlMessage：**                                              
+                                                                            
+  ```cpp                                                                    
+  #include "strategy_ids.h"                                                 
+                                                                            
+  struct ControlMessage {                                                   
+  enum class Type : uint8_t { ENABLE, DISABLE };                            
+  Type type;                                                                
+  uint32_t unique_id;      // 唯一 ID                                       
+  char symbol[48];         // 保留用于 shard 路由                           
+                                                                            
+  static ControlMessage enable(const std::string& sym, const                
+  std::string& strat_name) {                                                
+  ControlMessage msg;                                                       
+  msg.type = Type::ENABLE;                                                  
+  msg.unique_id = StrategyIds::make_unique_id(sym, strat_name);             
+  strncpy(msg.symbol, sym.c_str(), sizeof(msg.symbol) - 1);                 
+  msg.symbol[sizeof(msg.symbol) - 1] = '\0';                                
+  return msg;                                                               
+  }                                                                         
+                                                                            
+  static ControlMessage disable(const std::string& sym, const               
+  std::string& strat_name) {                                                
+  ControlMessage msg;                                                       
+  msg.type = Type::DISABLE;                                                 
+  msg.unique_id = StrategyIds::make_unique_id(sym, strat_name);             
+  strncpy(msg.symbol, sym.c_str(), sizeof(msg.symbol) - 1);                 
+  msg.symbol[sizeof(msg.symbol) - 1] = '\0';                                
+  return msg;                                                               
+  }                                                                         
+  };                                                                        
+  ```                                                                       
+                                                                            
+  **b) owned_strategies_ 改用数字 key：**                                   
+                                                                            
+  ```cpp                                                                    
+  // 改前：std::unordered_map<std::string, std::unique_ptr<Strategy>>       
+  owned_strategies_;                                                        
+  // 改后：                                                                 
+  std::unordered_map<uint32_t, std::unique_ptr<Strategy>>                   
+  owned_strategies_;                                                        
+  ```                                                                       
+                                                                            
+  **c) 相关函数更新：**                                                     
+                                                                            
+  - `register_strategy()`: 用 `StrategyIds::make_unique_id()` 生成 key      
+  - `has_strategy()`: 用数字 ID 查找                                        
+  - `enable/disable_strategy()`: 用数字 ID 查找                             
+                                                                            
+  ### 3. `include/strategy_base.h` 修改                                     
+                                                                            
+  ```cpp                                                                    
+  class Strategy {                                                          
+  public:                                                                   
+  // ...现有代码...                                                         
+                                                                            
+  uint8_t strategy_type_id = 0;  // 策略类型 ID（由工厂设置）               
+                                                                            
+  // on_control_message 改为用 unique_id 匹配                               
+  virtual void on_control_message(const ControlMessage& msg);               
+  };                                                                        
+  ```                                                                       
+                                                                            
+  ### 4. `src/strategy_base.cpp` 修改                                       
+                                                                            
+  ```cpp                                                                    
+  void Strategy::on_control_message(const ControlMessage& msg) {            
+  // 用 unique_id 匹配：检查策略类型 ID 是否一致                            
+  uint8_t msg_strategy_id = msg.unique_id & 0xFF;                           
+  if (strategy_type_id != msg_strategy_id) {                                
+  return;  // 不是目标策略                                                  
+  }                                                                         
+                                                                            
+  if (msg.type == ControlMessage::Type::ENABLE) {                           
+  set_enabled(true);                                                        
+  } else if (msg.type == ControlMessage::Type::DISABLE) {                   
+  set_enabled(false);                                                       
+  }                                                                         
+  }                                                                         
+  ```                                                                       
+                                                                            
+  ### 5. `src/main.cpp` 修改                                                
+                                                                            
+  在 `register_all_strategies()` 中设置 `strategy_type_id`：                
+                                                                            
+  ```cpp                                                                    
+  #include "strategy_ids.h"                                                 
+                                                                            
+  void register_all_strategies() {                                          
+  auto& factory = StrategyFactory::instance();                              
+                                                                            
+  factory.register_strategy("OpeningRangeBreakoutStrategy",                 
+  [](const std::string& symbol, const std::string& /*params*/) ->           
+  std::unique_ptr<Strategy> {                                               
+  auto strat =                                                              
+  std::make_unique<OpeningRangeBreakoutStrategy>(symbol + "_ORB");          
+  strat->strategy_type_id =                                                 
+  StrategyIds::OPENING_RANGE_BREAKOUT;                                      
+  return strat;                                                             
+  });                                                                       
+                                                                            
+  factory.register_strategy("PriceLevelVolumeStrategy",                     
+  [](const std::string& symbol, const std::string& /*params*/) ->           
+  std::unique_ptr<Strategy> {                                               
+  auto strat =                                                              
+  std::make_unique<PriceLevelVolumeStrategy>(symbol + "_PriceLevel");       
+  strat->strategy_type_id = StrategyIds::PRICE_LEVEL_VOLUME;                
+  return strat;                                                             
+  });                                                                       
+                                                                            
+  // ... 其他策略类似                                                       
+  }                                                                         
+  ```                                                                       
+                                                                            
+  ## 实现步骤                                                               
+                                                                            
+  | 步骤 | 文件 | 改动 |                                                    
+  |------|------|------|                                                    
+  | 1 | `include/strategy_ids.h` | 新建，定义 ID 常量和转换函数 |           
+  | 2 | `include/strategy_base.h` | 添加 `strategy_type_id` 字段 |          
+  | 3 | `include/strategy_engine.h` | 修改 ControlMessage 使用 unique_id |  
+  | 4 | `include/strategy_engine.h` | owned_strategies_ 改为 uint32_t key | 
+  | 5 | `include/strategy_engine.h` | 更新 register_strategy/has_strategy   
+  等 |                                                                      
+  | 6 | `src/strategy_base.cpp` | on_control_message 用 unique_id 匹配 |    
+  | 7 | `src/main.cpp` | register_all_strategies() 设置 strategy_type_id |  
+  | 8 | 构建测试 | `./build.sh engine` |                                    
+                                                                            
+  ## 验证方案                                                               
+                                                                            
+  1. **编译验证**                                                           
+  ```bash                                                                   
+  ./build.sh engine                                                         
+  ```                                                                       
+                                                                            
+  2. **回测模式验证**                                                       
+  ```bash                                                                   
+  python run_backtest.py 20260114                                           
+  ```                                                                       
+                                                                            
+  3. **ZMQ API 验证**（实盘模式）                                           
+  ```json                                                                   
+  {"action": "disable_strategy", "symbol": "600759", "strategy":            
+  "OpeningRangeBreakoutStrategy"}                                           
+  {"action": "enable_strategy", "symbol": "600759", "strategy":             
+  "OpeningRangeBreakoutStrategy"}                                           
+  ```                                                                       
+                                                                            
+  ## 数据流                                                                 
+                                                                            
+  ```                                                                       
+  ZMQ API (字符串)          StrategyEngine                    Strategy      
+  |                           |                               |             
+  | symbol="600759"           |                               |             
+  | strategy="ORB..."         |                               |             
+  |                           |                               |             
+  | ────────────────────────> | make_unique_id(sym, name)     |             
+  |                           | = 0x12345601                  |             
+  |                           |                               |             
+  |                           | ControlMessage{unique_id}     |             
+  |                           | ─────────────────────────────>|             
+  |                           |                               | if          
+  (strategy_type_id == (id & 0xFF))                                         
+  |                           |                               |             
+  set_enabled(false)                                                        
+  ```                                                                       
+                                                                            
+  **性能提升**:                                                             
+  - 字符串比较 → 数字比较 (10x+ faster)                                     
+  - 字符串哈希 → 数字哈希 (5x+ faster)                                      
+  - 内存占用 112 bytes → 4 bytes per key                                    
+                                                                            
+                                                                            
+  If you need specific details from before exiting plan mode (like exact    
+  code snippets, error messages, or content you generated), read the full   
+  transcript at: /home/pc/.claude/projects/-home-pc-screwdriver/dd73d0cf-17 
+  dd-4c75-aaab-db4fc1b61388.jsonl                                           
+
+● I'll implement this plan to optimize the strategy enable/disable functionality using numeric IDs. Let me start by reading the current files to understand the existing implementation.
+
+● Read(include/strategy_base.h)
+  ⎿  Read 48 lines
+
+● Read(include/strategy_engine.h)
+  ⎿  Read 504 lines
+
+● Read(src/strategy_base.cpp)
+  ⎿  Read 16 lines
+
+● Read(src/main.cpp)
+  ⎿  Read 465 lines
+
+● Now I have a clear understanding of the current code. Let me implement the plan step by step.
+
+  Step 1: Create include/strategy_ids.h
+
+● Write(include/strategy_ids.h)
+  ⎿  Wrote 139 lines to include/strategy_ids.h       
+      1 #ifndef STRATEGY_IDS_H
+      2 #define STRATEGY_IDS_H
+      3 #include <cstdint>
+      4 #include <string>
+      5 #include <unordered_map>
+      6 namespace StrategyIds {
+      7 // ==========================================
+     … +129 lines (ctrl+o to expand)
+
+● Step 2: Modify include/strategy_base.h
+
+● Update(include/strategy_base.h)
+  ⎿  Added 3 lines                                                       
+      36      uint64_t id = 0;
+      37      std::string name;
+      38  
+      39 +    // 策略类型 ID（8-bit，由工厂设置，用于快速匹配控制消息）  
+      40 +    uint8_t strategy_type_id = 0;                              
+      41 +                                                               
+      42      // 启用/禁用状态（无需 atomic，同一策略的所有回调在同一线程
+          顺序执行）
+      43      bool is_enabled() const { return enabled_; }
+      44      void set_enabled(bool enabled) { enabled_ = enabled; }
+
+● Step 3: Modify include/strategy_engine.h
+
+  First, add the include for strategy_ids.h:
+
+● Update(include/strategy_engine.h)
+  ⎿  Added 1 line                                                        
+      17  #include "concurrentqueue.h"
+      18  #include "market_data_structs.h"
+      19  #include "strategy_base.h"
+      20 +#include "strategy_ids.h"                                      
+      21  
+      22  // ==========================================
+      23  // 分支预测优化宏
+
+● Now update the ControlMessage struct:
+
+● Update(include/strategy_engine.h)
+  ⎿  Added 4 lines, removed 6 lines                                      
+      39          DISABLE
+      40      };
+      41      Type type;
+      42 -    char symbol[48];                                           
+      43 -    char strategy_name[64];                                    
+      42 +    uint32_t unique_id;      // 唯一 ID (stock_code << 9 | exch
+         +ange << 8 | strategy_id)                                       
+      43 +    char symbol[48];         // 保留用于 shard 路由            
+      44  
+      45      static ControlMessage enable(const std::string& sym, const 
+          std::string& strat_name) {
+      46          ControlMessage msg;
+      47          msg.type = Type::ENABLE;
+      48 +        msg.unique_id = StrategyIds::make_unique_id(sym, strat_
+         +name);                                                         
+      49          strncpy(msg.symbol, sym.c_str(), sizeof(msg.symbol) - 1
+          );
+      50          msg.symbol[sizeof(msg.symbol) - 1] = '\0';
+      50 -        strncpy(msg.strategy_name, strat_name.c_str(), sizeof(m
+         -sg.strategy_name) - 1);                                        
+      51 -        msg.strategy_name[sizeof(msg.strategy_name) - 1] = '\0'
+         -;                                                              
+      51          return msg;
+      52      }
+      53  
+      54      static ControlMessage disable(const std::string& sym, const
+           std::string& strat_name) {
+      55          ControlMessage msg;
+      56          msg.type = Type::DISABLE;
+      57 +        msg.unique_id = StrategyIds::make_unique_id(sym, strat_
+         +name);                                                         
+      58          strncpy(msg.symbol, sym.c_str(), sizeof(msg.symbol) - 1
+          );
+      59          msg.symbol[sizeof(msg.symbol) - 1] = '\0';
+      60 -        strncpy(msg.strategy_name, strat_name.c_str(), sizeof(m
+         -sg.strategy_name) - 1);                                        
+      61 -        msg.strategy_name[sizeof(msg.strategy_name) - 1] = '\0'
+         -;                                                              
+      60          return msg;
+      61      }
+      62  };
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+● Now update the make_strategy_key to return uint32_t and change owned_strategies_ key:
+
+● Update(include/strategy_engine.h)
+  ⎿  Added 8 lines, removed 3 lines                                      
+       88      mutable std::atomic<uint64_t> enqueue_order_count_{0};
+       89      mutable std::atomic<uint64_t> enqueue_txn_count_{0};
+       90  
+       91 -    // 生成策略唯一 key：symbol:strategy_name                 
+       92 -    static std::string make_strategy_key(const std::string& sy
+          -mbol, const std::string& strategy_name) {                     
+       93 -        return symbol + ":" + strategy_name;                  
+       91 +    // 生成策略唯一 key (数字 ID，高性能)                     
+       92 +    static uint32_t make_strategy_key(const std::string& symbo
+          +l, const std::string& strategy_name) {                        
+       93 +        return StrategyIds::make_unique_id(symbol, strategy_na
+          +me);                                                          
+       94      }
+       95  
+       96 +    // 从 symbol 和 strategy_type_id 生成 key                 
+       97 +    static uint32_t make_strategy_key(const std::string& symbo
+          +l, uint8_t strategy_type_id) {                                
+       98 +        return StrategyIds::make_unique_id(symbol, strategy_ty
+          +pe_id);                                                       
+       99 +    }                                                         
+      100 +                                                              
+      101  private:
+      102      std::vector<std::unique_ptr<moodycamel::ConcurrentQueue<Ma
+           rketMessage>>> queues_;
+      103      std::vector<std::thread> workers_;
+
+● Update owned_strategies_ to use uint32_t key:
+
+● Update(include/strategy_engine.h)
+  ⎿  Added 2 lines, removed 2 lines                                      
+      104      std::atomic<bool> running_{true};
+      105      std::atomic<bool> stopped_{false};
+      106  
+      107 -    // 策略所有权管理：key = "symbol:strategy_name"           
+      108 -    std::unordered_map<std::string, std::unique_ptr<Strategy>>
+          - owned_strategies_;                                           
+      107 +    // 策略所有权管理：key = unique_id (uint32_t)             
+      108 +    std::unordered_map<uint32_t, std::unique_ptr<Strategy>> ow
+          +ned_strategies_;                                              
+      109  
+      110      // 策略注册表：[shard_id][symbol] -> 策略列表（快速查找用
+           的裸指针）
+      111      // 注意：这里的 key 仍然是 symbol（用于市场数据路由）
+  ⎿  Found 7 new diagnostic issues in 1 file (ctrl+o to expand)
+
+● Let me re-read the file to see the current state and update all affected functions:
+
+● Read(include/strategy_engine.h)
+  ⎿  Read 508 lines
+  ⎿  Found 9 new diagnostic issues in 1 file (ctrl+o to expand)
+
+● I need to update all the functions to use uint32_t key. Let me fix them:
+
+● Update(include/strategy_engine.h)
+  ⎿  Added 3 lines, removed 3 lines                                      
+      148  
+      149      // 注册策略（转移所有权）- 启动前调用
+      150      // symbol: 股票代码（如 "600000.SH"）
+      151 -    // strat: 策略实例（需要设置 strat->name）                
+      151 +    // strat: 策略实例（需要设置 strat->name 和 strat->strateg
+          +y_type_id）                                                   
+      152      void register_strategy(const std::string& symbol, std::uni
+           que_ptr<Strategy> strat) {
+      153          if (!strat) {
+      154              return;  // 忽略空指针
+     ...
+      156  
+      157          int shard_id = get_shard_id(symbol);
+      158          Strategy* raw_ptr = strat.get();
+      159 -        std::string key = make_strategy_key(symbol, strat->nam
+          -e);                                                           
+      159 +        uint32_t key = make_strategy_key(symbol, strat->strate
+          +gy_type_id);                                                  
+      160  
+      161 -        // 1. 保存所有权（使用组合 key）                      
+      161 +        // 1. 保存所有权（使用数字 key）                      
+      162          owned_strategies_[key] = std::move(strat);
+      163  
+      164          // 2. 注册裸指针到分片（按 symbol 路由市场数据）
+
+● Update(include/strategy_engine.h)
+  ⎿  Added 4 lines, removed 4 lines                                      
+      171  
+      172      // 运行时注册策略（线程安全）
+      173      // symbol: 股票代码
+      174 -    // strat: 策略实例（需要设置 strat->name）                
+      174 +    // strat: 策略实例（需要设置 strat->name 和 strat->strateg
+          +y_type_id）                                                   
+      175      bool register_strategy_runtime(const std::string& symbol, 
+           std::unique_ptr<Strategy> strat) {
+      176          if (!strat) {
+      177              return false;
+      178          }
+      179  
+      180 -        std::string key = make_strategy_key(symbol, strat->nam
+          -e);                                                           
+      180 +        uint32_t key = make_strategy_key(symbol, strat->strate
+          +gy_type_id);                                                  
+      181  
+      182          // 写锁
+      183          std::unique_lock<std::shared_mutex> lock(registry_mute
+           x_);
+      184  
+      185 -        // 检查是否已存在（使用组合 key）                     
+      185 +        // 检查是否已存在（使用数字 key）                     
+      186          if (owned_strategies_.find(key) != owned_strategies_.e
+           nd()) {
+      187              return false;  // 已存在
+      188          }
+     ...
+      190          int shard_id = get_shard_id(symbol);
+      191          Strategy* raw_ptr = strat.get();
+      192  
+      193 -        // 保存所有权（使用组合 key）                         
+      193 +        // 保存所有权（使用数字 key）                         
+      194          owned_strategies_[key] = std::move(strat);
+      195  
+      196          // 注册裸指针到分片（按 symbol 路由）
+
+● Update(include/strategy_engine.h)
+  ⎿  Added 2 lines, removed 2 lines                                      
+      203          return true;
+      204      }
+      205  
+      206 -    // 检查策略是否存在（使用组合 key）                       
+      206 +    // 检查策略是否存在（使用数字 key）                       
+      207      bool has_strategy(const std::string& symbol, const std::st
+           ring& strategy_name) const {
+      208          std::shared_lock<std::shared_mutex> lock(registry_mute
+           x_);
+      209 -        std::string key = make_strategy_key(symbol, strategy_n
+          -ame);                                                         
+      209 +        uint32_t key = make_strategy_key(symbol, strategy_name
+          +);                                                            
+      210          return owned_strategies_.find(key) != owned_strategies
+           _.end();
+      211      }
+      212  
+
+● Update(include/strategy_engine.h)
+  ⎿  Added 8 lines, removed 1 line                                       
+      224          std::vector<std::string> result;
+      225          result.reserve(owned_strategies_.size());
+      226          for (const auto& kv : owned_strategies_) {
+      227 -            result.push_back(kv.first);                       
+      227 +            // 从数字 key 解析出 symbol 和 strategy_name      
+      228 +            uint32_t stock_code;                              
+      229 +            bool is_shanghai;                                 
+      230 +            uint8_t strategy_id;                              
+      231 +            StrategyIds::parse_unique_id(kv.first, stock_code,
+          + is_shanghai, strategy_id);                                   
+      232 +            std::string symbol = StrategyIds::unique_id_to_sym
+          +bol(kv.first);                                                
+      233 +            const char* strat_name = StrategyIds::id_to_name(s
+          +trategy_id);                                                  
+      234 +            result.push_back(symbol + ":" + strat_name);      
+      235          }
+      236          return result;
+      237      }
+
+● Update(include/strategy_engine.h)
+  ⎿  Added 1 line, removed 1 line                                        
+      238  
+      239      // 运行时移除策略（线程安全）
+      240      void unregister_strategy(const std::string& symbol, const 
+           std::string& strategy_name) {
+      241 -        std::string key = make_strategy_key(symbol, strategy_n
+          -ame);                                                         
+      241 +        uint32_t key = make_strategy_key(symbol, strategy_name
+          +);                                                            
+      242  
+      243          std::unique_lock<std::shared_mutex> lock(registry_mute
+           x_);
+      244  
+  ⎿  Found 8 new diagnostic issues in 1 file (ctrl+o to expand)
+
+● Let me re-read the file to fix the remaining issues:
+
+● Read(include/strategy_engine.h)
+  ⎿  Read 100 lines
+
+● Now I need to fix enable_strategy() and disable_strategy():
+
+● Update(include/strategy_engine.h)
+  ⎿  Added 2 lines, removed 2 lines                                      
+      290  
+      291      // 启用策略
+      292      bool enable_strategy(const std::string& symbol, const std:
+           :string& strategy_name) {
+      293 -        std::string key = make_strategy_key(symbol, strategy_n
+          -ame);                                                         
+      293 +        uint32_t key = make_strategy_key(symbol, strategy_name
+          +);                                                            
+      294          {
+      295              std::shared_lock<std::shared_mutex> lock(registry_
+           mutex_);
+      296              if (owned_strategies_.find(key) == owned_strategie
+           s_.end()) {
+     ...
+      303  
+      304      // 禁用策略
+      305      bool disable_strategy(const std::string& symbol, const std
+           ::string& strategy_name) {
+      306 -        std::string key = make_strategy_key(symbol, strategy_n
+          -ame);                                                         
+      306 +        uint32_t key = make_strategy_key(symbol, strategy_name
+          +);                                                            
+      307          {
+      308              std::shared_lock<std::shared_mutex> lock(registry_
+           mutex_);
+      309              if (owned_strategies_.find(key) == owned_strategie
+           s_.end()) {
+
+● Step 4: Modify src/strategy_base.cpp
+
+● Update(src/strategy_base.cpp)
+  ⎿  Added 4 lines, removed 3 lines                                      
+       2  #include "strategy_engine.h"  // for ControlMessage
+       3  
+       4  void Strategy::on_control_message(const ControlMessage& msg) {
+       5 -    // 只处理目标是自己的控制消息                              
+       6 -    if (name != msg.strategy_name) {                           
+       7 -        return;                                                
+       5 +    // 用 unique_id 匹配：检查策略类型 ID 是否一致（数字比较， 
+         +高性能）                                                       
+       6 +    uint8_t msg_strategy_id = msg.unique_id & 0xFF;            
+       7 +    if (strategy_type_id != msg_strategy_id) {                 
+       8 +        return;  // 不是目标策略                               
+       9      }
+      10  
+      11      if (msg.type == ControlMessage::Type::ENABLE) {
+
+● Step 5: Modify src/main.cpp
+
+  First, add the include:
+
+● Update(src/main.cpp)
+  ⎿  Added 1 line                                                        
+      23  // 引入配置和策略工厂
+      24  #include "backtest_config.h"
+      25  #include "strategy_factory.h"
+      26 +#include "strategy_ids.h"                                      
+      27  
+      28  // 引入日志模块
+      29  #include "logger.h"
+
+● Now update the register_all_strategies() function:
+
+● Update(src/main.cpp)
+  ⎿  Added 21 lines, removed 7 lines                                     
+      44  
+      45      factory.register_strategy("PriceLevelVolumeStrategy",
+      46          [](const std::string& symbol, const std::string& /*para
+          ms*/) -> std::unique_ptr<Strategy> {
+      47 -            return std::make_unique<PriceLevelVolumeStrategy>(s
+         -ymbol + "_PriceLevel");                                        
+      47 +            auto strat = std::make_unique<PriceLevelVolumeStrat
+         +egy>(symbol + "_PriceLevel");                                  
+      48 +            strat->strategy_type_id = StrategyIds::PRICE_LEVEL_
+         +VOLUME;                                                        
+      49 +            return strat;                                      
+      50          });
+      51  
+      52      // BreakoutPriceVolumeStrategy: 配置格式 "股票代码,Breakout
+          PriceVolumeStrategy,突破价格"
+     ...
+       61              if (breakout_price == 0) {
+       62                  throw std::runtime_error("BreakoutPriceVolumeS
+           trategy requires breakout_price parameter (e.g., 98500 for 9.8
+           5 yuan)");
+       63              }
+       62 -            return std::make_unique<BreakoutPriceVolumeStrateg
+          -y>(symbol + "_Breakout", breakout_price);                     
+       64 +            auto strat = std::make_unique<BreakoutPriceVolumeS
+          +trategy>(symbol + "_Breakout", breakout_price);               
+       65 +            strat->strategy_type_id = StrategyIds::BREAKOUT_PR
+          +ICE_VOLUME;                                                   
+       66 +            return strat;                                     
+       67          });
+       68  
+       69      factory.register_strategy("TestStrategy",
+       70          [](const std::string& symbol, const std::string& /*par
+           ams*/) -> std::unique_ptr<Strategy> {
+       67 -            return std::make_unique<TestStrategy>(symbol + "_T
+          -est");                                                        
+       71 +            auto strat = std::make_unique<TestStrategy>(symbol
+          + + "_Test");                                                  
+       72 +            strat->strategy_type_id = StrategyIds::TEST_STRATE
+          +GY;                                                           
+       73 +            return strat;                                     
+       74          });
+       75  
+       76      factory.register_strategy("PerformanceStrategy",
+       77          [](const std::string& symbol, const std::string& /*par
+           ams*/) -> std::unique_ptr<Strategy> {
+       72 -            return std::make_unique<PerformanceStrategy>(symbo
+          -l + "_Perf");                                                 
+       78 +            auto strat = std::make_unique<PerformanceStrategy>
+          +(symbol + "_Perf");                                           
+       79 +            strat->strategy_type_id = StrategyIds::PERFORMANCE
+          +_STRATEGY;                                                    
+       80 +            return strat;                                     
+       81          });
+       82  
+       83      factory.register_strategy("PrintStrategy",
+       84          [](const std::string& symbol, const std::string& /*par
+           ams*/) -> std::unique_ptr<Strategy> {
+       77 -            return std::make_unique<PrintStrategy>(symbol + "_
+          -Print");                                                      
+       85 +            auto strat = std::make_unique<PrintStrategy>(symbo
+          +l + "_Print");                                                
+       86 +            strat->strategy_type_id = StrategyIds::PRINT_STRAT
+          +EGY;                                                          
+       87 +            return strat;                                     
+       88          });
+       89  
+       90      factory.register_strategy("OpeningRangeBreakoutStrategy",
+       91          [](const std::string& symbol, const std::string& /*par
+           ams*/) -> std::unique_ptr<Strategy> {
+       82 -            return std::make_unique<OpeningRangeBreakoutStrate
+          -gy>(symbol + "_ORB");                                         
+       92 +            auto strat = std::make_unique<OpeningRangeBreakout
+          +Strategy>(symbol + "_ORB");                                   
+       93 +            strat->strategy_type_id = StrategyIds::OPENING_RAN
+          +GE_BREAKOUT;                                                  
+       94 +            return strat;                                     
+       95          });
+       96  
+       97      factory.register_strategy("GapUpVolumeBreakoutStrategy",
+       98          [](const std::string& symbol, const std::string& /*par
+           ams*/) -> std::unique_ptr<Strategy> {
+       87 -            return std::make_unique<GapUpVolumeBreakoutStrateg
+          -y>(symbol + "_GUVB");                                         
+       99 +            auto strat = std::make_unique<GapUpVolumeBreakoutS
+          +trategy>(symbol + "_GUVB");                                   
+      100 +            strat->strategy_type_id = StrategyIds::GAP_UP_VOLU
+          +ME_BREAKOUT;                                                  
+      101 +            return strat;                                     
+      102          });
+      103  }
+      104  
+  ⎿  Found 10 new diagnostic issues in 1 file (ctrl+o to expand)
+  ⎿  Found 10 new diagnostic issues in 1 file (ctrl+o to expand)
+
+● Step 6: Build and verify compilation
+
+● Bash(./build.sh engine 2>&1)
+  ⎿  [BUILD] Trading Engine Build System (Local)             
+     [WARN] This build is for LOCAL TESTING ONLY
+     [WARN] For production deployment, use: ./docker-build.sh
+     … +384 lines (ctrl+o to expand)
+
+● Build successful. Let me update the todo list and summarize the changes.
+
+● Implementation complete. Here's a summary of the changes:
+
+  Summary
+
+  Files Modified/Created:
+  File: include/strategy_ids.h
+  Change: NEW - Strategy ID constants and conversion functions
+  ────────────────────────────────────────
+  File: include/strategy_base.h
+  Change: Added strategy_type_id field (uint8_t)
+  ────────────────────────────────────────
+  File: include/strategy_engine.h
+  Change: Updated ControlMessage to use unique_id; changed owned_strategies_ key
+    from string to uint32_t
+  ────────────────────────────────────────
+  File: src/strategy_base.cpp
+  Change: on_control_message() now uses numeric ID matching
+  ────────────────────────────────────────
+  File: src/main.cpp
+  Change: register_all_strategies() sets strategy_type_id for each strategy
+  Key Changes:
+
+  1. Numeric Unique ID Format (32-bit):
+    - bits 0-7: strategy_type_id (0-255)
+    - bit 8: exchange (0=SZ, 1=SH)
+    - bits 9-29: stock_code (0-999999)
+  2. Performance Improvements:
+    - owned_strategies_ map key: string → uint32_t (112 bytes → 4 bytes per key)
+    - Control message matching: string comparison → numeric comparison (10x+ faster)
+    - Hash computation: string hash → integer hash (5x+ faster)
+  3. API Compatibility:
+    - External API still uses strings (symbol, strategy_name)
+    - Conversion happens at boundaries via StrategyIds::make_unique_id()
+
+  Strategy Type IDs:
+  ┌──────────────────────────────┬─────┐
+  │           Strategy           │ ID  │
+  ├──────────────────────────────┼─────┤
+  │ OpeningRangeBreakoutStrategy │ 1   │
+  ├──────────────────────────────┼─────┤
+  │ PriceLevelVolumeStrategy     │ 2   │
+  ├──────────────────────────────┼─────┤
+  │ GapUpVolumeBreakoutStrategy  │ 3   │
+  ├──────────────────────────────┼─────┤
+  │ WeakToStrongRedOpenStrategy  │ 4   │
+  ├──────────────────────────────┼─────┤
+  │ BreakoutPriceVolumeStrategy  │ 5   │
+  ├──────────────────────────────┼─────┤
+  │ PerformanceStrategy          │ 252 │
+  ├──────────────────────────────┼─────┤
+  │ TestStrategy                 │ 254 │
+  ├──────────────────────────────┼─────┤
+  │ PrintStrategy                │ 255 │
+  └──────────────────────────────┴─────┘
+  You can verify the functionality by running a backtest:
+  python run_backtest.py 20260114
+
+✻ Baked for 4m 21s
+
+❯ 现在创建策略是默认的状态是enabled还是disabled？ 
+
+● Looking at the code in include/strategy_base.h:
+
+  protected:
+      bool enabled_ = true;  // 默认启用
+
+  默认状态是 enabled（启用）。
+
+  所有新创建的策略实例 enabled_ 字段初始值为 true，策略会立即开始处理行情数据。
+
+  如果你需要策略默认禁用，可以：
+
+  1. 修改默认值（影响所有策略）:
+  bool enabled_ = false;  // 默认禁用
+  2. 在工厂创建时设置（按策略类型控制）:
+  factory.register_strategy("OpeningRangeBreakoutStrategy",
+      [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
+          auto strat = std::make_unique<OpeningRangeBreakoutStrategy>(symbol + "_ORB");
+          strat->strategy_type_id = StrategyIds::OPENING_RANGE_BREAKOUT;
+          strat->set_enabled(false);  // 创建时禁用
+          return strat;
+      });
+
+  需要修改默认行为吗？
+
+❯ 默认为启用，但是在工厂创建时设置BreakoutPriceVolumeStrategy为禁用 
+
+● Update(src/main.cpp)
+  ⎿  Added 1 line                                                        
+      63              }
+      64              auto strat = std::make_unique<BreakoutPriceVolumeSt
+          rategy>(symbol + "_Breakout", breakout_price);
+      65              strat->strategy_type_id = StrategyIds::BREAKOUT_PRI
+          CE_VOLUME;
+      66 +            strat->set_enabled(false);  // 默认禁用，需要通过 Z
+         +MQ 命令启用                                                    
+      67              return strat;
+      68          });
+      69  
+
+● Bash(./build.sh engine 2>&1 | tail -20)
+  ⎿ At global scope:                                                     
+    cc1plus: note: unrecognized command-line option
+    ‘-Wno-gnu-zero-variadic
+    -macro-arguments’ may have been intended to silence earlier
+    diagnostics
+    … +18 lines (ctrl+o to expand)
+  ⎿  Found 10 new diagnostic issues in 1 file (ctrl+o to expand)
+
+● 已完成。BreakoutPriceVolumeStrategy 现在创建时默认禁用。
+
+  strat->set_enabled(false);  // 默认禁用，需要通过 ZMQ 命令启用
+
+  运行时可以通过 ZMQ 命令启用：
+  {"action": "enable_strategy", "symbol": "600759", "strategy": "BreakoutPriceVolumeStrategy"}
+
+✻ Baked for 1m 1s
+
+❯ 总结一下本会话的工作 
+
+● 本会话工作总结
+
+  主要任务：策略启用/禁用功能 - 数字 ID 优化
+
+  将策略标识从字符串改为数字 ID，提升性能。
+
+  ---
+  修改的文件
+  文件: include/strategy_ids.h
+  操作: 新建
+  说明: 定义策略 ID 常量和转换函数
+  ────────────────────────────────────────
+  文件: include/strategy_base.h
+  操作: 修改
+  说明: 添加 strategy_type_id 字段
+  ────────────────────────────────────────
+  文件: include/strategy_engine.h
+  操作: 修改
+  说明: ControlMessage 使用 unique_id；owned_strategies_ key 改为 uint32_t
+  ────────────────────────────────────────
+  文件: src/strategy_base.cpp
+  操作: 修改
+  说明: on_control_message() 使用数字 ID 匹配
+  ────────────────────────────────────────
+  文件: src/main.cpp
+  操作: 修改
+  说明: 工厂注册时设置 strategy_type_id
+  ---
+  核心设计
+
+  唯一 ID 格式 (uint32_t):
+  bits 0-7:   strategy_type_id (0-255)
+  bit 8:      exchange (0=SZ, 1=SH)
+  bits 9-29:  stock_code (0-999999)
+
+  策略类型 ID 分配:
+  ┌──────────────────────────────┬─────┐
+  │             策略             │ ID  │
+  ├──────────────────────────────┼─────┤
+  │ OpeningRangeBreakoutStrategy │ 1   │
+  ├──────────────────────────────┼─────┤
+  │ PriceLevelVolumeStrategy     │ 2   │
+  ├──────────────────────────────┼─────┤
+  │ GapUpVolumeBreakoutStrategy  │ 3   │
+  ├──────────────────────────────┼─────┤
+  │ WeakToStrongRedOpenStrategy  │ 4   │
+  ├──────────────────────────────┼─────┤
+  │ BreakoutPriceVolumeStrategy  │ 5   │
+  ├──────────────────────────────┼─────┤
+  │ PerformanceStrategy          │ 252 │
+  ├──────────────────────────────┼─────┤
+  │ TestStrategy                 │ 254 │
+  ├──────────────────────────────┼─────┤
+  │ PrintStrategy                │ 255 │
+  └──────────────────────────────┴─────┘
+  ---
+  性能提升
+  ┌───────────────────────┬─────────────────────────┬────────────────────────┐
+  │         项目          │         优化前          │         优化后         │
+  ├───────────────────────┼─────────────────────────┼────────────────────────┤
+  │ owned_strategies_ key │ std::string (112 bytes) │ uint32_t (4 bytes)     │
+  ├───────────────────────┼─────────────────────────┼────────────────────────┤
+  │ 控制消息匹配          │ 字符串比较              │ 数字比较 (10x+ faster) │
+  ├───────────────────────┼─────────────────────────┼────────────────────────┤
+  │ 哈希计算              │ 字符串哈希              │ 整数哈希 (5x+ faster)  │
+  └───────────────────────┴─────────────────────────┴────────────────────────┘
+  ---
+  额外修改
+
+  - BreakoutPriceVolumeStrategy 创建时默认禁用，需通过 ZMQ 命令启用
+
+  ---
+  数据流
+
+  ZMQ API (字符串)          StrategyEngine                    Strategy
+     │                           │                               │
+     │ symbol="600759"           │                               │
+     │ strategy="ORB..."         │                               │
+     │ ─────────────────────────>│ make_unique_id(sym, name)     │
+     │                           │ = 0x12345601                  │
+     │                           │ ControlMessage{unique_id}     │
+     │                           │ ─────────────────────────────>│
+     │                           │                               │ if (strategy_type_id == (id & 0xFF))
+     │                           │                               │   set_enabled(true/false)
+
+  ---
+  验证状态
+
+  ✅ 编译通过 (./build.sh engine)
+
+
+

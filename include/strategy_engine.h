@@ -6,13 +6,18 @@
 #include <thread>
 #include <atomic>
 #include <string>
+#include <cstring>
+#include <algorithm>
 #include <unordered_map>
 #include <memory>
 #include <variant>
 #include <array>
+#include <shared_mutex>
+#include <type_traits>
 #include "concurrentqueue.h"
 #include "market_data_structs.h"
 #include "strategy_base.h"
+#include "strategy_ids.h"
 
 // ==========================================
 // 分支预测优化宏
@@ -26,9 +31,40 @@
 #endif
 
 // ==========================================
+// 控制消息类型
+// ==========================================
+struct ControlMessage {
+    enum class Type : uint8_t {
+        ENABLE,
+        DISABLE
+    };
+    Type type;
+    uint32_t unique_id;      // 唯一 ID (stock_code << 9 | exchange << 8 | strategy_id)
+    char symbol[48];         // 保留用于 shard 路由
+
+    static ControlMessage enable(const std::string& sym, const std::string& strat_name) {
+        ControlMessage msg;
+        msg.type = Type::ENABLE;
+        msg.unique_id = StrategyIds::make_unique_id(sym, strat_name);
+        strncpy(msg.symbol, sym.c_str(), sizeof(msg.symbol) - 1);
+        msg.symbol[sizeof(msg.symbol) - 1] = '\0';
+        return msg;
+    }
+
+    static ControlMessage disable(const std::string& sym, const std::string& strat_name) {
+        ControlMessage msg;
+        msg.type = Type::DISABLE;
+        msg.unique_id = StrategyIds::make_unique_id(sym, strat_name);
+        strncpy(msg.symbol, sym.c_str(), sizeof(msg.symbol) - 1);
+        msg.symbol[sizeof(msg.symbol) - 1] = '\0';
+        return msg;
+    }
+};
+
+// ==========================================
 // 市场数据消息类型
 // ==========================================
-using MarketMessage = std::variant<MDStockStruct, MDOrderStruct, MDTransactionStruct>;
+using MarketMessage = std::variant<MDStockStruct, MDOrderStruct, MDTransactionStruct, ControlMessage>;
 
 // ==========================================
 // Symbol Hash 函数
@@ -52,18 +88,32 @@ public:
     mutable std::atomic<uint64_t> enqueue_order_count_{0};
     mutable std::atomic<uint64_t> enqueue_txn_count_{0};
 
+    // 生成策略唯一 key (数字 ID，高性能)
+    static uint32_t make_strategy_key(const std::string& symbol, const std::string& strategy_name) {
+        return StrategyIds::make_unique_id(symbol, strategy_name);
+    }
+
+    // 从 symbol 和 strategy_type_id 生成 key
+    static uint32_t make_strategy_key(const std::string& symbol, uint8_t strategy_type_id) {
+        return StrategyIds::make_unique_id(symbol, strategy_type_id);
+    }
+
 private:
     std::vector<std::unique_ptr<moodycamel::ConcurrentQueue<MarketMessage>>> queues_;
     std::vector<std::thread> workers_;
     std::atomic<bool> running_{true};
     std::atomic<bool> stopped_{false};
 
-    // 策略所有权管理：Engine 拥有所有策略
-    std::unordered_map<std::string, std::unique_ptr<Strategy>> owned_strategies_;
+    // 策略所有权管理：key = unique_id (uint32_t)
+    std::unordered_map<uint32_t, std::unique_ptr<Strategy>> owned_strategies_;
 
     // 策略注册表：[shard_id][symbol] -> 策略列表（快速查找用的裸指针）
+    // 注意：这里的 key 仍然是 symbol（用于市场数据路由）
     using StrategyMap = std::unordered_map<std::string, std::vector<Strategy*>>;
     std::vector<StrategyMap> registry_;
+
+    // 读写锁保护 registry_（支持运行时动态添加/删除策略）
+    mutable std::shared_mutex registry_mutex_;
 
     // 共享的 thread_local token 数组（修复消息乱序bug）
     // 关键：所有 on_market_* 方法必须共享同一个 token 数组，
@@ -87,11 +137,18 @@ public:
     // 辅助函数：从 MarketMessage 中提取 symbol
     static const char* get_symbol(const MarketMessage& msg) {
         return std::visit([](auto&& data) -> const char* {
-            return data.htscsecurityid;
+            using T = std::decay_t<decltype(data)>;
+            if constexpr (std::is_same_v<T, ControlMessage>) {
+                return data.symbol;
+            } else {
+                return data.htscsecurityid;
+            }
         }, msg);
     }
 
-    // 注册策略（转移所有权）
+    // 注册策略（转移所有权）- 启动前调用
+    // symbol: 股票代码（如 "600000.SH"）
+    // strat: 策略实例（需要设置 strat->name 和 strat->strategy_type_id）
     void register_strategy(const std::string& symbol, std::unique_ptr<Strategy> strat) {
         if (!strat) {
             return;  // 忽略空指针
@@ -99,32 +156,162 @@ public:
 
         int shard_id = get_shard_id(symbol);
         Strategy* raw_ptr = strat.get();
+        uint32_t key = make_strategy_key(symbol, strat->strategy_type_id);
 
-        // 1. 保存所有权
-        owned_strategies_[symbol] = std::move(strat);
+        // 1. 保存所有权（使用数字 key）
+        owned_strategies_[key] = std::move(strat);
 
-        // 2. 注册裸指针到分片（用于快速查找）
+        // 2. 注册裸指针到分片（按 symbol 路由市场数据）
         registry_[shard_id][symbol].push_back(raw_ptr);
     }
 
-    // 运行时移除策略（可选功能）
-    void unregister_strategy(const std::string& symbol) {
-        int shard_id = get_shard_id(symbol);
+    // ==========================================
+    // 运行时动态策略管理（引擎启动后调用）
+    // ==========================================
 
-        // 1. 从 registry 移除
-        auto& strat_map = registry_[shard_id];
-        auto it = strat_map.find(symbol);
-        if (it != strat_map.end()) {
-            strat_map.erase(it);
+    // 运行时注册策略（线程安全）
+    // symbol: 股票代码
+    // strat: 策略实例（需要设置 strat->name 和 strat->strategy_type_id）
+    bool register_strategy_runtime(const std::string& symbol, std::unique_ptr<Strategy> strat) {
+        if (!strat) {
+            return false;
         }
 
-        // 2. 释放所有权（自动调用析构）
-        owned_strategies_.erase(symbol);
+        uint32_t key = make_strategy_key(symbol, strat->strategy_type_id);
+
+        // 写锁
+        std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+
+        // 检查是否已存在（使用数字 key）
+        if (owned_strategies_.find(key) != owned_strategies_.end()) {
+            return false;  // 已存在
+        }
+
+        int shard_id = get_shard_id(symbol);
+        Strategy* raw_ptr = strat.get();
+
+        // 保存所有权（使用数字 key）
+        owned_strategies_[key] = std::move(strat);
+
+        // 注册裸指针到分片（按 symbol 路由）
+        registry_[shard_id][symbol].push_back(raw_ptr);
+
+        // 释放锁后调用 on_start()
+        lock.unlock();
+        raw_ptr->on_start();
+
+        return true;
+    }
+
+    // 检查策略是否存在（使用数字 key）
+    bool has_strategy(const std::string& symbol, const std::string& strategy_name) const {
+        std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+        uint32_t key = make_strategy_key(symbol, strategy_name);
+        return owned_strategies_.find(key) != owned_strategies_.end();
+    }
+
+    // 检查某个 symbol 是否有任意策略
+    bool has_any_strategy(const std::string& symbol) const {
+        std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+        int shard_id = stock_id_fast(symbol.c_str(), SHARD_COUNT);
+        auto it = registry_[shard_id].find(symbol);
+        return it != registry_[shard_id].end() && !it->second.empty();
+    }
+
+    // 获取策略列表（返回 "symbol:strategy_name" 格式）
+    std::vector<std::string> get_strategy_list() const {
+        std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+        std::vector<std::string> result;
+        result.reserve(owned_strategies_.size());
+        for (const auto& kv : owned_strategies_) {
+            // 从数字 key 解析出 symbol 和 strategy_name
+            uint32_t stock_code;
+            bool is_shanghai;
+            uint8_t strategy_id;
+            StrategyIds::parse_unique_id(kv.first, stock_code, is_shanghai, strategy_id);
+            std::string symbol = StrategyIds::unique_id_to_symbol(kv.first);
+            const char* strat_name = StrategyIds::id_to_name(strategy_id);
+            result.push_back(symbol + ":" + strat_name);
+        }
+        return result;
+    }
+
+    // 运行时移除策略（线程安全）
+    void unregister_strategy(const std::string& symbol, const std::string& strategy_name) {
+        uint32_t key = make_strategy_key(symbol, strategy_name);
+
+        std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+
+        auto it = owned_strategies_.find(key);
+        if (it == owned_strategies_.end()) {
+            return;  // 不存在
+        }
+
+        // 先调用 on_stop()（需要释放锁避免死锁）
+        Strategy* strat = it->second.get();
+        lock.unlock();
+        if (strat) {
+            strat->on_stop();
+        }
+        lock.lock();
+
+        // 从 registry 移除（需要找到并删除对应的策略指针）
+        int shard_id = get_shard_id(symbol);
+        auto& strat_vec = registry_[shard_id][symbol];
+        strat_vec.erase(
+            std::remove(strat_vec.begin(), strat_vec.end(), strat),
+            strat_vec.end()
+        );
+
+        // 如果该 symbol 没有策略了，删除整个 entry
+        if (strat_vec.empty()) {
+            registry_[shard_id].erase(symbol);
+        }
+
+        // 释放所有权
+        owned_strategies_.erase(key);
     }
 
     // 获取策略数量
     size_t strategy_count() const {
         return owned_strategies_.size();
+    }
+
+    // ==========================================
+    // 策略启用/禁用控制
+    // ==========================================
+
+    // 发送控制消息到对应的 Worker 队列
+    void send_control_message(const ControlMessage& ctrl) {
+        int shard_id = get_shard_id(ctrl.symbol);
+        auto* q = queues_[shard_id].get();
+        q->enqueue(MarketMessage{std::in_place_type<ControlMessage>, ctrl});
+    }
+
+    // 启用策略
+    bool enable_strategy(const std::string& symbol, const std::string& strategy_name) {
+        uint32_t key = make_strategy_key(symbol, strategy_name);
+        {
+            std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+            if (owned_strategies_.find(key) == owned_strategies_.end()) {
+                return false;
+            }
+        }
+        send_control_message(ControlMessage::enable(symbol, strategy_name));
+        return true;
+    }
+
+    // 禁用策略
+    bool disable_strategy(const std::string& symbol, const std::string& strategy_name) {
+        uint32_t key = make_strategy_key(symbol, strategy_name);
+        {
+            std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+            if (owned_strategies_.find(key) == owned_strategies_.end()) {
+                return false;
+            }
+        }
+        send_control_message(ControlMessage::disable(symbol, strategy_name));
+        return true;
     }
 
     // 启动引擎
@@ -233,7 +420,6 @@ private:
     // Worker 线程循环
     void worker_loop(int shard_id) {
         auto* q = queues_[shard_id].get();
-        auto& local_strat_map = registry_[shard_id];
 
         // 线程局部对象池
         ObjectPool<OrderNode> local_pool(200000);
@@ -249,9 +435,17 @@ private:
                 const char* symbol = get_symbol(msg);
                 std::string sym_str(symbol);
 
-                // 处理消息并通知策略
-                auto strat_it = local_strat_map.find(sym_str);
-                bool has_strats = (strat_it != local_strat_map.end());
+                // 读锁查找策略（复制指针列表，快速释放锁）
+                std::vector<Strategy*> strats;
+                {
+                    std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+                    auto& local_strat_map = registry_[shard_id];
+                    auto strat_it = local_strat_map.find(sym_str);
+                    if (strat_it != local_strat_map.end()) {
+                        strats = strat_it->second;  // 复制指针列表
+                    }
+                }
+                bool has_strats = !strats.empty();
 
                 std::visit([&](auto&& data) {
                     using T = std::decay_t<decltype(data)>;
@@ -277,7 +471,7 @@ private:
                         }
 
                         if (has_strats) {
-                            for (auto* strat : strat_it->second) strat->on_tick(data);
+                            for (auto* strat : strats) strat->on_tick(data);
                         }
                     }
                     else if constexpr (std::is_same_v<T, MDOrderStruct>) {
@@ -285,7 +479,7 @@ private:
                         if (MD_LIKELY(book_it != books.end())) {
                             book_it->second->on_order(data);
                             if (has_strats) {
-                                for (auto* strat : strat_it->second) strat->on_order(data, *book_it->second);
+                                for (auto* strat : strats) strat->on_order(data, *book_it->second);
                             }
                         }
                         // 如果没有 OrderBook，忽略此消息（应该先收到 MDStockStruct）
@@ -295,10 +489,18 @@ private:
                         if (MD_LIKELY(book_it != books.end())) {
                             book_it->second->on_transaction(data);
                             if (has_strats) {
-                                for (auto* strat : strat_it->second) strat->on_transaction(data, *book_it->second);
+                                for (auto* strat : strats) strat->on_transaction(data, *book_it->second);
                             }
                         }
                         // 如果没有 OrderBook，忽略此消息（应该先收到 MDStockStruct）
+                    }
+                    else if constexpr (std::is_same_v<T, ControlMessage>) {
+                        // 处理控制消息 - 调用策略的 on_control_message()
+                        if (has_strats) {
+                            for (auto* strat : strats) {
+                                strat->on_control_message(data);
+                            }
+                        }
                     }
                 }, msg);
 

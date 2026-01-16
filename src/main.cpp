@@ -14,6 +14,7 @@
 
 // 引入策略
 #include "strategy/PriceLevelVolumeStrategy.h"
+#include "strategy/BreakoutPriceVolumeStrategy.h"
 #include "strategy/TestStrategy.h"
 #include "strategy/PrintStrategy.h"
 #include "strategy/OpeningRangeBreakoutStrategy.h"
@@ -22,6 +23,7 @@
 // 引入配置和策略工厂
 #include "backtest_config.h"
 #include "strategy_factory.h"
+#include "strategy_ids.h"
 
 // 引入日志模块
 #include "logger.h"
@@ -41,33 +43,63 @@ void register_all_strategies() {
     auto& factory = StrategyFactory::instance();
 
     factory.register_strategy("PriceLevelVolumeStrategy",
-        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
-            return std::make_unique<PriceLevelVolumeStrategy>(symbol + "_PriceLevel");
+        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
+            auto strat = std::make_unique<PriceLevelVolumeStrategy>(symbol + "_PriceLevel");
+            strat->strategy_type_id = StrategyIds::PRICE_LEVEL_VOLUME;
+            return strat;
+        });
+
+    // BreakoutPriceVolumeStrategy: 配置格式 "股票代码,BreakoutPriceVolumeStrategy,突破价格"
+    // 例如: 600759,BreakoutPriceVolumeStrategy,98500
+    // params 为突破价格（整数，乘以10000的格式，如98500表示9.85元）
+    factory.register_strategy("BreakoutPriceVolumeStrategy",
+        [](const std::string& symbol, const std::string& params) -> std::unique_ptr<Strategy> {
+            uint32_t breakout_price = 0;
+            if (!params.empty()) {
+                breakout_price = static_cast<uint32_t>(std::stoul(params));
+            }
+            if (breakout_price == 0) {
+                throw std::runtime_error("BreakoutPriceVolumeStrategy requires breakout_price parameter (e.g., 98500 for 9.85 yuan)");
+            }
+            auto strat = std::make_unique<BreakoutPriceVolumeStrategy>(symbol + "_Breakout", breakout_price);
+            strat->strategy_type_id = StrategyIds::BREAKOUT_PRICE_VOLUME;
+            strat->set_enabled(false);  // 默认禁用，需要通过 ZMQ 命令启用
+            return strat;
         });
 
     factory.register_strategy("TestStrategy",
-        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
-            return std::make_unique<TestStrategy>(symbol + "_Test");
+        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
+            auto strat = std::make_unique<TestStrategy>(symbol + "_Test");
+            strat->strategy_type_id = StrategyIds::TEST_STRATEGY;
+            return strat;
         });
 
     factory.register_strategy("PerformanceStrategy",
-        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
-            return std::make_unique<PerformanceStrategy>(symbol + "_Perf");
+        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
+            auto strat = std::make_unique<PerformanceStrategy>(symbol + "_Perf");
+            strat->strategy_type_id = StrategyIds::PERFORMANCE_STRATEGY;
+            return strat;
         });
 
     factory.register_strategy("PrintStrategy",
-        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
-            return std::make_unique<PrintStrategy>(symbol + "_Print");
+        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
+            auto strat = std::make_unique<PrintStrategy>(symbol + "_Print");
+            strat->strategy_type_id = StrategyIds::PRINT_STRATEGY;
+            return strat;
         });
 
     factory.register_strategy("OpeningRangeBreakoutStrategy",
-        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
-            return std::make_unique<OpeningRangeBreakoutStrategy>(symbol + "_ORB");
+        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
+            auto strat = std::make_unique<OpeningRangeBreakoutStrategy>(symbol + "_ORB");
+            strat->strategy_type_id = StrategyIds::OPENING_RANGE_BREAKOUT;
+            return strat;
         });
 
     factory.register_strategy("GapUpVolumeBreakoutStrategy",
-        [](const std::string& symbol) -> std::unique_ptr<Strategy> {
-            return std::make_unique<GapUpVolumeBreakoutStrategy>(symbol + "_GUVB");
+        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
+            auto strat = std::make_unique<GapUpVolumeBreakoutStrategy>(symbol + "_GUVB");
+            strat->strategy_type_id = StrategyIds::GAP_UP_VOLUME_BREAKOUT;
+            return strat;
         });
 }
 
@@ -128,7 +160,7 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
 
         // 创建策略实例并转移所有权给 engine
         try {
-            auto strategy = factory.create(cfg.strategy_name, cfg.symbol);
+            auto strategy = factory.create(cfg.strategy_name, cfg.symbol, cfg.params);
             engine.register_strategy(cfg.symbol, std::move(strategy));  // 转移所有权
             valid_symbols.push_back(cfg.symbol);
             LOG_MODULE_INFO(logger, MOD_ENGINE, "Registered strategy {} for {}", cfg.strategy_name, cfg.symbol);
@@ -237,7 +269,7 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
 
         // 创建策略实例并转移所有权给 engine
         try {
-            auto strategy = factory.create(cfg.strategy_name, cfg.symbol);
+            auto strategy = factory.create(cfg.strategy_name, cfg.symbol, cfg.params);
             engine.register_strategy(cfg.symbol, std::move(strategy));
             valid_symbols.push_back(cfg.symbol);
             LOG_MODULE_INFO(logger, MOD_ENGINE, "Registered strategy {} for {}", cfg.strategy_name, cfg.symbol);
@@ -265,8 +297,12 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
 
         g_zmq_client = std::make_unique<ZmqClient>(endpoint);
 
+        // 注入策略引擎引用（支持运行时动态添加/删除策略）
+        g_zmq_client->set_engine(&engine);
+
         if (g_zmq_client->start()) {
             LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client started, endpoint: {}", endpoint);
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "Runtime strategy management enabled via ZMQ");
         } else {
             LOG_MODULE_WARNING(logger, MOD_ENGINE, "Failed to start ZMQ client, continuing without it");
         }
@@ -281,7 +317,7 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
     using namespace com::htsc::mdc::gateway;
     using namespace com::htsc::mdc::udp;
 
-    从环境变量读取配置参数
+    // 从环境变量读取配置参数
     const char* env_user = std::getenv("FF_USER");
     const char* env_password = std::getenv("FF_PASSWORD");
     const char* env_ip = std::getenv("FF_IP");

@@ -17,10 +17,19 @@ namespace Action {
     constexpr const char* STATUS = "status";
     constexpr const char* ACK = "ack";
 
-    // 业务消息
+    // 业务消息（旧版，保持兼容）
     constexpr const char* ADD_HOT_STOCK = "add_hot_stock";
     constexpr const char* REMOVE_HOT_STOCK = "remove_hot_stock";
     constexpr const char* PLACE_ORDER = "place_order";
+
+    // 策略管理
+    constexpr const char* ADD_STRATEGY = "add_strategy";
+    constexpr const char* REMOVE_STRATEGY = "remove_strategy";
+    constexpr const char* LIST_STRATEGIES = "list_strategies";
+
+    // 策略启用/禁用
+    constexpr const char* ENABLE_STRATEGY = "enable_strategy";
+    constexpr const char* DISABLE_STRATEGY = "disable_strategy";
 }
 
 // ========== 消息结构体 ==========
@@ -56,6 +65,34 @@ struct RemoveHotStockMsg {
     static RemoveHotStockMsg from_json(const nlohmann::json& j) {
         RemoveHotStockMsg msg;
         msg.symbol = j.value("symbol", "");
+        return msg;
+    }
+};
+
+// 添加策略请求
+struct AddStrategyMsg {
+    std::string symbol;
+    std::string strategy_name;
+    nlohmann::json params;  // 可选参数
+
+    static AddStrategyMsg from_json(const nlohmann::json& j) {
+        AddStrategyMsg msg;
+        msg.symbol = j.value("symbol", "");
+        msg.strategy_name = j.value("strategy", "PriceLevelVolumeStrategy");
+        msg.params = j.value("params", nlohmann::json::object());
+        return msg;
+    }
+};
+
+// 移除策略请求
+struct RemoveStrategyMsg {
+    std::string symbol;
+    std::string strategy_name;
+
+    static RemoveStrategyMsg from_json(const nlohmann::json& j) {
+        RemoveStrategyMsg msg;
+        msg.symbol = j.value("symbol", "");
+        msg.strategy_name = j.value("strategy", "");
         return msg;
     }
 };

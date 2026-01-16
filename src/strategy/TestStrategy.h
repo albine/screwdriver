@@ -56,6 +56,7 @@ public:
     }
 
     void on_tick(const MDStockStruct& stock) override {
+        if (!is_enabled()) return;
         tick_count_++;
 
         // 定期打印 Tick 统计
@@ -66,6 +67,7 @@ public:
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
+        if (!is_enabled()) return;
         order_count_++;
 
         // 按时间打印订单簿
@@ -75,6 +77,7 @@ public:
     }
 
     void on_transaction(const MDTransactionStruct& txn, const FastOrderBook& book) override {
+        if (!is_enabled()) return;
         transaction_count_++;
 
         // 按时间打印订单簿
@@ -220,14 +223,17 @@ public:
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
+        if (!is_enabled()) return;
         message_count_++;
     }
 
     void on_transaction(const MDTransactionStruct& txn, const FastOrderBook& book) override {
+        if (!is_enabled()) return;
         message_count_++;
     }
 
     void on_tick(const MDStockStruct& stock) override {
+        if (!is_enabled()) return;
         message_count_++;
     }
 

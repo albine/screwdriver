@@ -118,6 +118,8 @@ private:
 
 public:
     void on_tick(const MDStockStruct& stock) override {
+        if (!is_enabled()) return;
+
         // Extract symbol once
         std::string symbol = get_symbol(stock);
 

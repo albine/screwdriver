@@ -1,0 +1,65 @@
+● 本会话工作总结
+
+  任务目标
+
+  修改 ZMQ REP 服务端的 add_hot_stock 和 remove_hot_stock 消息处理逻辑，从"创建/删除策略"改为"启用/禁用策略"。
+
+  修改文件
+
+  /home/pc/screwdriver/include/zmq_client.h
+
+  具体修改
+  函数: handle_rep_add_hot_stock
+  修改前: 通过 StrategyFactory::create() 创建新策略，再
+    register_strategy_runtime() 注册
+  修改后: 调用 engine_->enable_strategy(symbol, strategy_name)
+    启用已存在的策略
+  ────────────────────────────────────────
+  函数: handle_rep_remove_hot_stock
+  修改前: 调用 unregister_strategy() 删除策略
+  修改后: 调用 engine_->disable_strategy(symbol, strategy_name) 禁用策略
+  代码简化
+
+  - 移除了 target_price 参数处理（启用策略不需要）
+  - 移除了 StrategyFactory 相关代码
+  - 移除了 has_strategy() 检查（enable/disable 内部会处理）
+  - 日志从 "add/remove" 改为 "enabled/disabled"
+
+  验证
+
+  ./build.sh engine 编译成功。
+
+新增功能：REP 服务端（端口 13381）
+  ┌──────┬────────────────────────────────────────────┐
+  │ 功能 │                    说明                    │
+  ├──────┼────────────────────────────────────────────┤
+  │ 端口 │ 默认 tcp://*:13381，可通过构造函数参数修改 │
+  ├──────┼────────────────────────────────────────────┤
+  │ 模式 │ ZMQ_REP（服务端），接收请求并同步返回响应  │
+  └──────┴────────────────────────────────────────────┘
+  支持的消息格式：
+
+  // add_hot_stock 请求
+  {
+    "action": "add_hot_stock",
+    "symbol": "600000",
+    "target_price": 98500
+  }
+
+  // remove_hot_stock 请求
+  {
+    "action": "remove_hot_stock",
+    "symbol": "600000"
+  }
+
+  响应格式：
+  // 成功
+  {"success": true, "symbol": "600000.SH", "target_price": 98500}
+
+  // 失败
+  {"success": false, "error": "Strategy already exists: 600000.SH"}
+
+  行为：
+  - add_hot_stock：使用 BreakoutPriceVolumeStrategy 策略，target_price 作为突破价格参数
+  - remove_hot_stock：移除对应 symbol 的策略
+  - symbol 支持 "600000" 或 "600000.SH" 两种格式，会自动补全后缀

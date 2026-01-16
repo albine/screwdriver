@@ -1,5 +1,5 @@
-#ifndef PRICE_LEVEL_VOLUME_STRATEGY_H
-#define PRICE_LEVEL_VOLUME_STRATEGY_H
+#ifndef BREAKOUT_PRICE_VOLUME_STRATEGY_H
+#define BREAKOUT_PRICE_VOLUME_STRATEGY_H
 
 #include "strategy_base.h"
 #include "logger.h"
@@ -14,44 +14,41 @@
 #define LOG_MODULE MOD_STRATEGY
 
 // ==========================================
-// 价格档位挂单量监控策略
+// 突破价格档位挂单量监控策略
 //
 // 策略逻辑：
-// 1. 当开盘价 < 昨收价时，开始监控
-// 2. 维护200ms滚动窗口，跟踪昨收价档位的挂单量和主买成交量
+// 1. 构造时传入突破价格，立即开始监控
+// 2. 维护200ms滚动窗口，跟踪突破价档位的挂单量和主买成交量
 // 3. 计算 n = 窗口内挂单量平均值
 // 4. 计算 delta_n = 窗口内主买成交累计和
 // 5. 当 delta_n >= n 时触发买入信号（仅记录日志）
 // 6. 信号只触发一次
 // ==========================================
 
-class PriceLevelVolumeStrategy : public Strategy {
+class BreakoutPriceVolumeStrategy : public Strategy {
 private:
     // ==========================================
     // 状态机
     // ==========================================
     enum class MonitoringState {
-        IDLE,              // 初始状态，等待第一个Tick
-        WAITING_FOR_TICK,  // 已记录昨收价，等待开盘价数据
         MONITORING,        // 监控中
         SIGNAL_TRIGGERED   // 信号已触发
     };
 
-    MonitoringState state_ = MonitoringState::IDLE;
+    MonitoringState state_ = MonitoringState::MONITORING;
     bool signal_triggered_ = false;
 
     // ==========================================
     // 价格（乘以10000的整数格式）
     // ==========================================
-    uint32_t preclose_price_ = 0;    // 昨收价，例如97900表示9.79元
-    uint32_t open_price_ = 0;        // 开盘价
+    uint32_t breakout_price_ = 0;    // 突破价格，例如97900表示9.79元
 
     // ==========================================
     // 滚动窗口（200ms）
     // ==========================================
     struct WindowSnapshot {
         int32_t mdtime;           // 时间戳（HHMMSSMMM格式）
-        uint64_t volume;          // 昨收价档位的挂单量
+        uint64_t volume;          // 突破价档位的挂单量
         uint64_t buy_trade_qty;   // 主买成交量（单笔）
 
         WindowSnapshot(int32_t t, uint64_t v, uint64_t b)
@@ -74,21 +71,16 @@ private:
     std::atomic<uint64_t> buy_trade_count_{0};  // 主买成交次数
 
 public:
-    explicit PriceLevelVolumeStrategy(const std::string& strategy_name,
-                                       uint32_t preclose_price = 0,
-                                       uint32_t open_price = 0) {
+    // 构造函数：必须传入突破价格
+    explicit BreakoutPriceVolumeStrategy(const std::string& strategy_name,
+                                          uint32_t breakout_price)
+        : breakout_price_(breakout_price) {
         this->name = strategy_name;
-        // Note: std::deque does not have reserve(), unlike std::vector
-
-        // 如果提供了昨收价和开盘价，直接使用（用于回测）
-        if (preclose_price > 0 && open_price > 0 && open_price < preclose_price) {
-            preclose_price_ = preclose_price;
-            open_price_ = open_price;
-            state_ = MonitoringState::MONITORING;
-        }
+        // 直接进入监控状态，无需检查任何条件
+        state_ = MonitoringState::MONITORING;
     }
 
-    virtual ~PriceLevelVolumeStrategy() = default;
+    virtual ~BreakoutPriceVolumeStrategy() = default;
 
     // ==========================================
     // 生命周期回调
@@ -97,31 +89,26 @@ public:
         logger_ = hft::logger::get_logger();
 
         LOG_M_INFO("========================================");
-        LOG_M_INFO("PriceLevelVolumeStrategy started: {}", name);
+        LOG_M_INFO("BreakoutPriceVolumeStrategy started: {}", name);
         LOG_M_INFO("Configuration:");
         LOG_M_INFO("  - Window Size: 200ms rolling");
-        LOG_M_INFO("  - Monitoring: Preclose price level");
+        LOG_M_INFO("  - Monitoring: Breakout price level");
         LOG_M_INFO("  - n = Avg volume in window");
         LOG_M_INFO("  - delta_n = Sum of buy trades in window");
         LOG_M_INFO("  - Trigger: delta_n >= n");
-
-        if (state_ == MonitoringState::MONITORING) {
-            LOG_M_INFO("  - Preclose Price: {} ({}元)", preclose_price_, price_to_yuan(preclose_price_));
-            LOG_M_INFO("  - Open Price: {} ({}元)", open_price_, price_to_yuan(open_price_));
-            LOG_M_INFO("  - State: MONITORING (initialized from parameters)");
-        }
-
+        LOG_M_INFO("  - Breakout Price: {} ({}元)", breakout_price_, price_to_yuan(breakout_price_));
+        LOG_M_INFO("  - State: MONITORING (immediate start)");
         LOG_M_INFO("========================================");
     }
 
     void on_stop() override {
         LOG_M_INFO("========================================");
-        LOG_M_INFO("PriceLevelVolumeStrategy stopped: {}", name);
+        LOG_M_INFO("BreakoutPriceVolumeStrategy stopped: {}", name);
         LOG_M_INFO("Statistics:");
         LOG_M_INFO("  - Ticks: {}", tick_count_.load());
         LOG_M_INFO("  - Orders: {}", order_count_.load());
         LOG_M_INFO("  - Transactions: {}", transaction_count_.load());
-        LOG_M_INFO("  - Buy Trades (at preclose): {}", buy_trade_count_.load());
+        LOG_M_INFO("  - Buy Trades (at breakout): {}", buy_trade_count_.load());
         LOG_M_INFO("  - Signal Triggered: {}", signal_triggered_);
         LOG_M_INFO("========================================");
     }
@@ -132,84 +119,42 @@ public:
     void on_tick(const MDStockStruct& stock) override {
         if (!is_enabled()) return;
         tick_count_++;
-
-        if (state_ == MonitoringState::IDLE) {
-            // 记录昨收价（注意：价格是乘以10000的整数）
-            preclose_price_ = static_cast<uint32_t>(stock.preclosepx);
-
-            LOG_M_INFO("Initialized preclose_price={} ({}元)",
-                       preclose_price_,
-                       price_to_yuan(preclose_price_));
-
-            state_ = MonitoringState::WAITING_FOR_TICK;
-        }
-
-        if (state_ == MonitoringState::WAITING_FOR_TICK) {
-            // 检查是否满足 openpx < preclosepx
-            if (stock.openpx > 0 && stock.openpx < stock.preclosepx) {
-                open_price_ = static_cast<uint32_t>(stock.openpx);
-
-                LOG_M_INFO("Monitoring condition MET: openpx={} ({}元) < preclosepx={} ({}元)",
-                           open_price_,
-                           price_to_yuan(open_price_),
-                           preclose_price_,
-                           price_to_yuan(preclose_price_));
-
-                state_ = MonitoringState::MONITORING;
-            }
-        }
+        // 不需要检查任何条件，直接处于监控状态
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
         if (!is_enabled()) return;
         order_count_++;
 
-        if (state_ != MonitoringState::MONITORING && state_ != MonitoringState::SIGNAL_TRIGGERED) {
+        if (state_ == MonitoringState::SIGNAL_TRIGGERED) {
             return;
         }
 
-        // 调试：打印特定委托后的十档盘口
-        // if (order.orderindex == 707223) {
-        //     char context[256];
-        //     std::snprintf(context, sizeof(context),
-        //                   "DEBUG: After processing OrderIndex=%llu\nOrder Info: Price=%lld Qty=%lld BSFlag=%d Type=%d",
-        //                   order.orderindex, order.orderprice, order.orderqty, order.orderbsflag, order.ordertype);
-        //     book.print_orderbook(logger_, 10, std::string(context));
-        // }
-
-        // 查询昨收价档位的当前挂单量
-        // 注意：FastOrderBook已经在Strategy回调前更新了订单簿
-        uint64_t current_volume = book.get_volume_at_price(preclose_price_);
+        // 查询突破价档位的当前挂单量
+        uint64_t current_volume = book.get_volume_at_price(breakout_price_);
 
         // 添加到窗口（委托事件没有成交量）
         add_to_window(order.mdtime, current_volume, 0);
 
         // 检查触发条件
-        if (state_ == MonitoringState::MONITORING) {
-            check_trigger_condition();
-        }
+        check_trigger_condition();
     }
 
     void on_transaction(const MDTransactionStruct& txn, const FastOrderBook& book) override {
         if (!is_enabled()) return;
         transaction_count_++;
 
-        if (state_ != MonitoringState::MONITORING && state_ != MonitoringState::SIGNAL_TRIGGERED) {
+        if (state_ == MonitoringState::SIGNAL_TRIGGERED) {
             return;
         }
 
-        // 调试：打印特定委托后的十档盘口
-        if (txn.tradeindex == 439514) {
-            book.print_orderbook(10, "tradeindex=439514");
-        }
-
-        // 查询昨收价档位的当前挂单量
-        uint64_t current_volume = book.get_volume_at_price(preclose_price_);
+        // 查询突破价档位的当前挂单量
+        uint64_t current_volume = book.get_volume_at_price(breakout_price_);
 
         // 判断是否是主买成交
         uint64_t buy_trade_qty = 0;
         if (txn.tradebsflag == 1 &&  // 买方向（主买）
-            static_cast<uint32_t>(txn.tradeprice) == preclose_price_) {
+            static_cast<uint32_t>(txn.tradeprice) == breakout_price_) {
             buy_trade_qty = txn.tradeqty;  // 记录主买成交量
             buy_trade_count_++;
         }
@@ -218,9 +163,7 @@ public:
         add_to_window(txn.mdtime, current_volume, buy_trade_qty);
 
         // 检查触发条件
-        if (state_ == MonitoringState::MONITORING) {
-            check_trigger_condition();
-        }
+        check_trigger_condition();
     }
 
 private:
@@ -255,7 +198,7 @@ private:
         }
         double n = static_cast<double>(total_volume) / window_.size();
 
-        // 边界保护：如果n=0（昨收价档位无挂单），不触发
+        // 边界保护：如果n=0（突破价档位无挂单），不触发
         if (n < 1.0) {
             return;
         }
@@ -280,7 +223,7 @@ private:
                     "n(avg_volume)={:.0f} | delta_n(buy_trades)={} | "
                     "current_volume={} | window_size={}",
                     format_mdtime(latest.mdtime),
-                    format_price_display(preclose_price_),
+                    format_price_display(breakout_price_),
                     n,
                     delta_n,
                     latest.volume,
@@ -290,8 +233,8 @@ private:
             LOG_M_INFO("SIGNAL TRIGGERED at {}",
                        format_mdtime(latest.mdtime));
             LOG_M_INFO("Price Level: {} ({}元)",
-                       preclose_price_,
-                       price_to_yuan(preclose_price_));
+                       breakout_price_,
+                       price_to_yuan(breakout_price_));
             LOG_M_INFO("n (Avg Volume in 200ms): {:.0f}", n);
             LOG_M_INFO("delta_n (Buy Trades in 200ms): {}", delta_n);
             LOG_M_INFO("Current Volume: {}", latest.volume);
@@ -358,4 +301,4 @@ private:
     }
 };
 #undef LOG_MODULE
-#endif // PRICE_LEVEL_VOLUME_STRATEGY_H
+#endif // BREAKOUT_PRICE_VOLUME_STRATEGY_H

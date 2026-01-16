@@ -14,21 +14,27 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 # 链接目录（必须在 add_executable 之前）
 link_directories(${CMAKE_SOURCE_DIR}/fastfish/libs)
 
-# ============ Quill 日志库 (FetchContent) ============
+# ============ FetchContent 优化：禁用更新检查 ============
 include(FetchContent)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)  # 已下载后不再检查更新
+
+# ============ Quill 日志库 ============
 FetchContent_Declare(
     quill
     GIT_REPOSITORY https://github.com/odygrd/quill.git
     GIT_TAG v7.5.0
+    GIT_SHALLOW TRUE      # 浅克隆，只下载最新版本
 )
 FetchContent_MakeAvailable(quill)
 
-# ============ nlohmann/json (FetchContent) ============
+# ============ nlohmann/json ============
 FetchContent_Declare(
     json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE
 )
+set(JSON_BuildTests OFF CACHE INTERNAL "")  # 禁用 json 测试
 FetchContent_MakeAvailable(json)
 
 # ============ ZeroMQ ============
@@ -38,6 +44,7 @@ pkg_check_modules(ZMQ REQUIRED libzmq)
 add_executable(engine
     src/main.cpp
     src/FastOrderBook.cpp
+    src/strategy_base.cpp
 )
 target_include_directories(engine PRIVATE
     ${CMAKE_SOURCE_DIR}/fastfish/include/mdc_gateway_client/include

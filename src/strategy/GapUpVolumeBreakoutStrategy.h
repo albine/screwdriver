@@ -130,6 +130,7 @@ public:
     // 市场数据回调
     // ==========================================
     void on_tick(const MDStockStruct& stock) override {
+        if (!is_enabled()) return;
         tick_count_++;
 
         std::string symbol = get_symbol(stock);
@@ -218,6 +219,7 @@ public:
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
+        if (!is_enabled()) return;
         order_count_++;
 
         std::string symbol = get_symbol_from_order(order);
@@ -244,6 +246,7 @@ public:
     }
 
     void on_transaction(const MDTransactionStruct& txn, const FastOrderBook& book) override {
+        if (!is_enabled()) return;
         transaction_count_++;
 
         std::string symbol = get_symbol_from_transaction(txn);

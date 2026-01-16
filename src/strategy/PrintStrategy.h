@@ -16,10 +16,12 @@ public:
     }
 
     void on_tick(const MDStockStruct& stock) override {
+        if (!is_enabled()) return;
         // Simple tick print
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
+        if (!is_enabled()) return;
         // 每 1000 个订单打印一次最优报价
         if (order.applseqnum % 1000 == 0) {
             auto bid = book.get_best_bid();
@@ -32,6 +34,7 @@ public:
     }
 
     void on_transaction(const MDTransactionStruct& txn, const FastOrderBook& book) override {
+        if (!is_enabled()) return;
         // Transaction logic
     }
 };

@@ -1,0 +1,157 @@
+一、新策略开发
+
+  创建了 BreakoutPriceVolumeStrategy（突破价格档位挂单量监控策略）
+
+  - 基于 PriceLevelVolumeStrategy 修改
+  - 构造函数传入突破价格，直接进入监控状态
+  - 无需检查开盘价与突破价的关系
+
+  相关文件修改：
+  文件: src/strategy/BreakoutPriceVolumeStrategy.h
+  改动: 新建策略
+  ────────────────────────────────────────
+  文件: include/backtest_config.h
+  改动: 支持第三列 params 参数
+  ────────────────────────────────────────
+  文件: include/strategy_factory.h
+  改动: create() 增加 params 参数
+  ────────────────────────────────────────
+  文件: include/zmq_client.h
+  改动: 运行时添加策略支持 params
+  ────────────────────────────────────────
+  文件: src/main.cpp
+  改动: 注册新策略
+  配置格式：
+  600759,BreakoutPriceVolumeStrategy,98500
+  # 98500 = 9.85元 (价格×10000)
+
+  ---
+  二、运行时动态添加策略
+
+  ZMQ 协议支持传入突破价格：
+  {
+    "action": "add_strategy",
+    "symbol": "600759",
+    "strategy": "BreakoutPriceVolumeStrategy",
+    "params": 98500
+  }
+
+  ---
+  三、代码重构
+
+  提取公共 helper 函数 include/symbol_utils.h：
+  - normalize_symbol() - 自动补全 .SH/.SZ 后缀
+  - strip_suffix() - 去除后缀
+  - is_shanghai() / is_shenzhen() - 判断交易所
+
+  ---
+  四、构建优化
+
+  CMakeLists.txt 优化：
+  - FETCHCONTENT_UPDATES_DISCONNECTED ON - 禁用更新检查
+  - GIT_SHALLOW TRUE - 浅克隆
+
+  docker-build.sh 优化：
+  - 添加 Docker volume 缓存依赖 (trading-engine-deps-cache)
+  - 添加 --clean-cache 参数清理缓存
+
+  ---
+  五、线程架构分析
+    [jiace@localhost ~]$ PID=$(pgrep -f "engine live")
+    [jiace@localhost ~]$ ps -T -p $PID
+    PID   SPID TTY          TIME CMD
+    74464  74464 pts/0    00:00:15 engine
+    74464  74469 pts/0    00:04:23 QuillBackend
+    74464  74471 pts/0    01:24:31 engine
+    74464  74472 pts/0    01:24:31 engine
+    74464  74473 pts/0    01:24:32 engine
+    74464  74474 pts/0    01:24:31 engine
+    74464  74475 pts/0    00:00:00 engine
+    74464  74476 pts/0    00:00:06 engine
+    74464  74477 pts/0    00:00:00 engine
+    74464  74478 pts/0    00:00:00 engine
+    74464  74481 pts/0    00:00:16 sender
+    74464  74482 pts/0    00:12:34 receiver
+    74464  74483 pts/0    00:00:14 engine
+    74464  74506 pts/0    01:24:25 handler[0]
+    74464  74507 pts/0    01:24:25 handler[1]
+    74464  74508 pts/0    01:24:25 handler[2]
+    74464  74509 pts/0    01:24:25 handler[3]
+    74464  74510 pts/0    01:24:25 handler[4]
+    74464  74511 pts/0    01:24:22 handler[5]
+    74464  74512 pts/0    01:24:25 handler[6]
+    74464  74513 pts/0    01:24:25 handler[7]
+    74464  74514 pts/0    01:24:25 handler[8]
+    74464  74515 pts/0    01:24:25 handler[9]
+    74464  74516 pts/0    01:24:25 handler[10]
+    74464  74517 pts/0    01:24:25 handler[11]
+    74464  74518 pts/0    01:24:25 handler[12]
+    74464  74519 pts/0    01:24:25 handler[13]
+    74464  74520 pts/0    01:24:25 handler[14]
+    74464  74521 pts/0    01:24:25 handler[15]
+    74464  74522 pts/0    01:24:25 handler[16]
+    74464  74523 pts/0    01:24:25 handler[17]
+    74464  74524 pts/0    01:24:25 handler[18]
+    74464  74525 pts/0    01:24:25 handler[19]
+    74464  74526 pts/0    01:24:25 handler[20]
+    74464  74527 pts/0    01:24:25 handler[21]
+    74464  74528 pts/0    01:24:25 handler[22]
+    74464  74529 pts/0    01:24:25 handler[23]
+    74464  74530 pts/0    01:24:25 handler[24]
+    74464  74531 pts/0    01:24:25 handler[25]
+    74464  74532 pts/0    01:24:25 handler[26]
+    74464  74533 pts/0    01:24:25 handler[27]
+    74464  74534 pts/0    01:24:25 handler[28]
+    74464  74535 pts/0    01:24:25 handler[29]
+    74464  74536 pts/0    01:24:25 handler[30]
+    74464  74537 pts/0    01:24:25 handler[31]
+    74464  74538 pts/0    01:24:25 handler[32]
+    74464  74539 pts/0    01:24:25 handler[33]
+    74464  74540 pts/0    01:24:25 handler[34]
+    74464  74541 pts/0    01:24:25 handler[35]
+    74464  74542 pts/0    01:24:25 handler[36]
+    74464  74543 pts/0    01:24:25 handler[37]
+    74464  74544 pts/0    01:24:25 handler[38]
+    74464  74545 pts/0    01:24:25 handler[39]
+    74464  74546 pts/0    01:24:25 handler[40]
+    74464  74547 pts/0    01:24:25 handler[41]
+    74464  74548 pts/0    01:24:25 handler[42]
+    74464  74549 pts/0    01:24:25 handler[43]
+    74464  74550 pts/0    01:24:25 handler[44]
+    74464  74551 pts/0    01:24:25 handler[45]
+    74464  74552 pts/0    01:24:25 handler[46]
+    74464  74553 pts/0    01:24:25 handler[47]
+    74464  74554 pts/0    01:24:25 handler[48]
+    74464  74555 pts/0    01:24:25 handler[49]
+    74464  74556 pts/0    00:00:03 engine
+    74464  74557 pts/0    00:00:03 engine
+    74464  74558 pts/0    00:00:00 engine
+    74464  74559 pts/0    00:03:14 engine
+    
+  进程线程结构：
+  engine (主线程 74464)
+  ├── QuillBackend (日志)
+  ├── engine x4 (74471-74474) - StrategyEngine 4个shard worker
+  ├── sender/receiver - FastFish 网络线程
+  ├── handler[0-49] - FastFish 50个行情处理线程
+  └── 其他 engine 线程 - ZMQ/监控等
+
+  关键发现：
+  - SetWorkPoolThreadCount(50) 创建 50 个 handler
+  - SHARD_COUNT = 4 创建 4 个 strategy worker
+  - 50 个 handler 和 4 个 worker 都满负荷运行
+
+  ---
+  六、错误分析
+
+  "no data available" 警告：
+  XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 3894s no data available
+  - 来自 FastFish SDK 的数据活跃性监控
+  - 3 = MD_ORDER, 4 = MD_CONSTANT
+  - 可以忽略，主要行情通道正常
+
+  ---
+  七、其他说明
+
+  - live.conf 和 backtest.conf 使用相同的解析函数，股票代码无需手动加后缀
+  - nlohmann::json 初始化语法：用逗号 {"key", value} 而非冒号

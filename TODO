@@ -21,3 +21,8 @@ done
 下载行情 script/download_market_data.sh 600759.SH
 转换成csv/xlsx script/replayer_format_to_xlsx.py 600759.SH
 
+20260116
+编译 ./docker-build.sh
+上传 ./deploy.sh
+
+对时问题：日志打印的时间比实际时间快一分半

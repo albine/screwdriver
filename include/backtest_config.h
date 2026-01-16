@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <cstdlib>
+#include "symbol_utils.h"
 
 // ==========================================
 // 回测配置结构
@@ -15,6 +16,7 @@
 struct BacktestEntry {
     std::string symbol;         // 股票代码，如 "600759.SH"
     std::string strategy_name;  // 策略名称，如 "PriceLevelVolumeStrategy"
+    std::string params;         // 可选参数，如突破价格 "98500"
 };
 
 // ==========================================
@@ -43,35 +45,33 @@ inline std::vector<BacktestEntry> parse_backtest_config(const std::string& filep
         }
         line = line.substr(start, end - start + 1);
 
-        // 解析 "股票代码,策略名称"
+        // 解析 "股票代码,策略名称[,可选参数]"
         std::istringstream iss(line);
-        std::string symbol, strategy;
+        std::string symbol, strategy, params;
 
-        if (std::getline(iss, symbol, ',') && std::getline(iss, strategy)) {
+        if (std::getline(iss, symbol, ',') && std::getline(iss, strategy, ',')) {
+            // 尝试读取可选参数
+            std::getline(iss, params);
+
             // 去除字段首尾空白
             auto trim = [](std::string& s) {
                 auto start = s.find_first_not_of(" \t");
                 auto end = s.find_last_not_of(" \t");
                 if (start != std::string::npos) {
                     s = s.substr(start, end - start + 1);
+                } else {
+                    s.clear();
                 }
             };
             trim(symbol);
             trim(strategy);
+            trim(params);
 
             if (!symbol.empty() && !strategy.empty()) {
                 BacktestEntry entry;
-                // 自动补全交易所后缀
-                if (symbol.find('.') == std::string::npos) {
-                    // 6开头是上海，其他是深圳
-                    if (symbol[0] == '6') {
-                        symbol += ".SH";
-                    } else {
-                        symbol += ".SZ";
-                    }
-                }
-                entry.symbol = symbol;
+                entry.symbol = symbol_utils::normalize_symbol(symbol);
                 entry.strategy_name = strategy;
+                entry.params = params;
                 entries.push_back(entry);
             }
         }

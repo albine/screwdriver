@@ -153,4 +153,63 @@ struct MDTransactionStruct {
 
 };
 
+// ============================================================================
+// MDEntryDetailStruct - 盘口档位结构
+// ============================================================================
+struct MDEntryDetailStruct {
+    int32_t level;           // 档位
+    int64_t price;           // 价格
+    int32_t totalqty;        // 总数量
+    int32_t numberoforders;  // 订单数
+};
+
+// ============================================================================
+// MDOrderbookStruct - OrderBook 快照结构
+// ============================================================================
+struct MDOrderbookStruct {
+    // 基本字段
+    char htscsecurityid[40];
+    int32_t mddate;
+    int32_t mdtime;
+    int64_t datatimestamp;
+    char tradingphasecode;
+    int32_t securityidsource;
+    int32_t securitytype;
+    int32_t channelno;
+    int64_t applseqnum;
+    int64_t snapshotmddatetime;
+
+    // 价格和统计
+    int64_t numtrades;
+    int64_t totalvolumetrade;
+    int64_t totalvaluetrade;
+    int64_t lastpx;
+    int64_t highpx;
+    int64_t lowpx;
+    int64_t maxpx;
+    int64_t minpx;
+    int64_t preclosepx;
+    int64_t openpx;
+    int64_t closepx;
+
+    // 买卖统计
+    int64_t totalbuyqty;
+    int64_t totalsellqty;
+    int64_t weightedavgbuypx;
+    int64_t weightedavgsellpx;
+    int64_t totalbuynumber;
+    int64_t totalsellnumber;
+    int32_t numbuyorders;
+    int32_t numsellorders;
+
+    // 盘口数据 (最多10档)
+    MDEntryDetailStruct buyentries[10];
+    MDEntryDetailStruct sellentries[10];
+    int32_t buyentries_count;
+    int32_t sellentries_count;
+
+    // 数据乘数
+    int32_t datamultiplepowerof10;
+};
+
 #endif // MARKET_DATA_STRUCTS_H

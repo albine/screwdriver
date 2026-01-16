@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <type_traits>
 #include <atomic>
+#include <chrono>
 
     // ==========================================
 // 高性能拷贝宏
@@ -387,36 +388,22 @@ private:
     // OrderBook Snapshot 处理（备份/对比用）
     // ==========================================
     void on_orderbook_snapshot(const com::htsc::mdc::insight::model::ADOrderbookSnapshot& snapshot) {
-        // 获取证券代码
         const std::string& security_id = snapshot.htscsecurityid();
 
-        // 获取本地 OrderBook 进行对比
-        // 注意：engine_ 需要提供 get_orderbook() 方法来获取 FastOrderBook
-        // 如果没有该方法，这里只做日志记录
-
-        // 提取快照中的买卖一档信息
-        int64_t snapshot_bid1_price = 0;
-        int32_t snapshot_bid1_qty = 0;
-        int64_t snapshot_ask1_price = 0;
-        int32_t snapshot_ask1_qty = 0;
-
-        if (snapshot.buyentries_size() > 0) {
-            const auto& bid1 = snapshot.buyentries(0);
-            snapshot_bid1_price = bid1.price();
-            snapshot_bid1_qty = bid1.totalqty();
-        }
-
-        if (snapshot.sellentries_size() > 0) {
-            const auto& ask1 = snapshot.sellentries(0);
-            snapshot_ask1_price = ask1.price();
-            snapshot_ask1_qty = ask1.totalqty();
-        }
-
-        // 采样日志（每1000次记录一次，避免日志过多）
+        // 采样控制：每100000次 或 每10分钟 打印一次
         static std::atomic<uint64_t> snapshot_count{0};
-        uint64_t count = snapshot_count.fetch_add(1, std::memory_order_relaxed);
+        static std::atomic<int64_t> last_log_time{0};  // 上次打印时间（秒）
 
-        if (count % 1000 == 0) {
+        uint64_t count = snapshot_count.fetch_add(1, std::memory_order_relaxed);
+        int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        int64_t last_time = last_log_time.load(std::memory_order_relaxed);
+
+        bool should_log = (count % 100000 == 0) || (now - last_time >= 600);  // 600秒 = 10分钟
+
+        if (should_log) {
+            last_log_time.store(now, std::memory_order_relaxed);
+
             // 计算价格乘数
             int32_t power = snapshot.datamultiplepowerof10();
             double multiplier = 1.0;
@@ -426,18 +413,35 @@ private:
                 for (int i = 0; i < -power; ++i) multiplier /= 10.0;
             }
 
-            double bid1_px = snapshot_bid1_price * multiplier;
-            double ask1_px = snapshot_ask1_price * multiplier;
+            // 打印基本信息
+            LOG_BIZ(BIZ_ORDR, "[OB_SNAP] sym={} time={} last={:.2f} vol={} cnt={}",
+                security_id, snapshot.mdtime(),
+                snapshot.lastpx() * multiplier,
+                snapshot.totalvolumetrade(),
+                count);
 
-            LOG_BIZ(BIZ_ORDR, "[OB_SNAPSHOT] symbol={} bid1={:.2f}x{} ask1={:.2f}x{} time={} levels={}x{}",
-                security_id, bid1_px, snapshot_bid1_qty, ask1_px, snapshot_ask1_qty,
-                snapshot.mdtime(), snapshot.buyentries_size(), snapshot.sellentries_size());
+            // 打印买盘10档
+            int buy_levels = std::min(snapshot.buyentries_size(), 10);
+            for (int i = 0; i < buy_levels; ++i) {
+                const auto& entry = snapshot.buyentries(i);
+                LOG_BIZ(BIZ_ORDR, "[OB_SNAP] sym={} BID[{}] px={:.2f} qty={} orders={}",
+                    security_id, i + 1,
+                    entry.price() * multiplier,
+                    entry.totalqty(),
+                    entry.numberoforders());
+            }
+
+            // 打印卖盘10档
+            int sell_levels = std::min(snapshot.sellentries_size(), 10);
+            for (int i = 0; i < sell_levels; ++i) {
+                const auto& entry = snapshot.sellentries(i);
+                LOG_BIZ(BIZ_ORDR, "[OB_SNAP] sym={} ASK[{}] px={:.2f} qty={} orders={}",
+                    security_id, i + 1,
+                    entry.price() * multiplier,
+                    entry.totalqty(),
+                    entry.numberoforders());
+            }
         }
-
-        // TODO: 与本地 FastOrderBook 对比
-        // 如果发现差异，可以记录告警或触发重建
-        // engine_->compare_orderbook(security_id, snapshot_bid1_price, snapshot_bid1_qty,
-        //                            snapshot_ask1_price, snapshot_ask1_qty);
     }
 };
 

@@ -1,0 +1,941 @@
+我想修改include/zmq_client.h，        
+  增加一条REQ/REP通道，端口13381，我们  
+  是服务端。接收两种消息：              
+  "action": "add_hot_stock",            
+  "symbol": request.symbol,             
+  "target_price": request.target_price  
+  和：                                  
+  "action": "remove_hot_stock",         
+  "symbol": symbol                      
+  ⎿ ⧉ Selected 8 lines from Untitled-1 in 
+    Visual Studio Code
+
+● 让我先读取当前的 zmq_client.h 文件，了解现有的结构。
+
+● Read(include/zmq_client.h)
+  ⎿  Read 410 lines
+
+● 了解现有结构了。当前是 DEALER 客户端模式连接到 ROUTER 服务端。你需要新增一个 REP 服务端通道。
+
+  让我添加这个功能：
+
+● Update(include/zmq_client.h)
+  ⎿  Added 5 lines, removed 2 lines  
+      21  
+      22  class ZmqClient {
+      23  public:
+      24 -    explicit ZmqClient(cons
+         -t std::string& endpoint = "
+         -tcp://localhost:13380")    
+      25 -        : endpoint_(endpoin
+         -t), running_(false), contex
+         -t_(nullptr), socket_(nullpt
+         -r), engine_(nullptr) {}    
+      24 +    explicit ZmqClient(cons
+         +t std::string& endpoint = "
+         +tcp://localhost:13380",    
+      25 +                       cons
+         +t std::string& rep_endpoint
+         + = "tcp://*:13381")        
+      26 +        : endpoint_(endpoin
+         +t), rep_endpoint_(rep_endpo
+         +int),                      
+      27 +          running_(false), 
+         +context_(nullptr), socket_(
+         +nullptr),                  
+      28 +          rep_socket_(nullp
+         +tr), engine_(nullptr) {}   
+      29  
+      30      // 设置策略引擎引用（用
+          于动态策略管理）
+      31      void set_engine(Strateg
+          yEngine* engine) {
+
+● Update(include/zmq_client.h)
+  ⎿  Added 32 lines                  
+       90          recv_thread_ = std
+           ::thread(&ZmqClient::recv_
+           loop, this);
+       91          heartbeat_thread_ 
+           = std::thread(&ZmqClient::
+           heartbeat_loop, this);
+       92  
+       93 +        // 启动 REP 服务端
+       94 +        if (!start_rep_ser
+          +ver()) {                  
+       95 +            LOG_M_WARNING(
+          +"REP server failed to star
+          +t, continuing without it")
+          +;                         
+       96 +        }                 
+       97 +                          
+       98          LOG_M_INFO("ZMQ cl
+           ient started with heartbea
+           t every 60s");
+       99  
+      100          return true;
+      101      }
+      102  
+      103 +    // 启动 REP 服务端（端
+          +口 13381）                
+      104 +    bool start_rep_server(
+          +) {                       
+      105 +        rep_socket_ = zmq_
+          +socket(context_, ZMQ_REP);
+      106 +        if (!rep_socket_) 
+          +{                         
+      107 +            LOG_M_ERROR("F
+          +ailed to create REP socket
+          +: {}", zmq_strerror(errno)
+          +);                        
+      108 +            return false; 
+      109 +        }                 
+      110 +                          
+      111 +        // 设置接收超时   
+      112 +        int recv_timeout =
+          + 1000;                    
+      113 +        zmq_setsockopt(rep
+          +_socket_, ZMQ_RCVTIMEO, &r
+          +ecv_timeout, sizeof(recv_t
+          +imeout));                 
+      114 +                          
+      115 +        // 绑定到端口     
+      116 +        if (zmq_bind(rep_s
+          +ocket_, rep_endpoint_.c_st
+          +r()) != 0) {              
+      117 +            LOG_M_ERROR("F
+          +ailed to bind REP socket t
+          +o {}: {}", rep_endpoint_, 
+          +zmq_strerror(errno));     
+      118 +            zmq_close(rep_
+          +socket_);                 
+      119 +            rep_socket_ = 
+          +nullptr;                  
+      120 +            return false; 
+      121 +        }                 
+      122 +                          
+      123 +        LOG_M_INFO("REP se
+          +rver listening on {}", rep
+          +_endpoint_);              
+      124 +                          
+      125 +        // 启动 REP 接收线
+          +程                        
+      126 +        rep_thread_ = std:
+          +:thread(&ZmqClient::rep_re
+          +cv_loop, this);           
+      127 +        return true;      
+      128 +    }                     
+      129 +                          
+      130      void stop() {
+      131          if (!running_) ret
+           urn;
+      132  
+  ⎿ Found 10 new diagnostic issues in 1 file
+     (ctrl+o to expand)
+
+● Update(include/zmq_client.h)
+  ⎿  Added 7 lines                   
+      137          if (heartbeat_thre
+           ad_.joinable()) {
+      138              heartbeat_thre
+           ad_.join();
+      139          }
+      140 +        if (rep_thread_.jo
+          +inable()) {               
+      141 +            rep_thread_.jo
+          +in();                     
+      142 +        }                 
+      143  
+      144          if (socket_) {
+      145              zmq_close(sock
+           et_);
+      146              socket_ = null
+           ptr;
+      147          }
+      148 +        if (rep_socket_) {
+      149 +            zmq_close(rep_
+          +socket_);                 
+      150 +            rep_socket_ = 
+          +nullptr;                  
+      151 +        }                 
+      152          if (context_) {
+      153              zmq_ctx_destro
+           y(context_);
+      154              context_ = nul
+           lptr;
+  ⎿ Found 10 new diagnostic issues in 1 file
+     (ctrl+o to expand)
+
+● 现在添加 REP 接收循环和消息处理。让我先找到 recv_loop 函数的位置。
+
+● Read(include/zmq_client.h)
+  ⎿  Read 50 lines
+  ⎿  Found 5 new diagnostic issues in 1 file (ctrl+o to 
+     expand)
+  ⎿  Found 10 new diagnostic issues in 1 file (ctrl+o to 
+     expand)
+
+● Update(include/zmq_client.h)
+  ⎿  Added 137 lines                              
+      218          }
+      219      }
+      220  
+      221 +    // REP 服务端接收循环（处理 add_hot
+          +_stock / remove_hot_stock 请求）       
+      222 +    void rep_recv_loop() {             
+      223 +        char buffer[65536];            
+      224 +                                       
+      225 +        while (running_) {             
+      226 +            int rc = zmq_recv(rep_socke
+          +t_, buffer, sizeof(buffer) - 1, 0);    
+      227 +            if (rc < 0) {              
+      228 +                if (errno == EAGAIN) co
+          +ntinue;  // 超时，继续循环             
+      229 +                if (!running_) break;  
+      230 +                continue;              
+      231 +            }                          
+      232 +                                       
+      233 +            if (rc > 0) {              
+      234 +                buffer[rc] = '\0';     
+      235 +                std::string response = 
+          +process_rep_request(buffer, rc);       
+      236 +                // REQ/REP 模式必须发送
+          +响应                                   
+      237 +                zmq_send(rep_socket_, r
+          +esponse.c_str(), response.size(), 0);  
+      238 +            }                          
+      239 +        }                              
+      240 +    }                                  
+      241 +                                       
+      242 +    // 处理 REP 服务端收到的请求       
+      243 +    std::string process_rep_request(con
+          +st char* data, size_t len) {           
+      244 +        json response;                 
+      245 +        response["success"] = false;   
+      246 +                                       
+      247 +        try {                          
+      248 +            json request = json::parse(
+          +std::string(data, len));               
+      249 +            std::string action = reques
+          +t.value("action", "");                 
+      250 +                                       
+      251 +            LOG_M_INFO("REP received: a
+          +ction={}", action);                    
+      252 +                                       
+      253 +            if (action == "add_hot_stoc
+          +k") {                                  
+      254 +                return handle_rep_add_h
+          +ot_stock(request);                     
+      255 +            } else if (action == "remov
+          +e_hot_stock") {                        
+      256 +                return handle_rep_remov
+          +e_hot_stock(request);                  
+      257 +            } else {                   
+      258 +                response["error"] = "Un
+          +known action: " + action;              
+      259 +                LOG_M_WARNING("REP unkn
+          +own action: {}", action);              
+      260 +            }                          
+      261 +        } catch (const json::exception&
+          + e) {                                  
+      262 +            response["error"] = std::st
+          +ring("JSON parse error: ") + e.what(); 
+      263 +            LOG_M_ERROR("REP JSON parse
+          + error: {}", e.what());                
+      264 +        }                              
+      265 +                                       
+      266 +        return response.dump();        
+      267 +    }                                  
+      268 +                                       
+      269 +    // 处理 add_hot_stock 请求         
+      270 +    std::string handle_rep_add_hot_stoc
+          +k(const json& request) {               
+      271 +        json response;                 
+      272 +                                       
+      273 +        std::string symbol = request.va
+          +lue("symbol", "");                     
+      274 +        int64_t target_price = request.
+          +value("target_price", int64_t(0));     
+      275 +                                       
+      276 +        if (symbol.empty()) {          
+      277 +            response["success"] = false
+          +;                                      
+      278 +            response["error"] = "Missin
+          +g symbol";                             
+      279 +            return response.dump();    
+      280 +        }                              
+      281 +                                       
+      282 +        // 自动补全后缀                
+      283 +        symbol = symbol_utils::normaliz
+          +e_symbol(symbol);                      
+      284 +                                       
+      285 +        if (!engine_) {                
+      286 +            response["success"] = false
+          +;                                      
+      287 +            response["error"] = "Engine
+          + not initialized";                     
+      288 +            return response.dump();    
+      289 +        }                              
+      290 +                                       
+      291 +        // 检查是否已存在              
+      292 +        if (engine_->has_strategy(symbo
+          +l)) {                                  
+      293 +            response["success"] = false
+          +;                                      
+      294 +            response["error"] = "Strate
+          +gy already exists: " + symbol;         
+      295 +            return response.dump();    
+      296 +        }                              
+      297 +                                       
+      298 +        // 使用 BreakoutPriceVolumeStra
+          +tegy 策略                              
+      299 +        auto& factory = StrategyFactory
+          +::instance();                          
+      300 +        std::string strategy_name = "Br
+          +eakoutPriceVolumeStrategy";            
+      301 +        std::string params_str = std::t
+          +o_string(target_price);                
+      302 +                                       
+      303 +        try {                          
+      304 +            auto strategy = factory.cre
+          +ate(strategy_name, symbol, params_str);
+      305 +            if (engine_->register_strat
+          +egy_runtime(symbol, std::move(strategy)
+          +)) {                                   
+      306 +                LOG_M_INFO("REP add_hot
+          +_stock: {} target_price={}", symbol, ta
+          +rget_price);                           
+      307 +                response["success"] = t
+          +rue;                                   
+      308 +                response["symbol"] = sy
+          +mbol;                                  
+      309 +                response["target_price"
+          +] = target_price;                      
+      310 +            } else {                   
+      311 +                response["success"] = f
+          +alse;                                  
+      312 +                response["error"] = "Fa
+          +iled to register strategy";            
+      313 +            }                          
+      314 +        } catch (const std::exception& 
+          +e) {                                   
+      315 +            response["success"] = false
+          +;                                      
+      316 +            response["error"] = e.what(
+          +);                                     
+      317 +            LOG_M_ERROR("REP add_hot_st
+          +ock exception: {}", e.what());         
+      318 +        }                              
+      319 +                                       
+      320 +        return response.dump();        
+      321 +    }                                  
+      322 +                                       
+      323 +    // 处理 remove_hot_stock 请求      
+      324 +    std::string handle_rep_remove_hot_s
+          +tock(const json& request) {            
+      325 +        json response;                 
+      326 +                                       
+      327 +        std::string symbol = request.va
+          +lue("symbol", "");                     
+      328 +                                       
+      329 +        if (symbol.empty()) {          
+      330 +            response["success"] = false
+          +;                                      
+      331 +            response["error"] = "Missin
+          +g symbol";                             
+      332 +            return response.dump();    
+      333 +        }                              
+      334 +                                       
+      335 +        // 自动补全后缀                
+      336 +        symbol = symbol_utils::normaliz
+          +e_symbol(symbol);                      
+      337 +                                       
+      338 +        if (!engine_) {                
+      339 +            response["success"] = false
+          +;                                      
+      340 +            response["error"] = "Engine
+          + not initialized";                     
+      341 +            return response.dump();    
+      342 +        }                              
+      343 +                                       
+      344 +        if (!engine_->has_strategy(symb
+          +ol)) {                                 
+      345 +            response["success"] = false
+          +;                                      
+      346 +            response["error"] = "Strate
+          +gy not found: " + symbol;              
+      347 +            return response.dump();    
+      348 +        }                              
+      349 +                                       
+      350 +        engine_->unregister_strategy(sy
+          +mbol);                                 
+      351 +        LOG_M_INFO("REP remove_hot_stoc
+          +k: {}", symbol);                       
+      352 +                                       
+      353 +        response["success"] = true;    
+      354 +        response["symbol"] = symbol;   
+      355 +        return response.dump();        
+      356 +    }                                  
+      357 +                                       
+      358      // 发送注册消息，让 ROUTER 知道我们
+           的 identity
+      359      void send_register() {
+      360          json payload;
+
+● 现在添加成员变量。让我找到文件末尾的成员变量定义。
+
+● Read(include/zmq_client.h)
+  ⎿  Read 50 lines
+  ⎿  Found 6 new diagnostic issues in 1 file (ctrl+o to 
+     expand)
+  ⎿  Found 8 new diagnostic issues in 1 file (ctrl+o to 
+     expand)
+
+● Read(include/zmq_client.h)
+  ⎿  Read 15 lines
+
+● Update(include/zmq_client.h)
+  ⎿  Added 3 lines                                
+      574      }
+      575  
+      576      std::string endpoint_;
+      577 +    std::string rep_endpoint_;  // REP 
+          +服务端端点                             
+      578      std::string identity_;
+      579      std::atomic<bool> running_;
+      580      void* context_;
+      581      void* socket_;
+      582 +    void* rep_socket_;          // REP 
+          +服务端 socket                          
+      583      std::thread recv_thread_;
+      584      std::thread heartbeat_thread_;
+      585 +    std::thread rep_thread_;    // REP 
+          +服务端接收线程                         
+      586      StrategyEngine* engine_;
+      587  };
+      588  
+
+● 现在编译验证。
+
+● Bash(./build.sh engine 2>&1)
+  ⎿ [BUILD] Trading Engine Build System (Local)   
+    [WARN] This build is for LOCAL TESTING ONLY
+    [WARN] For production deployment, use:
+    ./docker-
+    … +516 lines (ctrl+o to expand)
+  ⎿  Found 3 new diagnostic issues in 1 file (ctrl+o to 
+     expand)
+  ⎿  Found 3 new diagnostic issues in 1 file (ctrl+o to 
+     expand)
+
+● 编译成功。修改完成，总结如下：
+
+  新增功能：REP 服务端（端口 13381）
+  ┌──────┬────────────────────────────────────────────┐
+  │ 功能 │                    说明                    │
+  ├──────┼────────────────────────────────────────────┤
+  │ 端口 │ 默认 tcp://*:13381，可通过构造函数参数修改 │
+  ├──────┼────────────────────────────────────────────┤
+  │ 模式 │ ZMQ_REP（服务端），接收请求并同步返回响应  │
+  └──────┴────────────────────────────────────────────┘
+  支持的消息格式：
+
+  // add_hot_stock 请求
+  {
+    "action": "add_hot_stock",
+    "symbol": "600000",
+    "target_price": 98500
+  }
+
+  // remove_hot_stock 请求
+  {
+    "action": "remove_hot_stock",
+    "symbol": "600000"
+  }
+
+  响应格式：
+  // 成功
+  {"success": true, "symbol": "600000.SH", "target_price": 98500}
+
+  // 失败
+  {"success": false, "error": "Strategy already exists: 600000.SH"}
+
+  行为：
+  - add_hot_stock：使用 BreakoutPriceVolumeStrategy 策略，target_price 作为突破价格参数
+  - remove_hot_stock：移除对应 symbol 的策略
+  - symbol 支持 "600000" 或 "600000.SH" 两种格式，会自动补全后缀
+
+✻ Sautéed for 2m 3s
+
+❯ 修改收到add_hot_stock的方法，不是BreakoutPriceVolumeStrat 
+  egy新增策略，而是enable BreakoutPriceVolumeStrategy策略。 
+  zmq_client应该已经有enable策略的api                       
+
+● 明白，修改 add_hot_stock 为启用策略，remove_hot_stock 为禁用策略。让我先读取当前代码。
+
+● Read(include/zmq_client.h)
+  ⎿  Read 100 lines
+
+● 这是一个简单的修改，我直接写计划。
+
+● Updated plan
+  ⎿  Wrote 95 lines to                                   
+     ../.claude/plans/shiny-gathering-donut.md
+      1 # 修改 add_hot_stock/remove_hot_stock 为 enable/d
+        isable 策略
+      2 ## 目标
+      3 修改 REP 服务端的消息处理逻辑：
+      4 - `add_hot_stock` -> 启用(enable)已存在的 Breakou
+        tPriceVolumeStrategy 策略
+      5 - `remove_hot_stock` -> 禁用(disable)策略（而不是
+        删除）
+      6 ## 修改文件
+      7 `/home/pc/screwdriver/include/zmq_client.h`
+     … +85 lines (ctrl+o to expand)
+  ⎿  User rejected Claude's plan:
+     ╭──────────────────────────────────────────────────────────────╮
+     │ 修改 add_hot_stock/remove_hot_stock 为 enable/disable 策略   │
+     │                                                              │
+     │ 目标                                                         │
+     │                                                              │
+     │ 修改 REP 服务端的消息处理逻辑：                              │
+     │ - add_hot_stock -> 启用(enable)已存在的                      │
+     │ BreakoutPriceVolumeStrategy 策略                             │
+     │ - remove_hot_stock -> 禁用(disable)策略（而不是删除）        │
+     │                                                              │
+     │ 修改文件                                                     │
+     │                                                              │
+     │ /home/pc/screwdriver/include/zmq_client.h                    │
+     │                                                              │
+     │ 修改内容                                                     │
+     │                                                              │
+     │ 1. handle_rep_add_hot_stock (行 269-323)                     │
+     │                                                              │
+     │ 当前行为: 创建新的 BreakoutPriceVolumeStrategy 策略          │
+     │ 修改为: 调用 engine_->enable_strategy(symbol,                │
+     │ "BreakoutPriceVolumeStrategy")                               │
+     │                                                              │
+     │ std::string handle_rep_add_hot_stock(const json& request) {  │
+     │     json response;                                           │
+     │     std::string symbol = request.value("symbol", "");        │
+     │                                                              │
+     │     if (symbol.empty()) {                                    │
+     │         response["success"] = false;                         │
+     │         response["error"] = "Missing symbol";                │
+     │         return response.dump();                              │
+     │     }                                                        │
+     │                                                              │
+     │     symbol = symbol_utils::normalize_symbol(symbol);         │
+     │                                                              │
+     │     if (!engine_) {                                          │
+     │         response["success"] = false;                         │
+     │         response["error"] = "Engine not initialized";        │
+     │         return response.dump();                              │
+     │     }                                                        │
+     │                                                              │
+     │     std::string strategy_name =                              │
+     │ "BreakoutPriceVolumeStrategy";                               │
+     │                                                              │
+     │     if (engine_->enable_strategy(symbol, strategy_name)) {   │
+     │         LOG_M_INFO("REP add_hot_stock: enabled {}:{}",       │
+     │ symbol, strategy_name);                                      │
+     │         response["success"] = true;                          │
+     │         response["symbol"] = symbol;                         │
+     │         response["strategy"] = strategy_name;                │
+     │     } else {                                                 │
+     │         response["success"] = false;                         │
+     │         response["error"] = "Strategy not found: " + symbol +│
+     │  ":" + strategy_name;                                        │
+     │     }                                                        │
+     │                                                              │
+     │     return response.dump();                                  │
+     │ }                                                            │
+     │                                                              │
+     │ 2. handle_rep_remove_hot_stock (行 325-362)                  │
+     │                                                              │
+     │ 当前行为: 删除(unregister)策略                               │
+     │ 修改为: 调用 engine_->disable_strategy(symbol,               │
+     │ "BreakoutPriceVolumeStrategy")                               │
+     │                                                              │
+     │ std::string handle_rep_remove_hot_stock(const json& request) │
+     │ {                                                            │
+     │     json response;                                           │
+     │     std::string symbol = request.value("symbol", "");        │
+     │                                                              │
+     │     if (symbol.empty()) {                                    │
+     │         response["success"] = false;                         │
+     │         response["error"] = "Missing symbol";                │
+     │         return response.dump();                              │
+     │     }                                                        │
+     │                                                              │
+     │     symbol = symbol_utils::normalize_symbol(symbol);         │
+     │                                                              │
+     │     if (!engine_) {                                          │
+     │         response["success"] = false;                         │
+     │         response["error"] = "Engine not initialized";        │
+     │         return response.dump();                              │
+     │     }                                                        │
+     │                                                              │
+     │     std::string strategy_name =                              │
+     │ "BreakoutPriceVolumeStrategy";                               │
+     │                                                              │
+     │     if (engine_->disable_strategy(symbol, strategy_name)) {  │
+     │         LOG_M_INFO("REP remove_hot_stock: disabled {}:{}",   │
+     │ symbol, strategy_name);                                      │
+     │         response["success"] = true;                          │
+     │         response["symbol"] = symbol;                         │
+     │         response["strategy"] = strategy_name;                │
+     │     } else {                                                 │
+     │         response["success"] = false;                         │
+     │         response["error"] = "Strategy not found: " + symbol +│
+     │  ":" + strategy_name;                                        │
+     │     }                                                        │
+     │                                                              │
+     │     return response.dump();                                  │
+     │ }                                                            │
+     │                                                              │
+     │ 验证                                                         │
+     │                                                              │
+     │ ./build.sh engine                                            │
+     │                                                              │
+     ╰──────────────────────────────────────────────────────────────╯
+╭─ Claude Code ─────────────────────────────────────────────────────╮
+│                                                                   │
+│                     Welcome back stramunger!                      │
+│                                                                   │
+│                                                                   │
+│                              ▐▛███▜▌                              │
+│                             ▝▜█████▛▘                             │
+│                               ▘▘ ▝▝                               │
+│                                                                   │
+│                                                                   │
+│                             Opus 4.5                              │
+│                            Claude Max                             │
+│                           ~/screwdriver                           │
+│                                                                   │
+╰───────────────────────────────────────────────────────────────────╯
+
+❯ Implement the following plan:                                  
+                                                                 
+  # 修改 add_hot_stock/remove_hot_stock 为 enable/disable 策略   
+                                                                 
+  ## 目标                                                        
+  修改 REP 服务端的消息处理逻辑：                                
+  - `add_hot_stock` -> 启用(enable)已存在的                      
+  BreakoutPriceVolumeStrategy 策略                               
+  - `remove_hot_stock` -> 禁用(disable)策略（而不是删除）        
+                                                                 
+  ## 修改文件                                                    
+  `/home/pc/screwdriver/include/zmq_client.h`                    
+                                                                 
+  ## 修改内容                                                    
+                                                                 
+  ### 1. handle_rep_add_hot_stock (行 269-323)                   
+  **当前行为**: 创建新的 BreakoutPriceVolumeStrategy 策略        
+  **修改为**: 调用 `engine_->enable_strategy(symbol,             
+  "BreakoutPriceVolumeStrategy")`                                
+                                                                 
+  ```cpp                                                         
+  std::string handle_rep_add_hot_stock(const json& request) {    
+  json response;                                                 
+  std::string symbol = request.value("symbol", "");              
+                                                                 
+  if (symbol.empty()) {                                          
+  response["success"] = false;                                   
+  response["error"] = "Missing symbol";                          
+  return response.dump();                                        
+  }                                                              
+                                                                 
+  symbol = symbol_utils::normalize_symbol(symbol);               
+                                                                 
+  if (!engine_) {                                                
+  response["success"] = false;                                   
+  response["error"] = "Engine not initialized";                  
+  return response.dump();                                        
+  }                                                              
+                                                                 
+  std::string strategy_name = "BreakoutPriceVolumeStrategy";     
+                                                                 
+  if (engine_->enable_strategy(symbol, strategy_name)) {         
+  LOG_M_INFO("REP add_hot_stock: enabled {}:{}", symbol,         
+  strategy_name);                                                
+  response["success"] = true;                                    
+  response["symbol"] = symbol;                                   
+  response["strategy"] = strategy_name;                          
+  } else {                                                       
+  response["success"] = false;                                   
+  response["error"] = "Strategy not found: " + symbol +          
+  ":" + strategy_name;                                           
+  }                                                              
+                                                                 
+  return response.dump();                                        
+  }                                                              
+  ```                                                            
+                                                                 
+  ### 2. handle_rep_remove_hot_stock (行 325-362)                
+  **当前行为**: 删除(unregister)策略                             
+  **修改为**: 调用 `engine_->disable_strategy(symbol,            
+  "BreakoutPriceVolumeStrategy")`                                
+                                                                 
+  ```cpp                                                         
+  std::string handle_rep_remove_hot_stock(const json& request) { 
+  json response;                                                 
+  std::string symbol = request.value("symbol", "");              
+                                                                 
+  if (symbol.empty()) {                                          
+  response["success"] = false;                                   
+  response["error"] = "Missing symbol";                          
+  return response.dump();                                        
+  }                                                              
+                                                                 
+  symbol = symbol_utils::normalize_symbol(symbol);               
+                                                                 
+  if (!engine_) {                                                
+  response["success"] = false;                                   
+  response["error"] = "Engine not initialized";                  
+  return response.dump();                                        
+  }                                                              
+                                                                 
+  std::string strategy_name = "BreakoutPriceVolumeStrategy";     
+                                                                 
+  if (engine_->disable_strategy(symbol, strategy_name)) {        
+  LOG_M_INFO("REP remove_hot_stock: disabled {}:{}",             
+  symbol, strategy_name);                                        
+  response["success"] = true;                                    
+  response["symbol"] = symbol;                                   
+  response["strategy"] = strategy_name;                          
+  } else {                                                       
+  response["success"] = false;                                   
+  response["error"] = "Strategy not found: " + symbol +          
+  ":" + strategy_name;                                           
+  }                                                              
+                                                                 
+  return response.dump();                                        
+  }                                                              
+  ```                                                            
+                                                                 
+  ## 验证                                                        
+  ```bash                                                        
+  ./build.sh engine                                              
+  ```                                                            
+                                                                 
+                                                                 
+  If you need specific details from before exiting plan mode     
+  (like exact code snippets, error messages, or content you      
+  generated), read the full transcript at:                       
+  /home/pc/.claude/projects/-home-pc-screwdriver/b460a4bd-b64d-4 
+  8bc-ad8b-e81cb03c0ac8.jsonl                                    
+
+● I'll implement the plan to modify add_hot_stock and remove_hot_stock to enable/disable strategies instead of creating/deleting them. Let me first read the current implementation.
+
+● Read(include/zmq_client.h)
+  ⎿  Read 100 lines
+
+● Now I can see the current implementation. Let me create a todo list and make the modifications.
+
+● Update(include/zmq_client.h)
+  ⎿  Added 8 lines, removed 30 lines                          
+      266          return response.dump();
+      267      }
+      268  
+      269 -    // 处理 add_hot_stock 请求（使用固定的 Breakout
+          -PriceVolumeStrategy）                              
+      269 +    // 处理 add_hot_stock 请求（启用已存在的 Breako
+          +utPriceVolumeStrategy）                            
+      270      std::string handle_rep_add_hot_stock(const json
+           & request) {
+      271          json response;
+      272 -                                                   
+      272          std::string symbol = request.value("symbol"
+           , "");
+      274 -        int64_t target_price = request.value("targe
+          -t_price", int64_t(0));                             
+      273  
+      274          if (symbol.empty()) {
+      275              response["success"] = false;
+     ...
+      277              return response.dump();
+      278          }
+      279  
+      282 -        // 自动补全后缀                            
+      280          symbol = symbol_utils::normalize_symbol(sym
+           bol);
+      281  
+      282          if (!engine_) {
+     ...
+      285              return response.dump();
+      286          }
+      287  
+      291 -        // 使用 BreakoutPriceVolumeStrategy 策略（ 
+          -固定）                                             
+      288          std::string strategy_name = "BreakoutPriceV
+           olumeStrategy";
+      289  
+      294 -        // 检查是否已存在                          
+      295 -        if (engine_->has_strategy(symbol, strategy_
+          -name)) {                                           
+      290 +        if (engine_->enable_strategy(symbol, strate
+          +gy_name)) {                                        
+      291 +            LOG_M_INFO("REP add_hot_stock: enabled 
+          +{}:{}", symbol, strategy_name);                    
+      292 +            response["success"] = true;            
+      293 +            response["symbol"] = symbol;           
+      294 +            response["strategy"] = strategy_name;  
+      295 +        } else {                                   
+      296              response["success"] = false;
+      297 -            response["error"] = "Strategy already e
+          -xists: " + symbol + ":" + strategy_name;           
+      298 -            return response.dump();                
+      297 +            response["error"] = "Strategy not found
+          +: " + symbol + ":" + strategy_name;                
+      298          }
+      299  
+      301 -        auto& factory = StrategyFactory::instance()
+          -;                                                  
+      302 -        std::string params_str = std::to_string(tar
+          -get_price);                                        
+      303 -                                                   
+      304 -        try {                                      
+      305 -            auto strategy = factory.create(strategy
+          -_name, symbol, params_str);                        
+      306 -            if (engine_->register_strategy_runtime(
+          -symbol, std::move(strategy))) {                    
+      307 -                LOG_M_INFO("REP add_hot_stock: {}:{
+          -} target_price={}", symbol, strategy_name, target_p
+          -rice);                                             
+      308 -                response["success"] = true;        
+      309 -                response["symbol"] = symbol;       
+      310 -                response["strategy"] = strategy_nam
+          -e;                                                 
+      311 -                response["target_price"] = target_p
+          -rice;                                              
+      312 -            } else {                               
+      313 -                response["success"] = false;       
+      314 -                response["error"] = "Failed to regi
+          -ster strategy";                                    
+      315 -            }                                      
+      316 -        } catch (const std::exception& e) {        
+      317 -            response["success"] = false;           
+      318 -            response["error"] = e.what();          
+      319 -            LOG_M_ERROR("REP add_hot_stock exceptio
+          -n: {}", e.what());                                 
+      320 -        }                                          
+      321 -                                                   
+      300          return response.dump();
+      301      }
+      302  
+  ⎿  Found 7 new diagnostic issues in 1 file (ctrl+o to expand)
+
+● Update(include/zmq_client.h)
+  ⎿  Added 7 lines, removed 12 lines                                   
+      300          return response.dump();
+      301      }
+      302  
+      303 -    // 处理 remove_hot_stock 请求（移除固定的 BreakoutPriceV
+          -olumeStrategy）                                             
+      303 +    // 处理 remove_hot_stock 请求（禁用 BreakoutPriceVolumeS
+          +trategy）                                                   
+      304      std::string handle_rep_remove_hot_stock(const json& requ
+           est) {
+      305          json response;
+      306 -                                                            
+      306          std::string symbol = request.value("symbol", "");
+      307  
+      308          if (symbol.empty()) {
+     ...
+      311              return response.dump();
+      312          }
+      313  
+      315 -        // 自动补全后缀                                     
+      314          symbol = symbol_utils::normalize_symbol(symbol);
+      315  
+      316          if (!engine_) {
+     ...
+      319              return response.dump();
+      320          }
+      321  
+      324 -        // 使用固定的策略名                                 
+      322          std::string strategy_name = "BreakoutPriceVolumeStra
+           tegy";
+      323  
+      327 -        if (!engine_->has_strategy(symbol, strategy_name)) {
+      324 +        if (engine_->disable_strategy(symbol, strategy_name)
+          +) {                                                         
+      325 +            LOG_M_INFO("REP remove_hot_stock: disabled {}:{}
+          +", symbol, strategy_name);                                  
+      326 +            response["success"] = true;                     
+      327 +            response["symbol"] = symbol;                    
+      328 +            response["strategy"] = strategy_name;           
+      329 +        } else {                                            
+      330              response["success"] = false;
+      331              response["error"] = "Strategy not found: " + sym
+           bol + ":" + strategy_name;
+      330 -            return response.dump();                         
+      332          }
+      333  
+      333 -        engine_->unregister_strategy(symbol, strategy_name);
+      334 -        LOG_M_INFO("REP remove_hot_stock: {}:{}", symbol, st
+          -rategy_name);                                               
+      335 -                                                            
+      336 -        response["success"] = true;                         
+      337 -        response["symbol"] = symbol;                        
+      338 -        response["strategy"] = strategy_name;               
+      334          return response.dump();
+      335      }
+      336  
+  ⎿  Found 6 new diagnostic issues in 1 file (ctrl+o to expand)
+
+● Bash(./build.sh engine)
+  ⎿  [BUILD] Trading Engine Build System (Local)             
+     [WARN] This build is for LOCAL TESTING ONLY
+     [WARN] For production deployment, use: ./docker-build.sh
+     … +34 lines (ctrl+o to expand)
+
+● Done. Both functions have been modified:
+
+  Changes made to /home/pc/screwdriver/include/zmq_client.h:
+
+  1. handle_rep_add_hot_stock (lines 269-301):
+    - Changed from creating a new strategy via StrategyFactory::create() + register_strategy_runtime()
+    - Now calls engine_->enable_strategy(symbol, strategy_name)
+    - Removed target_price parameter handling (no longer needed for enable)
+  2. handle_rep_remove_hot_stock (lines 303-335):
+    - Changed from deleting strategy via unregister_strategy()
+    - Now calls engine_->disable_strategy(symbol, strategy_name)
+
+  Build completed successfully.
+
+✻ Sautéed for 1m 7s
+
+❯ 总结一下本会话的工作 
+
+● 本会话工作总结
+
+  任务目标
+
+  修改 ZMQ REP 服务端的 add_hot_stock 和 remove_hot_stock 消息处理逻辑，从"创建/删除策略"改为"启用/禁用策略"。
+
+  修改文件
+
+  /home/pc/screwdriver/include/zmq_client.h
+
+  具体修改
+  函数: handle_rep_add_hot_stock
+  修改前: 通过 StrategyFactory::create() 创建新策略，再
+    register_strategy_runtime() 注册
+  修改后: 调用 engine_->enable_strategy(symbol, strategy_name)
+    启用已存在的策略
+  ────────────────────────────────────────
+  函数: handle_rep_remove_hot_stock
+  修改前: 调用 unregister_strategy() 删除策略
+  修改后: 调用 engine_->disable_strategy(symbol, strategy_name) 禁用策略
+  代码简化
+
+  - 移除了 target_price 参数处理（启用策略不需要）
+  - 移除了 StrategyFactory 相关代码
+  - 移除了 has_strategy() 检查（enable/disable 内部会处理）
+  - 日志从 "add/remove" 改为 "enabled/disabled"
+
+  验证
+
+  ./build.sh engine 编译成功。
