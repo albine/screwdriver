@@ -12,7 +12,6 @@ namespace StrategyIds {
 // ==========================================
 constexpr uint8_t UNKNOWN                         = 0;
 constexpr uint8_t OPENING_RANGE_BREAKOUT          = 1;
-constexpr uint8_t WEAK_TO_STRONG_RED_OPEN         = 4;
 constexpr uint8_t BREAKOUT_PRICE_VOLUME           = 5;
 
 // ==========================================
@@ -21,7 +20,6 @@ constexpr uint8_t BREAKOUT_PRICE_VOLUME           = 5;
 inline uint8_t name_to_id(const std::string& name) {
     static const std::unordered_map<std::string, uint8_t> map = {
         {"OpeningRangeBreakoutStrategy", OPENING_RANGE_BREAKOUT},
-        {"WeakToStrongRedOpenStrategy", WEAK_TO_STRONG_RED_OPEN},
         {"BreakoutPriceVolumeStrategy", BREAKOUT_PRICE_VOLUME},
     };
     auto it = map.find(name);
@@ -31,7 +29,6 @@ inline uint8_t name_to_id(const std::string& name) {
 inline const char* id_to_name(uint8_t id) {
     switch (id) {
         case OPENING_RANGE_BREAKOUT:   return "OpeningRangeBreakoutStrategy";
-        case WEAK_TO_STRONG_RED_OPEN:  return "WeakToStrongRedOpenStrategy";
         case BREAKOUT_PRICE_VOLUME:    return "BreakoutPriceVolumeStrategy";
         default:                       return "Unknown";
     }
