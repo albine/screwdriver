@@ -1,0 +1,295 @@
+#!/usr/bin/env python3
+"""
+新增策略自动化脚本
+
+用法:
+    python script/add_strategy.py StrategyName [--id N]
+
+示例:
+    python script/add_strategy.py VolumeSpike          # 自动分配 ID
+    python script/add_strategy.py VolumeSpike --id 10  # 指定 ID 为 10
+
+脚本会自动:
+1. 创建 src/strategy/{StrategyName}Strategy.h
+2. 更新 include/strategy_ids.h
+3. 更新 src/main.cpp
+4. 更新 config/strategy_backtest.conf
+"""
+
+import argparse
+import os
+import re
+import sys
+from pathlib import Path
+
+# 项目根目录
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
+
+# 文件路径
+STRATEGY_IDS_H = PROJECT_ROOT / "include" / "strategy_ids.h"
+MAIN_CPP = PROJECT_ROOT / "src" / "main.cpp"
+STRATEGY_DIR = PROJECT_ROOT / "src" / "strategy"
+BACKTEST_CONF = PROJECT_ROOT / "config" / "strategy_backtest.conf"
+
+
+def to_snake_case(name: str) -> str:
+    """将 CamelCase 转换为 SNAKE_CASE"""
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).upper()
+
+
+def parse_existing_ids(content: str) -> dict:
+    """解析 strategy_ids.h 中已存在的 ID"""
+    ids = {}
+    pattern = r'constexpr\s+uint8_t\s+(\w+)\s*=\s*(\d+);'
+    for match in re.finditer(pattern, content):
+        name, value = match.groups()
+        ids[name] = int(value)
+    return ids
+
+
+def find_next_available_id(existing_ids: dict) -> int:
+    """找到下一个可用的 ID（避开 252-255 保留区）"""
+    used = set(existing_ids.values())
+    for i in range(1, 252):  # 1-251 可用
+        if i not in used:
+            return i
+    raise ValueError("没有可用的策略 ID（1-251 已用完）")
+
+
+def generate_strategy_header(class_name: str, description: str = "") -> str:
+    """生成策略头文件模板"""
+    guard_name = f"{to_snake_case(class_name)}_H"
+
+    return f'''#ifndef {guard_name}
+#define {guard_name}
+
+#include "strategy_base.h"
+#include "market_data_structs.h"
+#include "logger.h"
+#include "utils/time_util.h"
+#include "utils/symbol_utils.h"
+#include <string>
+
+#define LOG_MODULE MOD_STRATEGY
+
+/**
+ * {class_name}
+ *
+ * {description if description else "TODO: 添加策略描述"}
+ */
+class {class_name} : public Strategy {{
+private:
+    // 策略状态变量
+    // TODO: 添加策略需要的状态变量
+
+public:
+    explicit {class_name}(const std::string& strategy_name,
+                         const std::string& sym = "") {{
+        this->name = strategy_name;
+        this->symbol = sym;
+        // 默认启用（如需默认禁用，设置 enabled_ = false）
+    }}
+
+    virtual ~{class_name}() = default;
+
+    void on_start() override {{
+        LOG_M_INFO("{class_name} started for {{}}", symbol);
+    }}
+
+    void on_stop() override {{
+        LOG_M_INFO("{class_name} stopped for {{}}", symbol);
+    }}
+
+    void on_tick(const MDStockStruct& stock) override {{
+        if (!is_enabled()) return;
+
+        // TODO: 实现行情处理逻辑
+    }}
+
+    void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {{
+        if (!is_enabled()) return;
+
+        // TODO: 实现委托处理逻辑（如不需要可删除此方法）
+    }}
+
+    void on_transaction(const MDTransactionStruct& txn, const FastOrderBook& book) override {{
+        if (!is_enabled()) return;
+
+        // TODO: 实现成交处理逻辑（如不需要可删除此方法）
+    }}
+}};
+
+#undef LOG_MODULE
+#endif // {guard_name}
+'''
+
+
+def update_strategy_ids(content: str, class_name: str, strategy_id: int) -> str:
+    """更新 strategy_ids.h"""
+    const_name = to_snake_case(class_name.replace("Strategy", ""))
+
+    # 1. 添加 constexpr 定义（在 BREAKOUT_PRICE_VOLUME 之后）
+    id_pattern = r'(constexpr uint8_t BREAKOUT_PRICE_VOLUME\s*=\s*\d+;)'
+    new_const = f'constexpr uint8_t {const_name:<30} = {strategy_id};'
+    content = re.sub(id_pattern, rf'\1\n{new_const}', content)
+
+    # 2. 更新 name_to_id() map（在最后一个条目后添加）
+    map_pattern = r'(\{"BreakoutPriceVolumeStrategy", BREAKOUT_PRICE_VOLUME\},)'
+    new_entry = f'{{"{class_name}", {const_name}}},'
+    content = re.sub(map_pattern, rf'\1\n        {new_entry}', content)
+
+    # 3. 更新 id_to_name() switch（在 default 前添加）
+    switch_pattern = r'(case BREAKOUT_PRICE_VOLUME:\s*return "BreakoutPriceVolumeStrategy";)'
+    new_case = f'case {const_name}:{" " * (18 - len(const_name))}return "{class_name}";'
+    content = re.sub(switch_pattern, rf'\1\n        {new_case}', content)
+
+    return content
+
+
+def update_main_cpp(content: str, class_name: str) -> str:
+    """更新 main.cpp"""
+    const_name = to_snake_case(class_name.replace("Strategy", ""))
+    short_suffix = "".join([c for c in class_name if c.isupper()])[:3]
+
+    # 1. 添加 #include（在最后一个策略 include 之后）
+    include_pattern = r'(#include "strategy/OpeningRangeBreakoutStrategy\.h")'
+    new_include = f'#include "strategy/{class_name}.h"'
+    content = re.sub(include_pattern, rf'\1\n{new_include}', content)
+
+    # 2. 添加注册代码（在 register_all_strategies 函数末尾的 } 之前）
+    register_code = f'''
+    factory.register_strategy("{class_name}",
+        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {{
+            auto strat = std::make_unique<{class_name}>(symbol + "_{short_suffix}", symbol);
+            strat->strategy_type_id = StrategyIds::{const_name};
+            return strat;
+        }});
+'''
+
+    # 找到 register_all_strategies 函数的结束位置
+    func_pattern = r'(factory\.register_strategy\("OpeningRangeBreakoutStrategy"[^}]+\}\);)\n\}'
+    content = re.sub(func_pattern, rf'\1{register_code}}}\n', content)
+
+    return content
+
+
+def update_backtest_conf(content: str, class_name: str) -> str:
+    """更新 config/strategy_backtest.conf"""
+    # 在可用策略列表中添加新策略
+    pattern = r'(#   - BreakoutPriceVolumeStrategy: .+)'
+    new_line = f'#   - {class_name}: TODO 添加描述'
+    content = re.sub(pattern, rf'\1\n{new_line}', content)
+    return content
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='新增策略自动化脚本',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+示例:
+    python script/add_strategy.py VolumeSpike          # 创建 VolumeSpikeStrategy
+    python script/add_strategy.py VolumeSpike --id 10  # 指定 ID 为 10
+        '''
+    )
+    parser.add_argument('name', help='策略名称（不含 Strategy 后缀）')
+    parser.add_argument('--id', type=int, help='指定策略 ID（默认自动分配）')
+    parser.add_argument('--desc', default='', help='策略描述')
+    parser.add_argument('--dry-run', action='store_true', help='仅显示将要执行的操作，不实际修改文件')
+
+    args = parser.parse_args()
+
+    # 规范化策略名称
+    name = args.name
+    if not name.endswith('Strategy'):
+        name = name + 'Strategy'
+    class_name = name
+
+    print(f"=== 新增策略: {class_name} ===\n")
+
+    # 检查策略是否已存在
+    strategy_file = STRATEGY_DIR / f"{class_name}.h"
+    if strategy_file.exists():
+        print(f"错误: 策略文件已存在: {strategy_file}")
+        sys.exit(1)
+
+    # 读取现有文件
+    with open(STRATEGY_IDS_H, 'r') as f:
+        ids_content = f.read()
+    with open(MAIN_CPP, 'r') as f:
+        main_content = f.read()
+    with open(BACKTEST_CONF, 'r') as f:
+        conf_content = f.read()
+
+    # 检查策略名是否已注册
+    if class_name in ids_content:
+        print(f"错误: 策略 {class_name} 已在 strategy_ids.h 中注册")
+        sys.exit(1)
+
+    # 确定策略 ID
+    existing_ids = parse_existing_ids(ids_content)
+    if args.id:
+        if args.id in existing_ids.values():
+            print(f"错误: ID {args.id} 已被使用")
+            sys.exit(1)
+        if args.id < 1 or args.id > 251:
+            print(f"错误: ID 必须在 1-251 范围内（252-255 保留）")
+            sys.exit(1)
+        strategy_id = args.id
+    else:
+        strategy_id = find_next_available_id(existing_ids)
+
+    const_name = to_snake_case(class_name.replace("Strategy", ""))
+
+    print(f"策略类名:     {class_name}")
+    print(f"策略 ID:      {strategy_id} ({const_name})")
+    print(f"策略文件:     {strategy_file}")
+    print()
+
+    if args.dry_run:
+        print("=== Dry Run 模式，不实际修改文件 ===")
+        print("\n将创建文件:")
+        print(f"  - {strategy_file}")
+        print("\n将修改文件:")
+        print(f"  - {STRATEGY_IDS_H}")
+        print(f"  - {MAIN_CPP}")
+        print(f"  - {BACKTEST_CONF}")
+        return
+
+    # 1. 创建策略头文件
+    print(f"[1/4] 创建策略头文件: {strategy_file}")
+    strategy_header = generate_strategy_header(class_name, args.desc)
+    with open(strategy_file, 'w') as f:
+        f.write(strategy_header)
+
+    # 2. 更新 strategy_ids.h
+    print(f"[2/4] 更新 strategy_ids.h")
+    new_ids_content = update_strategy_ids(ids_content, class_name, strategy_id)
+    with open(STRATEGY_IDS_H, 'w') as f:
+        f.write(new_ids_content)
+
+    # 3. 更新 main.cpp
+    print(f"[3/4] 更新 main.cpp")
+    new_main_content = update_main_cpp(main_content, class_name)
+    with open(MAIN_CPP, 'w') as f:
+        f.write(new_main_content)
+
+    # 4. 更新配置文件
+    print(f"[4/4] 更新 strategy_backtest.conf")
+    new_conf_content = update_backtest_conf(conf_content, class_name)
+    with open(BACKTEST_CONF, 'w') as f:
+        f.write(new_conf_content)
+
+    print()
+    print("=== 完成 ===")
+    print()
+    print("下一步:")
+    print(f"  1. 编辑 {strategy_file} 实现策略逻辑")
+    print(f"  2. 运行 ./build.sh engine 编译")
+    print(f"  3. 在 config/strategy_backtest.conf 中添加测试配置")
+    print(f"  4. 运行 python run_backtest.py YYYYMMDD 测试")
+
+
+if __name__ == '__main__':
+    main()

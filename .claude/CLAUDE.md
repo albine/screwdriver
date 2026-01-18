@@ -137,9 +137,7 @@ export LD_LIBRARY_PATH=$PWD/fastfish/libs:$LD_LIBRARY_PATH
 
 **Available Strategies**:
 - `OpeningRangeBreakoutStrategy`: Opening range breakout
-- `PriceLevelVolumeStrategy`: Price level volume monitoring
-- `TestStrategy`: OrderBook validation
-- `PrintStrategy`: Simple debug strategy
+- `BreakoutPriceVolumeStrategy`: Breakout price volume monitoring
 
 ### Log Files
 
@@ -153,16 +151,30 @@ After running backtest, check logs:
 
 ### Adding a New Strategy
 
-1. Create strategy header: `src/strategy/YourStrategy.h`
-2. Implement required methods: `OnOrderBook()`, `OnTransaction()`, etc.
-3. Register in `include/strategy_factory.h`:
-   ```cpp
-   if (strategy_name == "YourStrategy") {
-       return std::make_unique<YourStrategy>();
-   }
-   ```
-4. **Build**: `./build.sh engine`
-5. **Test**: Add to `config/backtest.conf` and run backtest
+**IMPORTANT**: When adding a new strategy, you MUST use the `add_strategy.py` script:
+
+```bash
+python script/add_strategy.py StrategyName [--id N]
+```
+
+**Examples:**
+```bash
+python script/add_strategy.py VolumeSpike          # 自动分配 ID，创建 VolumeSpikeStrategy
+python script/add_strategy.py VolumeSpike --id 10  # 指定 ID 为 10
+```
+
+This script automatically:
+1. Creates strategy header file in `src/strategy/{StrategyName}Strategy.h`
+2. Updates `include/strategy_ids.h` with new ID and mappings
+3. Registers the strategy in `src/main.cpp`
+4. Updates `config/strategy_backtest.conf` comments
+
+**After running the script:**
+1. Edit the generated strategy file to implement your logic
+2. **Build**: `./build.sh engine`
+3. **Test**: Add to `config/strategy_backtest.conf` and run backtest
+
+**DO NOT manually create strategy files or modify registration code by hand.**
 
 ### Modifying Existing Code
 
