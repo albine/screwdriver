@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <map>
 #include <memory>
+#include <algorithm>
 
 // 引入策略引擎和适配器
 #include "strategy_engine.h"
@@ -103,7 +104,7 @@ void register_all_strategies() {
 // ==========================================
 // 回测模式
 // ==========================================
-void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "config/backtest.conf") {
+void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "config/strategy_backtest.conf") {
     LOG_MODULE_INFO(logger, MOD_ENGINE, "=== Backtest Mode ===");
 
     // 注册所有策略
@@ -129,8 +130,6 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
 
     // 为每个配置创建策略并检查数据
     for (const auto& cfg : configs) {
-        LOG_MODULE_INFO(logger, MOD_ENGINE, "Processing: {} with strategy {}", cfg.symbol, cfg.strategy_name);
-
         // 检查策略是否存在
         if (!factory.has_strategy(cfg.strategy_name)) {
             LOG_MODULE_WARNING(logger, MOD_ENGINE, "Unknown strategy: {}, skipping {}", cfg.strategy_name, cfg.symbol);
@@ -160,9 +159,8 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
             auto strategy = factory.create(cfg.strategy_name, cfg.symbol, cfg.params);
             engine.register_strategy(cfg.symbol, std::move(strategy));  // 转移所有权
             valid_symbols.push_back(cfg.symbol);
-            LOG_MODULE_INFO(logger, MOD_ENGINE, "Registered strategy {} for {}", cfg.strategy_name, cfg.symbol);
         } catch (const std::exception& e) {
-            LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create strategy: {}", e.what());
+            LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create strategy for {}: {}", cfg.symbol, e.what());
         }
     }
 
@@ -219,21 +217,36 @@ static std::unique_ptr<ZmqClient> g_zmq_client;
 // ==========================================
 // 实盘模式
 // ==========================================
-void run_live_mode(quill::Logger* logger, const std::string& config_file = "config/live.conf") {
+void run_live_mode(quill::Logger* logger,
+                   const std::string& strategy_config_file = "config/strategy_live.conf",
+                   const std::string& engine_config_file = "config/engine.conf") {
     LOG_MODULE_INFO(logger, MOD_ENGINE, "=== Live Trading Mode ===");
+
+    // 解析引擎配置
+    auto engine_cfg = parse_engine_config(engine_config_file);
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Loaded engine config from {}", engine_config_file);
 
     // 注册所有策略
     register_all_strategies();
 
-    // 解析配置文件
-    auto configs = parse_strategy_config(config_file);
+    // 解析策略配置文件
+    auto configs = parse_strategy_config(strategy_config_file);
     if (configs.empty()) {
-        LOG_MODULE_ERROR(logger, MOD_ENGINE, "No valid configurations found in {}", config_file);
+        LOG_MODULE_ERROR(logger, MOD_ENGINE, "No valid configurations found in {}", strategy_config_file);
         LOG_MODULE_INFO(logger, MOD_ENGINE, "Config format: stock_code,strategy_name (e.g., 600759,PriceLevelVolumeStrategy)");
         return;
     }
 
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Loaded {} live trading configurations from {}", configs.size(), config_file);
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Loaded {} configurations from {}", configs.size(), strategy_config_file);
+
+    // 统计每种策略的配置数量
+    std::map<std::string, int> strategy_counts;
+    for (const auto& cfg : configs) {
+        strategy_counts[cfg.strategy_name]++;
+    }
+    for (const auto& [name, count] : strategy_counts) {
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "  - {}: {} symbols", name, count);
+    }
 
     // 创建策略引擎
     StrategyEngine engine;
@@ -243,8 +256,6 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
     // 为每个配置创建策略
     std::vector<std::string> valid_symbols;
     for (const auto& cfg : configs) {
-        LOG_MODULE_INFO(logger, MOD_ENGINE, "Processing: {} with strategy {}", cfg.symbol, cfg.strategy_name);
-
         // 检查策略是否存在
         if (!factory.has_strategy(cfg.strategy_name)) {
             LOG_MODULE_WARNING(logger, MOD_ENGINE, "Unknown strategy: {}, skipping {}", cfg.strategy_name, cfg.symbol);
@@ -259,10 +270,12 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
         try {
             auto strategy = factory.create(cfg.strategy_name, cfg.symbol, cfg.params);
             engine.register_strategy(cfg.symbol, std::move(strategy));
-            valid_symbols.push_back(cfg.symbol);
-            LOG_MODULE_INFO(logger, MOD_ENGINE, "Registered strategy {} for {}", cfg.strategy_name, cfg.symbol);
+            // 只添加一次（去重）
+            if (std::find(valid_symbols.begin(), valid_symbols.end(), cfg.symbol) == valid_symbols.end()) {
+                valid_symbols.push_back(cfg.symbol);
+            }
         } catch (const std::exception& e) {
-            LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create strategy: {}", e.what());
+            LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create strategy for {}: {}", cfg.symbol, e.what());
         }
     }
 
@@ -271,28 +284,33 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
         return;
     }
 
+    // 为所有股票添加默认策略 BreakoutPriceVolumeStrategy（默认禁用，需通过 ZMQ 命令启用）
+    for (const auto& symbol : valid_symbols) {
+        try {
+            auto default_strategy = factory.create("BreakoutPriceVolumeStrategy", symbol, "");
+            engine.register_strategy(symbol, std::move(default_strategy));
+        } catch (const std::exception& e) {
+            LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create default strategy for {}: {}", symbol, e.what());
+        }
+    }
+
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine with {} symbols...", valid_symbols.size());
     engine.start();
 
     // 创建实盘上下文（稍后在 ZMQ 客户端启动后设置）
     std::unique_ptr<LiveContext> live_ctx;
 
-    // 初始化 ZMQ 客户端（可通过 DISABLE_ZMQ=1 禁用）
-    // 注意：某些系统上 ZMQ 可能因 signaler 问题导致 abort
-    const char* disable_zmq = std::getenv("DISABLE_ZMQ");
-    if (disable_zmq && std::string(disable_zmq) == "1") {
-        LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client disabled via DISABLE_ZMQ=1");
+    // 初始化 ZMQ 客户端（可通过 engine.conf 中 disable_zmq=true 禁用）
+    if (engine_cfg.disable_zmq) {
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client disabled via config");
     } else {
-        const char* zmq_endpoint = std::getenv("ZMQ_ENDPOINT");
-        std::string endpoint = zmq_endpoint ? zmq_endpoint : "tcp://localhost:13380";
-
-        g_zmq_client = std::make_unique<ZmqClient>(endpoint);
+        g_zmq_client = std::make_unique<ZmqClient>(engine_cfg.zmq_endpoint);
 
         // 注入策略引擎引用（支持运行时动态添加/删除策略）
         g_zmq_client->set_engine(&engine);
 
         if (g_zmq_client->start()) {
-            LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client started, endpoint: {}", endpoint);
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client started, endpoint: {}", engine_cfg.zmq_endpoint);
             LOG_MODULE_INFO(logger, MOD_ENGINE, "Runtime strategy management enabled via ZMQ");
 
             // 创建实盘上下文并设置给所有策略
@@ -304,22 +322,19 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
     }
 
     // ========================================
-    // 创建持久化层 (可通过 DISABLE_PERSIST=1 禁用)
+    // 创建持久化层 (可通过 engine.conf 中 disable_persist=true 禁用)
     // ========================================
     std::unique_ptr<PersistLayer> persist;
-    const char* disable_persist = std::getenv("DISABLE_PERSIST");
-    if (disable_persist && std::string(disable_persist) == "1") {
-        LOG_MODULE_INFO(logger, MOD_ENGINE, "PersistLayer disabled via DISABLE_PERSIST=1");
+    if (engine_cfg.disable_persist) {
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "PersistLayer disabled via config");
     } else {
         persist = std::make_unique<PersistLayer>();
 
         // 获取当前日期
         std::string date = get_current_date();
 
-        // 数据目录 (可通过环境变量配置)
-        // 默认使用当前目录下的 data/raw，生产环境可通过 PERSIST_DATA_DIR 指定
-        const char* data_dir_env = std::getenv("PERSIST_DATA_DIR");
-        std::string data_dir = data_dir_env ? data_dir_env : "data/raw";
+        // 数据目录 (通过 engine.conf 配置)
+        std::string data_dir = engine_cfg.persist_data_dir;
 
         // Writer 线程绑核 (绑定到最后一个 CPU)
         int last_cpu = static_cast<int>(std::thread::hardware_concurrency()) - 1;

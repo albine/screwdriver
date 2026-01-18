@@ -89,6 +89,82 @@ inline std::vector<StrategyConfigEntry> parse_backtest_config(const std::string&
 }
 
 // ==========================================
+// 引擎配置结构
+// ==========================================
+struct EngineConfig {
+    // ZMQ 配置
+    std::string zmq_endpoint = "tcp://localhost:13380";
+    bool disable_zmq = false;
+
+    // 持久化配置
+    bool disable_persist = false;
+    std::string persist_data_dir = "data/raw";
+};
+
+// ==========================================
+// 引擎配置解析器
+// ==========================================
+inline EngineConfig parse_engine_config(const std::string& filepath) {
+    EngineConfig config;
+    std::ifstream file(filepath);
+
+    if (!file.is_open()) {
+        return config;  // 返回默认值
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        // 跳过空行和注释
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        // 去除首尾空白
+        auto start = line.find_first_not_of(" \t");
+        auto end = line.find_last_not_of(" \t\r\n");
+        if (start == std::string::npos) {
+            continue;
+        }
+        line = line.substr(start, end - start + 1);
+
+        // 解析 key=value
+        auto eq_pos = line.find('=');
+        if (eq_pos == std::string::npos) {
+            continue;
+        }
+
+        std::string key = line.substr(0, eq_pos);
+        std::string value = line.substr(eq_pos + 1);
+
+        // 去除 key 和 value 的首尾空白
+        auto trim = [](std::string& s) {
+            auto start = s.find_first_not_of(" \t");
+            auto end = s.find_last_not_of(" \t");
+            if (start != std::string::npos) {
+                s = s.substr(start, end - start + 1);
+            } else {
+                s.clear();
+            }
+        };
+        trim(key);
+        trim(value);
+
+        // 设置配置值
+        if (key == "zmq_endpoint") {
+            config.zmq_endpoint = value;
+        } else if (key == "disable_zmq") {
+            config.disable_zmq = (value == "true" || value == "1");
+        } else if (key == "disable_persist") {
+            config.disable_persist = (value == "true" || value == "1");
+        } else if (key == "persist_data_dir") {
+            config.persist_data_dir = value;
+        }
+    }
+
+    return config;
+}
+
+// ==========================================
 // 数据文件检测与下载
 // ==========================================
 inline bool check_data_exists(const std::string& symbol, const std::string& data_dir = "test_data") {
