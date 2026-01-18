@@ -3,13 +3,13 @@
 
 #include "strategy_base.h"
 #include "logger.h"
+#include "utils/price_util.h"
+#include "utils/time_util.h"
 #include <iostream>
 #include <iomanip>
 #include <chrono>
 #include <atomic>
 #include <deque>
-#include <cstdio>
-#include <cmath>
 
 #define LOG_MODULE MOD_STRATEGY
 
@@ -116,7 +116,7 @@ public:
 
             LOG_M_INFO("Initialized preclose_price={} ({}元)",
                        preclose_price_,
-                       price_to_yuan(preclose_price_));
+                       price_util::price_to_yuan(preclose_price_));
 
             state_ = MonitoringState::WAITING_FOR_TICK;
         }
@@ -128,9 +128,9 @@ public:
 
                 LOG_M_INFO("Monitoring condition MET: openpx={} ({}元) < preclosepx={} ({}元)",
                            open_price_,
-                           price_to_yuan(open_price_),
+                           price_util::price_to_yuan(open_price_),
                            preclose_price_,
-                           price_to_yuan(preclose_price_));
+                           price_util::price_to_yuan(preclose_price_));
 
                 state_ = MonitoringState::MONITORING;
             }
@@ -210,7 +210,7 @@ private:
 
         // 移除超过200ms的旧数据
         while (!window_.empty()) {
-            if (is_within_200ms(window_.front().mdtime, mdtime)) {
+            if (time_util::is_within_ms(window_.front().mdtime, mdtime, 200)) {
                 break;  // 还在窗口内
             }
             window_.pop_front();
@@ -256,8 +256,8 @@ private:
                     "BUY SIGNAL | Time={} | Price={} | "
                     "n(avg_volume)={:.0f} | delta_n(buy_trades)={} | "
                     "current_volume={} | window_size={}",
-                    format_mdtime(latest.mdtime),
-                    format_price_display(preclose_price_),
+                    time_util::format_mdtime(latest.mdtime),
+                    price_util::format_price_display(preclose_price_),
                     n,
                     delta_n,
                     latest.volume,
@@ -265,10 +265,10 @@ private:
 
             LOG_M_INFO("========================================");
             LOG_M_INFO("SIGNAL TRIGGERED at {}",
-                       format_mdtime(latest.mdtime));
+                       time_util::format_mdtime(latest.mdtime));
             LOG_M_INFO("Price Level: {} ({}元)",
                        preclose_price_,
-                       price_to_yuan(preclose_price_));
+                       price_util::price_to_yuan(preclose_price_));
             LOG_M_INFO("n (Avg Volume in 200ms): {:.0f}", n);
             LOG_M_INFO("delta_n (Buy Trades in 200ms): {}", delta_n);
             LOG_M_INFO("Current Volume: {}", latest.volume);
@@ -277,62 +277,6 @@ private:
         }
     }
 
-    // ==========================================
-    // 时间计算
-    // ==========================================
-    int64_t calculate_time_diff_ms(int32_t time1, int32_t time2) const {
-        // MDTime格式: HHMMSSMMM (9位数字)
-        // 例如: 093015500 = 09:30:15.500
-
-        // 提取时分秒毫秒
-        int32_t h1 = time1 / 10000000;
-        int32_t m1 = (time1 / 100000) % 100;
-        int32_t s1 = (time1 / 1000) % 100;
-        int32_t ms1 = time1 % 1000;
-
-        int32_t h2 = time2 / 10000000;
-        int32_t m2 = (time2 / 100000) % 100;
-        int32_t s2 = (time2 / 1000) % 100;
-        int32_t ms2 = time2 % 1000;
-
-        // 转换为总毫秒数
-        int64_t total1 = (h1 * 3600000LL) + (m1 * 60000LL) + (s1 * 1000LL) + ms1;
-        int64_t total2 = (h2 * 3600000LL) + (m2 * 60000LL) + (s2 * 1000LL) + ms2;
-
-        return total2 - total1;
-    }
-
-    bool is_within_200ms(int32_t time1, int32_t time2) const {
-        int64_t diff = calculate_time_diff_ms(time1, time2);
-        return (diff >= 0 && diff <= 200);
-    }
-
-    // ==========================================
-    // 格式化输出
-    // ==========================================
-
-    // 格式化价格显示（带人民币单位）
-    std::string format_price_display(uint32_t price) const {
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "%u(%.2f元)", price, price / 10000.0);
-        return std::string(buf);
-    }
-
-    // 仅转换为元（用于数值计算显示）
-    double price_to_yuan(uint32_t price) const {
-        return price / 10000.0;
-    }
-
-    std::string format_mdtime(int32_t mdtime) const {
-        int32_t h = mdtime / 10000000;
-        int32_t m = (mdtime / 100000) % 100;
-        int32_t s = (mdtime / 1000) % 100;
-        int32_t ms = mdtime % 1000;
-
-        char buf[16];
-        std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d.%03d", h, m, s, ms);
-        return std::string(buf);
-    }
 };
 #undef LOG_MODULE
 #endif // PRICE_LEVEL_VOLUME_STRATEGY_H

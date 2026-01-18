@@ -13,7 +13,7 @@
 #include "zmq_protocol.h"
 #include "strategy_engine.h"
 #include "strategy_factory.h"
-#include "symbol_utils.h"
+#include "utils/symbol_utils.h"
 
 // 定义本文件的日志模块
 #define LOG_MODULE "ZMQ"

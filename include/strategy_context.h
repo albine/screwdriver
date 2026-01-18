@@ -3,7 +3,7 @@
 
 #include "trade_signal.h"
 #include "logger.h"
-#include "symbol_utils.h"
+#include "utils/symbol_utils.h"
 #include <memory>
 
 // 前向声明

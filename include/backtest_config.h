@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <cstdlib>
-#include "symbol_utils.h"
+#include "utils/symbol_utils.h"
 
 // ==========================================
 // 策略配置结构（回测和实盘通用）

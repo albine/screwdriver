@@ -4,10 +4,9 @@
 #include "strategy_base.h"
 #include "market_data_structs.h"
 #include "logger.h"
+#include "utils/time_util.h"
 #include <map>
 #include <string>
-#include <cstdio>
-#include <cmath>
 
 #define LOG_MODULE MOD_STRATEGY
 
@@ -35,18 +34,6 @@ private:
 
     static std::string get_symbol(const MDStockStruct& stock) {
         return std::string(stock.htscsecurityid);
-    }
-
-    static std::string format_mdtime(int32_t mdtime) {
-        int hours = mdtime / 10000000;
-        int minutes = (mdtime / 100000) % 100;
-        int seconds = (mdtime / 1000) % 100;
-        int millis = mdtime % 1000;
-
-        char buffer[32];
-        snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d.%03d",
-                 hours, minutes, seconds, millis);
-        return std::string(buffer);
     }
 
     static bool is_market_open(int32_t mdtime) {
@@ -214,7 +201,7 @@ private:
             LOG_BIZ("SIGNAL",
                     "BUY | {} | Time={} | Price={:.4f} | Open={:.4f} | "
                     "PrevClose={:.4f} | Reason=弱转强绿开翻红",
-                    symbol, format_mdtime(stock.mdtime), order_price,
+                    symbol, time_util::format_mdtime(stock.mdtime), order_price,
                     open_price, prev_close);
 
             stock_state.buy_signal_triggered = true;
@@ -242,7 +229,7 @@ private:
                     "BUY | {} | Time={} | Price={:.4f} | Open={:.4f} | "
                     "PrevClose={:.4f} | PrevHigh={:.4f} | GapUp={:.2f}% | "
                     "Consolidation={:.1f}s | Reason=弱转强高开新高",
-                    symbol, format_mdtime(stock.mdtime), order_price,
+                    symbol, time_util::format_mdtime(stock.mdtime), order_price,
                     open_price, prev_close, stock_state.highest_price,
                     gap_up_bp / 100.0, consolidation_seconds);
 

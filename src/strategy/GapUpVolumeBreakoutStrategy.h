@@ -4,12 +4,12 @@
 #include "strategy_base.h"
 #include "market_data_structs.h"
 #include "logger.h"
-#include "symbol_utils.h"
+#include "utils/symbol_utils.h"
+#include "utils/price_util.h"
+#include "utils/time_util.h"
 #include <map>
 #include <deque>
 #include <string>
-#include <cstdio>
-#include <cmath>
 #include <atomic>
 
 #define LOG_MODULE MOD_STRATEGY
@@ -341,7 +341,7 @@ private:
 
         // Remove data older than 200ms
         while (!state.window_.empty()) {
-            if (is_within_200ms(state.window_.front().mdtime, mdtime)) {
+            if (time_util::is_within_ms(state.window_.front().mdtime, mdtime, 200)) {
                 break;  // Still within window
             }
             state.window_.pop_front();
@@ -383,7 +383,7 @@ private:
                     "n(avg_volume)={:.0f} | delta_n(buy_trades)={} | "
                     "window_size={} | open={:.4f} | prev_close={:.4f}",
                     symbol,
-                    format_mdtime(mdtime),
+                    time_util::format_mdtime(mdtime),
                     state.locked_breakout_price / 10000.0,
                     state.locked_breakout_price,
                     n,
@@ -394,7 +394,7 @@ private:
 
             LOG_M_INFO("========================================");
             LOG_M_INFO("SIGNAL TRIGGERED | {}", symbol);
-            LOG_M_INFO("Time: {}", format_mdtime(mdtime));
+            LOG_M_INFO("Time: {}", time_util::format_mdtime(mdtime));
             LOG_M_INFO("Breakout Price: {:.4f} ({})",
                        state.locked_breakout_price / 10000.0,
                        state.locked_breakout_price);
@@ -406,43 +406,6 @@ private:
         }
     }
 
-    bool is_within_200ms(int32_t time1, int32_t time2) const {
-        int64_t diff = calculate_time_diff_ms(time1, time2);
-        return (diff >= 0 && diff <= 200);
-    }
-
-    int64_t calculate_time_diff_ms(int32_t time1, int32_t time2) const {
-        // MDTime format: HHMMSSMMM (9 digits)
-        // Example: 093015500 = 09:30:15.500
-
-        // Extract hours, minutes, seconds, milliseconds
-        int32_t h1 = time1 / 10000000;
-        int32_t m1 = (time1 / 100000) % 100;
-        int32_t s1 = (time1 / 1000) % 100;
-        int32_t ms1 = time1 % 1000;
-
-        int32_t h2 = time2 / 10000000;
-        int32_t m2 = (time2 / 100000) % 100;
-        int32_t s2 = (time2 / 1000) % 100;
-        int32_t ms2 = time2 % 1000;
-
-        // Convert to total milliseconds
-        int64_t total1 = (h1 * 3600000LL) + (m1 * 60000LL) + (s1 * 1000LL) + ms1;
-        int64_t total2 = (h2 * 3600000LL) + (m2 * 60000LL) + (s2 * 1000LL) + ms2;
-
-        return total2 - total1;
-    }
-
-    std::string format_mdtime(int32_t mdtime) const {
-        int32_t h = mdtime / 10000000;
-        int32_t m = (mdtime / 100000) % 100;
-        int32_t s = (mdtime / 1000) % 100;
-        int32_t ms = mdtime % 1000;
-
-        char buf[16];
-        std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d.%03d", h, m, s, ms);
-        return std::string(buf);
-    }
 };
 #undef LOG_MODULE
 #endif // GAP_UP_VOLUME_BREAKOUT_STRATEGY_H
