@@ -11,19 +11,22 @@
 #include "symbol_utils.h"
 
 // ==========================================
-// 回测配置结构
+// 策略配置结构（回测和实盘通用）
 // ==========================================
-struct BacktestEntry {
+struct StrategyConfigEntry {
     std::string symbol;         // 股票代码，如 "600759.SH"
     std::string strategy_name;  // 策略名称，如 "PriceLevelVolumeStrategy"
     std::string params;         // 可选参数，如突破价格 "98500"
 };
 
+// 向后兼容的别名
+using BacktestEntry = StrategyConfigEntry;
+
 // ==========================================
-// 配置文件解析器
+// 配置文件解析器（回测和实盘通用）
 // ==========================================
-inline std::vector<BacktestEntry> parse_backtest_config(const std::string& filepath) {
-    std::vector<BacktestEntry> entries;
+inline std::vector<StrategyConfigEntry> parse_strategy_config(const std::string& filepath) {
+    std::vector<StrategyConfigEntry> entries;
     std::ifstream file(filepath);
 
     if (!file.is_open()) {
@@ -68,7 +71,7 @@ inline std::vector<BacktestEntry> parse_backtest_config(const std::string& filep
             trim(params);
 
             if (!symbol.empty() && !strategy.empty()) {
-                BacktestEntry entry;
+                StrategyConfigEntry entry;
                 entry.symbol = symbol_utils::normalize_symbol(symbol);
                 entry.strategy_name = strategy;
                 entry.params = params;
@@ -78,6 +81,11 @@ inline std::vector<BacktestEntry> parse_backtest_config(const std::string& filep
     }
 
     return entries;
+}
+
+// 向后兼容的函数别名
+inline std::vector<StrategyConfigEntry> parse_backtest_config(const std::string& filepath) {
+    return parse_strategy_config(filepath);
 }
 
 // ==========================================

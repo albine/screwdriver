@@ -110,7 +110,7 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
     register_all_strategies();
 
     // 解析配置文件
-    auto configs = parse_backtest_config(config_file);
+    auto configs = parse_strategy_config(config_file);
     if (configs.empty()) {
         LOG_MODULE_ERROR(logger, MOD_ENGINE, "No valid configurations found in {}", config_file);
         LOG_MODULE_INFO(logger, MOD_ENGINE, "Config format: stock_code,strategy_name (e.g., 600759,PriceLevelVolumeStrategy)");
@@ -226,7 +226,7 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
     register_all_strategies();
 
     // 解析配置文件
-    auto configs = parse_backtest_config(config_file);
+    auto configs = parse_strategy_config(config_file);
     if (configs.empty()) {
         LOG_MODULE_ERROR(logger, MOD_ENGINE, "No valid configurations found in {}", config_file);
         LOG_MODULE_INFO(logger, MOD_ENGINE, "Config format: stock_code,strategy_name (e.g., 600759,PriceLevelVolumeStrategy)");
