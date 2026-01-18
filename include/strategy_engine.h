@@ -74,7 +74,7 @@ struct ControlMessage {
 // ==========================================
 // 市场数据消息类型
 // ==========================================
-using MarketMessage = std::variant<MDStockStruct, MDOrderStruct, MDTransactionStruct, ControlMessage>;
+using MarketMessage = std::variant<MDStockStruct, MDOrderStruct, MDTransactionStruct, MDOrderbookStruct, ControlMessage>;
 
 // ==========================================
 // Symbol Hash 函数
@@ -437,6 +437,19 @@ public:
         q->enqueue(*tokens[shard_id], MarketMessage{std::in_place_type<MDTransactionStruct>, transaction});
     }
 
+    void on_market_orderbook_snapshot(const MDOrderbookStruct& snapshot) {
+        int shard_id = get_shard_id(snapshot.htscsecurityid);
+        auto* q = queues_[shard_id].get();
+
+        auto& tokens = get_producer_tokens();
+
+        if (MD_UNLIKELY(!tokens[shard_id])) {
+            tokens[shard_id] = std::make_unique<moodycamel::ProducerToken>(*q);
+        }
+
+        q->enqueue(*tokens[shard_id], MarketMessage{std::in_place_type<MDOrderbookStruct>, snapshot});
+    }
+
 private:
     int get_shard_id(const char* symbol) {
         return stock_id_fast(symbol, SHARD_COUNT);
@@ -522,6 +535,12 @@ private:
                             }
                         }
                         // 如果没有 OrderBook，忽略此消息（应该先收到 MDStockStruct）
+                    }
+                    else if constexpr (std::is_same_v<T, MDOrderbookStruct>) {
+                        // OrderBook 快照不需要本地 OrderBook，直接调用策略回调
+                        if (has_strats) {
+                            for (auto* strat : strats) strat->on_orderbook_snapshot(data);
+                        }
                     }
                     else if constexpr (std::is_same_v<T, ControlMessage>) {
                         // 处理控制消息 - 调用策略的 on_control_message()

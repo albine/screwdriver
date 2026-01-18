@@ -385,9 +385,87 @@ private:
     }
 
     // ==========================================
+    // 转换函数：将 protobuf ADOrderbookSnapshot 转换为 MDOrderbookStruct
+    // ==========================================
+    void convert_to_orderbook_snapshot_fast(
+        const com::htsc::mdc::insight::model::ADOrderbookSnapshot& pb_snap,
+        MDOrderbookStruct& out) {
+
+        // 字符串拷贝
+        const std::string& sec_id = pb_snap.htscsecurityid();
+        size_t len = std::min(sec_id.size(), sizeof(out.htscsecurityid) - 1);
+        std::memcpy(out.htscsecurityid, sec_id.data(), len);
+        out.htscsecurityid[len] = '\0';
+
+        // 基本字段
+        out.mddate = pb_snap.mddate();
+        out.mdtime = pb_snap.mdtime();
+        out.datatimestamp = pb_snap.datatimestamp();
+        const std::string& phase = pb_snap.tradingphasecode();
+        out.tradingphasecode = phase.empty() ? '\0' : phase[0];
+        out.securityidsource = pb_snap.securityidsource();
+        out.securitytype = pb_snap.securitytype();
+        out.channelno = pb_snap.channelno();
+        out.applseqnum = pb_snap.applseqnum();
+        out.snapshotmddatetime = pb_snap.snapshotmddatetime();
+
+        // 价格和统计
+        out.numtrades = pb_snap.numtrades();
+        out.totalvolumetrade = pb_snap.totalvolumetrade();
+        out.totalvaluetrade = pb_snap.totalvaluetrade();
+        out.lastpx = pb_snap.lastpx();
+        out.highpx = pb_snap.highpx();
+        out.lowpx = pb_snap.lowpx();
+        out.maxpx = pb_snap.maxpx();
+        out.minpx = pb_snap.minpx();
+        out.preclosepx = pb_snap.preclosepx();
+        out.openpx = pb_snap.openpx();
+        out.closepx = pb_snap.closepx();
+
+        // 买卖统计
+        out.totalbuyqty = pb_snap.totalbuyqty();
+        out.totalsellqty = pb_snap.totalsellqty();
+        out.weightedavgbuypx = pb_snap.weightedavgbuypx();
+        out.weightedavgsellpx = pb_snap.weightedavgsellpx();
+        out.totalbuynumber = pb_snap.totalbuynumber();
+        out.totalsellnumber = pb_snap.totalsellnumber();
+        out.numbuyorders = pb_snap.numbuyorders();
+        out.numsellorders = pb_snap.numsellorders();
+
+        // 买盘档位
+        int buy_count = std::min(pb_snap.buyentries_size(), 10);
+        out.buyentries_count = buy_count;
+        for (int i = 0; i < buy_count; ++i) {
+            const auto& entry = pb_snap.buyentries(i);
+            out.buyentries[i].level = entry.level();
+            out.buyentries[i].price = entry.price();
+            out.buyentries[i].totalqty = entry.totalqty();
+            out.buyentries[i].numberoforders = entry.numberoforders();
+        }
+
+        // 卖盘档位
+        int sell_count = std::min(pb_snap.sellentries_size(), 10);
+        out.sellentries_count = sell_count;
+        for (int i = 0; i < sell_count; ++i) {
+            const auto& entry = pb_snap.sellentries(i);
+            out.sellentries[i].level = entry.level();
+            out.sellentries[i].price = entry.price();
+            out.sellentries[i].totalqty = entry.totalqty();
+            out.sellentries[i].numberoforders = entry.numberoforders();
+        }
+
+        out.datamultiplepowerof10 = pb_snap.datamultiplepowerof10();
+    }
+
+    // ==========================================
     // OrderBook Snapshot 处理（备份/对比用）
     // ==========================================
     void on_orderbook_snapshot(const com::htsc::mdc::insight::model::ADOrderbookSnapshot& snapshot) {
+        // 转换并转发到策略引擎
+        MDOrderbookStruct ob_struct;
+        convert_to_orderbook_snapshot_fast(snapshot, ob_struct);
+        engine_->on_market_orderbook_snapshot(ob_struct);
+
         const std::string& security_id = snapshot.htscsecurityid();
 
         // 采样控制：每100000次 或 每10分钟 打印一次

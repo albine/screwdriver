@@ -30,6 +30,9 @@ public:
     // 成交数据回调
     virtual void on_transaction(const MDTransactionStruct& transaction, const FastOrderBook& book) {}
 
+    // OrderBook 快照回调
+    virtual void on_orderbook_snapshot(const MDOrderbookStruct& snapshot) {}
+
     // 控制消息回调（默认实现处理 ENABLE/DISABLE）
     // 实现在 src/strategy_base.cpp
     virtual void on_control_message(const ControlMessage& msg);
