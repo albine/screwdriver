@@ -99,13 +99,16 @@ public:
             return;  // 不是目标策略
         }
 
+        // 如果信号已触发，忽略 enable/disable 消息
+        if (state_ == MonitoringState::SIGNAL_TRIGGERED) {
+            LOG_M_WARNING("Strategy {} already triggered, ignoring {} message",
+                          name, msg.type == ControlMessage::Type::ENABLE ? "ENABLE" : "DISABLE");
+            return;
+        }
+
         if (msg.type == ControlMessage::Type::ENABLE) {
             // 从 param 获取 target_price
             breakout_price_ = msg.param;
-            // 重置状态
-            signal_triggered_ = false;
-            state_ = MonitoringState::MONITORING;
-            window_.clear();
             set_enabled(true);
 
             LOG_M_INFO("========================================");
@@ -114,6 +117,7 @@ public:
             LOG_M_INFO("========================================");
         } else if (msg.type == ControlMessage::Type::DISABLE) {
             set_enabled(false);
+            window_.clear();
             LOG_M_INFO("BreakoutPriceVolumeStrategy DISABLED: {}", name);
         }
     }
