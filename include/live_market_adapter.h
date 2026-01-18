@@ -13,6 +13,9 @@
 #include <atomic>
 #include <chrono>
 
+// 持久化层 (可选)
+#include "persist_layer.h"
+
     // ==========================================
 // 高性能拷贝宏
 // DEST_ARR: 目标数组
@@ -53,13 +56,23 @@
 // 实盘数据适配器
 // ==========================================
 // 继承自 InsightHandle，将实盘数据转换为策略引擎可用的格式
+// 支持可选的持久化层 (PersistLayer) 用于高频数据落盘
 class LiveMarketAdapter : public InsightHandle {
 private:
     StrategyEngine* engine_;
+    PersistLayer* persist_;  // 可选，为 nullptr 时不持久化
 
 public:
-    explicit LiveMarketAdapter(const std::string& folder_name, StrategyEngine* engine)
-        : InsightHandle(folder_name), engine_(engine) {}
+    // 构造函数
+    // @param folder_name  数据文件夹名
+    // @param engine       策略引擎指针
+    // @param persist      持久化层指针 (可选，默认为 nullptr)
+    explicit LiveMarketAdapter(const std::string& folder_name,
+                               StrategyEngine* engine,
+                               PersistLayer* persist = nullptr)
+        : InsightHandle(folder_name)
+        , engine_(engine)
+        , persist_(persist) {}
 
     // 重写 OnMarketData 方法，将实盘数据转发到策略引擎
     // 使用高性能 fast 转换函数
@@ -74,6 +87,8 @@ public:
                 if (data.has_mdstock()) {
                     MDStockStruct stock;  // 栈上对象，不初始化
                     convert_to_stock_fast(data.mdstock(), stock);
+                    // 持久化 (入队，不阻塞)
+                    if (persist_) persist_->log_tick(stock);
                     engine_->on_market_tick(stock);
                 }
                 break;
@@ -85,6 +100,8 @@ public:
                     if (pb_order.securitytype() != StockType) break;
                     MDOrderStruct order;  // 栈上对象，不初始化
                     convert_to_order_fast(pb_order, order);
+                    // 持久化 (入队，不阻塞)
+                    if (persist_) persist_->log_order(order);
                     engine_->on_market_order(order);
                 }
                 break;
@@ -96,6 +113,8 @@ public:
                     if (pb_txn.securitytype() != StockType) break;
                     MDTransactionStruct transaction;  // 栈上对象，不初始化
                     convert_to_transaction_fast(pb_txn, transaction);
+                    // 持久化 (入队，不阻塞)
+                    if (persist_) persist_->log_transaction(transaction);
                     engine_->on_market_transaction(transaction);
                 }
                 break;
@@ -105,6 +124,7 @@ public:
                     const auto& snapshot = data.orderbooksnapshot();
                     // 过滤非股票类型
                     if (snapshot.securitytype() != StockType) break;
+                    // 持久化 (在 on_orderbook_snapshot 内部处理)
                     on_orderbook_snapshot(snapshot);
                 }
                 break;
@@ -464,6 +484,8 @@ private:
         // 转换并转发到策略引擎
         MDOrderbookStruct ob_struct;
         convert_to_orderbook_snapshot_fast(snapshot, ob_struct);
+        // 持久化 (入队，不阻塞)
+        if (persist_) persist_->log_snapshot(ob_struct);
         engine_->on_market_orderbook_snapshot(ob_struct);
 
         const std::string& security_id = snapshot.htscsecurityid();

@@ -11,3 +11,4 @@ logs/
 test_data/
 test_data_cleaned/
 compile_commands.json
+.cache

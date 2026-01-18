@@ -26,6 +26,9 @@
 #include "strategy_ids.h"
 #include "strategy_context.h"
 
+// 引入持久化层
+#include "persist_layer.h"
+
 // 引入日志模块
 #include "logger.h"
 
@@ -300,8 +303,40 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
         }
     }
 
-    // 创建实盘数据适配器
-    LiveMarketAdapter adapter("market_data", &engine);
+    // ========================================
+    // 创建持久化层 (可通过 DISABLE_PERSIST=1 禁用)
+    // ========================================
+    std::unique_ptr<PersistLayer> persist;
+    const char* disable_persist = std::getenv("DISABLE_PERSIST");
+    if (disable_persist && std::string(disable_persist) == "1") {
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "PersistLayer disabled via DISABLE_PERSIST=1");
+    } else {
+        persist = std::make_unique<PersistLayer>();
+
+        // 获取当前日期
+        std::string date = get_current_date();
+
+        // 数据目录 (可通过环境变量配置)
+        // 默认使用当前目录下的 data/raw，生产环境可通过 PERSIST_DATA_DIR 指定
+        const char* data_dir_env = std::getenv("PERSIST_DATA_DIR");
+        std::string data_dir = data_dir_env ? data_dir_env : "data/raw";
+
+        // Writer 线程绑核 (绑定到最后一个 CPU)
+        int last_cpu = static_cast<int>(std::thread::hardware_concurrency()) - 1;
+
+        if (!persist->init(date, data_dir, last_cpu)) {
+            LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to initialize PersistLayer");
+            engine.stop();
+            hft::logger::shutdown();
+            com::htsc::mdc::gateway::fini_env();
+            return;
+        }
+
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "PersistLayer initialized: date={} dir={}", date, data_dir);
+    }
+
+    // 创建实盘数据适配器 (传入持久化层指针)
+    LiveMarketAdapter adapter("market_data", &engine, persist.get());
 
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Connecting to market data gateway...");
 
@@ -412,6 +447,12 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
     if (g_zmq_client) {
         g_zmq_client->stop();
         g_zmq_client.reset();
+    }
+
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Stopping PersistLayer...");
+    if (persist) {
+        persist->stop();
+        persist.reset();
     }
 
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Stopping strategy engine...");

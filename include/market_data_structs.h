@@ -212,4 +212,15 @@ struct MDOrderbookStruct {
     int32_t datamultiplepowerof10;
 };
 
+// ============================================================================
+// 编译期 struct 大小检查
+// ============================================================================
+// 这些 static_assert 确保 struct 大小与 ClickHouse RowBinary 导入时的预期一致
+// 如果修改了任何 struct 的字段，需要同步更新这里的期望大小和 ClickHouse 表结构
+static_assert(sizeof(MDOrderStruct) == 144, "MDOrderStruct size mismatch - update ClickHouse schema!");
+static_assert(sizeof(MDTransactionStruct) == 128, "MDTransactionStruct size mismatch - update ClickHouse schema!");
+static_assert(sizeof(MDStockStruct) == 2216, "MDStockStruct size mismatch - update ClickHouse schema!");
+static_assert(sizeof(MDOrderbookStruct) == 728, "MDOrderbookStruct size mismatch - update ClickHouse schema!");
+static_assert(sizeof(MDEntryDetailStruct) == 24, "MDEntryDetailStruct size mismatch!");
+
 #endif // MARKET_DATA_STRUCTS_H
