@@ -17,28 +17,12 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 # 链接目录（必须在 add_executable 之前）
 link_directories(${CMAKE_SOURCE_DIR}/fastfish/libs)
 
-# ============ FetchContent 优化：禁用更新检查 ============
-include(FetchContent)
-set(FETCHCONTENT_UPDATES_DISCONNECTED ON)  # 已下载后不再检查更新
+# ============ Quill 日志库 (本地) ============
+add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/quill)
 
-# ============ Quill 日志库 ============
-FetchContent_Declare(
-    quill
-    GIT_REPOSITORY https://github.com/odygrd/quill.git
-    GIT_TAG v7.5.0
-    GIT_SHALLOW TRUE      # 浅克隆，只下载最新版本
-)
-FetchContent_MakeAvailable(quill)
-
-# ============ nlohmann/json ============
-FetchContent_Declare(
-    json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG v3.11.3
-    GIT_SHALLOW TRUE
-)
-set(JSON_BuildTests OFF CACHE INTERNAL "")  # 禁用 json 测试
-FetchContent_MakeAvailable(json)
+# ============ nlohmann/json (本地) ============
+set(JSON_BuildTests OFF CACHE INTERNAL "")
+add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/json)
 
 # ============ ZeroMQ ============
 find_package(PkgConfig REQUIRED)
