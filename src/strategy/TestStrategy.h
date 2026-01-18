@@ -43,9 +43,12 @@ private:
     int32_t random_offset_minute_ = 0;
 
 public:
-    explicit TestStrategy(const std::string& name, uint64_t sample_interval = 100000)
+    explicit TestStrategy(const std::string& strategy_name,
+                          const std::string& sym = "",
+                          uint64_t sample_interval = 100000)
         : sample_interval_(sample_interval) {
-        this->name = name;
+        this->name = strategy_name;
+        this->symbol = sym;
         start_time_ = std::chrono::steady_clock::now();
 
         // 生成-1到+1分钟的随机偏移
@@ -217,8 +220,10 @@ private:
     std::chrono::steady_clock::time_point start_time_;
 
 public:
-    explicit PerformanceStrategy(const std::string& name) {
-        this->name = name;
+    explicit PerformanceStrategy(const std::string& strategy_name,
+                                  const std::string& sym = "") {
+        this->name = strategy_name;
+        this->symbol = sym;
         start_time_ = std::chrono::steady_clock::now();
     }
 

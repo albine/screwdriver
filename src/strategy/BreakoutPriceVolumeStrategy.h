@@ -2,6 +2,8 @@
 #define BREAKOUT_PRICE_VOLUME_STRATEGY_H
 
 #include "strategy_base.h"
+#include "strategy_engine.h"  // for ControlMessage
+#include "trade_signal.h"
 #include "logger.h"
 #include <iostream>
 #include <iomanip>
@@ -71,12 +73,13 @@ private:
     std::atomic<uint64_t> buy_trade_count_{0};  // 主买成交次数
 
 public:
-    // 构造函数：必须传入突破价格
+    // 构造函数：无需传入突破价格，策略默认禁用
+    // 突破价格通过 ControlMessage 的 param 在 enable 时传入
     explicit BreakoutPriceVolumeStrategy(const std::string& strategy_name,
-                                          uint32_t breakout_price)
-        : breakout_price_(breakout_price) {
+                                         const std::string& sym = "") {
         this->name = strategy_name;
-        // 直接进入监控状态，无需检查任何条件
+        this->symbol = sym;  // 使用基类的 symbol 成员
+        this->enabled_ = false;  // 默认禁用，等待 enable 消息带入 target_price
         state_ = MonitoringState::MONITORING;
     }
 
@@ -87,30 +90,37 @@ public:
     // ==========================================
     void on_start() override {
         logger_ = hft::logger::get_logger();
-
-        LOG_M_INFO("========================================");
-        LOG_M_INFO("BreakoutPriceVolumeStrategy started: {}", name);
-        LOG_M_INFO("Configuration:");
-        LOG_M_INFO("  - Window Size: 200ms rolling");
-        LOG_M_INFO("  - Monitoring: Breakout price level");
-        LOG_M_INFO("  - n = Avg volume in window");
-        LOG_M_INFO("  - delta_n = Sum of buy trades in window");
-        LOG_M_INFO("  - Trigger: delta_n >= n");
-        LOG_M_INFO("  - Breakout Price: {} ({}元)", breakout_price_, price_to_yuan(breakout_price_));
-        LOG_M_INFO("  - State: MONITORING (immediate start)");
-        LOG_M_INFO("========================================");
     }
 
     void on_stop() override {
-        LOG_M_INFO("========================================");
-        LOG_M_INFO("BreakoutPriceVolumeStrategy stopped: {}", name);
-        LOG_M_INFO("Statistics:");
-        LOG_M_INFO("  - Ticks: {}", tick_count_.load());
-        LOG_M_INFO("  - Orders: {}", order_count_.load());
-        LOG_M_INFO("  - Transactions: {}", transaction_count_.load());
-        LOG_M_INFO("  - Buy Trades (at breakout): {}", buy_trade_count_.load());
-        LOG_M_INFO("  - Signal Triggered: {}", signal_triggered_);
-        LOG_M_INFO("========================================");
+        // 空实现，日志已移至引擎层汇总
+    }
+
+    // 覆盖控制消息处理：enable 时从 param 获取 target_price
+    void on_control_message(const ControlMessage& msg) override {
+        // 用 unique_id 匹配：检查策略类型 ID 是否一致
+        uint8_t msg_strategy_id = msg.unique_id & 0xFF;
+        if (strategy_type_id != msg_strategy_id) {
+            return;  // 不是目标策略
+        }
+
+        if (msg.type == ControlMessage::Type::ENABLE) {
+            // 从 param 获取 target_price
+            breakout_price_ = msg.param;
+            // 重置状态
+            signal_triggered_ = false;
+            state_ = MonitoringState::MONITORING;
+            window_.clear();
+            set_enabled(true);
+
+            LOG_M_INFO("========================================");
+            LOG_M_INFO("BreakoutPriceVolumeStrategy ENABLED: {}", name);
+            LOG_M_INFO("  - Breakout Price: {} ({}元)", breakout_price_, price_to_yuan(breakout_price_));
+            LOG_M_INFO("========================================");
+        } else if (msg.type == ControlMessage::Type::DISABLE) {
+            set_enabled(false);
+            LOG_M_INFO("BreakoutPriceVolumeStrategy DISABLED: {}", name);
+        }
     }
 
     // ==========================================
@@ -240,6 +250,16 @@ private:
             LOG_M_INFO("Current Volume: {}", latest.volume);
             LOG_M_INFO("Window Size: {} snapshots", window_.size());
             LOG_M_INFO("========================================");
+
+            // 发送买入信号
+            TradeSignal signal;
+            signal.symbol = this->symbol;  // 使用基类的 symbol
+            signal.side = TradeSignal::Side::BUY;
+            signal.price = breakout_price_;
+            signal.quantity = 100;  // 默认下单数量，可根据需求调整
+            signal.trigger_time = latest.mdtime;
+            signal.strategy_name = this->name;
+            place_order(signal);
         }
     }
 

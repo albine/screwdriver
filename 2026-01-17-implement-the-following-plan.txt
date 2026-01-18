@@ -1,0 +1,1311 @@
+                                                                                
+ ▐▛███▜▌   Claude Code v2.1.9                                                   
+▝▜█████▛▘  Opus 4.5 · Claude Max                                                
+  ▘▘ ▝▝    ~/screwdriver                                                        
+                                                                                
+❯ Implement the following plan:                                                 
+                                                                                
+  # 策略信号与下单操作分离设计                                                  
+                                                                                
+  ## 问题                                                                       
+  - 策略触发买入信号时需要向 ZMQ 发送下单信息                                   
+  - 但回测模式不应依赖 ZmqClient                                                
+  - 需要将运算逻辑和下单操作解耦                                                
+                                                                                
+  ## 设计方案：StrategyContext 上下文模式                                       
+                                                                                
+  ### 核心思路                                                                  
+  使用 StrategyContext 作为策略的运行时上下文，封装所有与外部交互的操作。实     
+  盘和回测模式使用不同的 Context 实现。                                         
+                                                                                
+  ### 实现步骤                                                                  
+                                                                                
+  #### 1. 定义信号结构体 (`include/trade_signal.h`)                             
+  ```cpp                                                                        
+  struct TradeSignal {                                                          
+  enum class Side { BUY, SELL };                                                
+  std::string symbol;                                                           
+  Side side;                                                                    
+  uint32_t price;       // 内部格式（*10000）                                   
+  uint64_t quantity;                                                            
+  int32_t trigger_time; // MDTime 格式                                          
+  std::string strategy_name;                                                    
+  };                                                                            
+  ```                                                                           
+                                                                                
+  #### 2. 定义 StrategyContext 接口 (`include/strategy_context.h`)              
+  ```cpp                                                                        
+  class StrategyContext {                                                       
+  public:                                                                       
+  virtual ~StrategyContext() = default;                                         
+                                                                                
+  // 下单                                                                       
+  virtual void place_order(const TradeSignal& signal) = 0;                      
+                                                                                
+  // 将来可扩展：                                                               
+  // virtual void cancel_order(const std::string& order_id) = 0;                
+  // virtual Position get_position(const std::string& symbol) = 0;              
+  // virtual double get_available_cash() = 0;                                   
+  };                                                                            
+  ```                                                                           
+                                                                                
+  #### 3. 实现两个 Context                                                      
+  - `LiveContext`: 调用 ZmqClient::send_place_order() 真实下单                  
+  - `BacktestContext`: 仅记录日志到 biz log                                     
+                                                                                
+  #### 4. 修改 Strategy 基类                                                    
+  ```cpp                                                                        
+  class Strategy {                                                              
+  protected:                                                                    
+  StrategyContext* ctx_ = nullptr;                                              
+  public:                                                                       
+  void set_context(StrategyContext* ctx) { ctx_ = ctx; }                        
+                                                                                
+  // 策略调用此方法下单                                                         
+  void place_order(const TradeSignal& signal) {                                 
+  if (ctx_) {                                                                   
+  ctx_->place_order(signal);                                                    
+  }                                                                             
+  }                                                                             
+  };                                                                            
+  ```                                                                           
+                                                                                
+  #### 5. 修改 BreakoutPriceVolumeStrategy                                      
+  在 `check_trigger_condition()` 信号触发时调用 `place_order()`                 
+                                                                                
+  #### 6. 修改 main.cpp                                                         
+  - 实盘模式：创建 LiveContext，设置给所有策略                                  
+  - 回测模式：创建 BacktestContext，设置给所有策略                              
+                                                                                
+  ### 文件修改清单                                                              
+  1. 新建 `include/trade_signal.h` - 信号结构体                                 
+  2. 新建 `include/strategy_context.h` - Context 接口 + 两个实现                
+  3. 修改 `include/strategy_base.h` - 添加 ctx_ 和 place_order()                
+  4. 修改 `src/strategy/BreakoutPriceVolumeStrategy.h` - 触发时调用             
+  place_order()                                                                 
+  5. 修改 `src/main.cpp` - 根据模式创建不同 Context                             
+                                                                                
+  ### 验证方式                                                                  
+  1. 编译通过                                                                   
+  2. 回测模式：运行回测，检查 biz log 中有下单记录                              
+  3. 实盘模式：触发信号时 ZMQ 发送下单消息                                      
+                                                                                
+                                                                                
+  If you need specific details from before exiting plan mode (like exact        
+  code snippets, error messages, or content you generated), read the full       
+  transcript at: /home/dy/.claude/projects/-home-dy-screwdriver/823d4994-5b     
+  2b-4fdd-98ae-1d8bcce2f270.jsonl                                               
+                                                                                
+● I'll implement this plan to separate strategy signals from order placement.   
+  Let me first read the existing files to understand the current structure.     
+                                                                                
+● Read(include/strategy_base.h)                                                 
+  ⎿  Read 51 lines                                                              
+                                                                                
+● Read(src/strategy/BreakoutPriceVolumeStrategy.h)                              
+  ⎿  Read 332 lines                                                             
+                                                                                
+● Read(src/main.cpp)                                                            
+  ⎿  Read 459 lines                                                             
+                                                                                
+● Read(include/zmq_client.h)                                                    
+  ⎿  Read 682 lines                                                             
+                                                                                
+● Let me create a todo list and start implementing the changes.                 
+                                                                                
+● Read(include/logger.h)                                                        
+  ⎿  Read 252 lines                                                             
+                                                                                
+● Now I'll create the trade_signal.h file.                                      
+                                                                                
+● Write(include/trade_signal.h)                                                 
+  ⎿  Wrote 33 lines to include/trade_signal.h                                   
+      1 #ifndef TRADE_SIGNAL_H                                                  
+      2 #define TRADE_SIGNAL_H                                                  
+      3 #include <string>                                                       
+      4 #include <cstdint>                                                      
+      5 /**                                                                     
+      6  * @brief 交易信号结构体                                                
+      7  *                                                                      
+      8  * 用于策略触发买卖信号时，封装下单信息。                               
+     … +23 lines (ctrl+o to expand)                                             
+                                                                                
+● Write(include/strategy_context.h)                                             
+  ⎿  Wrote 73 lines to include/strategy_context.h                               
+      1 #ifndef STRATEGY_CONTEXT_H                                              
+      2 #define STRATEGY_CONTEXT_H                                              
+      3 #include "trade_signal.h"                                               
+      4 #include "logger.h"                                                     
+      5 #include "symbol_utils.h"                                               
+      6 #include <memory>                                                       
+      7 // 前向声明                                                             
+      8 class ZmqClient;                                                        
+     … +63 lines (ctrl+o to expand)                                             
+                                                                                
+● Now I need to create the implementation file for LiveContext since it needs to
+   include ZmqClient.                                                           
+                                                                                
+● Write(src/strategy_context.cpp)                                               
+  ⎿  Wrote 20 lines to src/strategy_context.cpp                                 
+      1 #include "strategy_context.h"                                           
+      2 #include "zmq_client.h"                                                 
+      3 void LiveContext::place_order(const TradeSignal& signal) {              
+      4     // 记录到业务日志                                                   
+      5     LOG_BIZ(BIZ_ORDR,                                                   
+      6             "[LIVE] {} | {} | {} @ {} | qty={} | trigger_time={}"       
+        ,                                                                       
+      7             signal.strategy_name,                                       
+      8             signal.symbol,                                              
+      9             signal.side_str(),                                          
+     … +10 lines (ctrl+o to expand)                                             
+                                                                                
+● Let me check the CMakeLists.txt to add the new source file.                   
+                                                                                
+● Read(CMakeLists.txt)                                                          
+  ⎿  Read 81 lines                                                              
+                                                                                
+● Update(CMakeLists.txt)                                                        
+  ⎿  Added 1 line                                                               
+      48      src/main.cpp                                                      
+      49      src/FastOrderBook.cpp                                             
+      50      src/strategy_base.cpp                                             
+      51 +    src/strategy_context.cpp                                          
+      52  )                                                                     
+      53  target_include_directories(engine PRIVATE                             
+      54      ${CMAKE_SOURCE_DIR}/fastfish/include/mdc_gateway_client/inc       
+          lude                                                                  
+                                                                                
+● Now let me modify strategy_base.h to add context support.                     
+                                                                                
+● Update(include/strategy_base.h)                                               
+  ⎿  Added 2 lines                                                              
+       7                                                                        
+       8  // 前向声明                                                           
+       9  struct ControlMessage;                                                
+      10 +struct TradeSignal;                                                   
+      11 +class StrategyContext;                                                
+      12                                                                        
+      13  // ==========================================                         
+      14  // 策略基类                                                           
+                                                                                
+● Update(include/strategy_base.h)                                               
+  ⎿  Added 8 lines, removed 1 line                                              
+      45      bool is_enabled() const { return enabled_; }                      
+      46      void set_enabled(bool enabled) { enabled_ = enabled; }            
+      47                                                                        
+      48 +    // 设置策略上下文（用于下单等操作）                               
+      49 +    void set_context(StrategyContext* ctx) { ctx_ = ctx; }            
+      50 +                                                                      
+      51  protected:                                                            
+      49 -    bool enabled_ = true;  // 默认启用                                
+      52 +    bool enabled_ = true;       // 默认启用                           
+      53 +    StrategyContext* ctx_ = nullptr;  // 策略上下文                   
+      54 +                                                                      
+      55 +    // 下单方法（策略调用此方法发出交易信号）                         
+      56 +    void place_order(const TradeSignal& signal);                      
+      57  };                                                                    
+      58                                                                        
+      59  #endif // STRATEGY_BASE_H                                             
+                                                                                
+● Read(src/strategy_base.cpp)                                                   
+  ⎿  Read 17 lines                                                              
+                                                                                
+● Update(src/strategy_base.cpp)                                                 
+  ⎿  Added 2 lines                                                              
+      1  #include "strategy_base.h"                                             
+      2  #include "strategy_engine.h"  // for ControlMessage                    
+      3 +#include "strategy_context.h"                                          
+      4 +#include "trade_signal.h"                                              
+      5                                                                         
+      6  void Strategy::on_control_message(const ControlMessage& msg) {         
+      7      // 用 unique_id 匹配：检查策略类型 ID 是否一致（数字比较，高       
+         性能）                                                                 
+                                                                                
+● Update(src/strategy_base.cpp)                                                 
+  ⎿  Added 6 lines                                                              
+      16          set_enabled(false);                                           
+      17      }                                                                 
+      18  }                                                                     
+      19 +                                                                      
+      20 +void Strategy::place_order(const TradeSignal& signal) {               
+      21 +    if (ctx_) {                                                       
+      22 +        ctx_->place_order(signal);                                    
+      23 +    }                                                                 
+      24 +}                                                                     
+                                                                                
+● Now let me modify BreakoutPriceVolumeStrategy.h to call place_order() when the
+   signal is triggered.                                                         
+                                                                                
+● Update(src/strategy/BreakoutPriceVolumeStrategy.h)                            
+  ⎿  Added 1 line                                                               
+      3                                                                         
+      4  #include "strategy_base.h"                                             
+      5  #include "strategy_engine.h"  // for ControlMessage                    
+      6 +#include "trade_signal.h"                                              
+      7  #include "logger.h"                                                    
+      8  #include <iostream>                                                    
+      9  #include <iomanip>                                                     
+                                                                                
+● Let me also add a symbol member to the strategy to track which stock it's     
+  monitoring.                                                                   
+                                                                                
+● Update(src/strategy/BreakoutPriceVolumeStrategy.h)                            
+  ⎿  Added 5 lines                                                              
+      41      bool signal_triggered_ = false;                                   
+      42                                                                        
+      43      // ==========================================                     
+      44 +    // 股票代码                                                       
+      45 +    // ==========================================                     
+      46 +    std::string symbol_;  // 股票代码（如 "600000.SH"）               
+      47 +                                                                      
+      48 +    // ==========================================                     
+      49      // 价格（乘以10000的整数格式）                                    
+      50      // ==========================================                     
+      51      uint32_t breakout_price_ = 0;    // 突破价格，例如97900表示       
+          9.79元                                                                
+                                                                                
+● Update(src/strategy/BreakoutPriceVolumeStrategy.h)                            
+  ⎿  Added 3 lines, removed 1 line                                              
+      80  public:                                                               
+      81      // 构造函数：无需传入突破价格，策略默认禁用                       
+      82      // 突破价格通过 ControlMessage 的 param 在 enable 时传入          
+      83 -    explicit BreakoutPriceVolumeStrategy(const std::string& str       
+         -ategy_name) {                                                         
+      83 +    explicit BreakoutPriceVolumeStrategy(const std::string& str       
+         +ategy_name,                                                           
+      84 +                                         const std::string& sym       
+         +bol = "") {                                                           
+      85          this->name = strategy_name;                                   
+      86 +        this->symbol_ = symbol;                                       
+      87          this->enabled_ = false;  // 默认禁用，等待 enable 消息        
+          带入 target_price                                                     
+      88          state_ = MonitoringState::MONITORING;                         
+      89      }                                                                 
+                                                                                
+● Now let me add the place_order() call in the check_trigger_condition() method 
+  when signal is triggered.                                                     
+                                                                                
+● Update(src/strategy/BreakoutPriceVolumeStrategy.h)                            
+  ⎿  Added 10 lines                                                             
+      275              LOG_M_INFO("Current Volume: {}", latest.volume);         
+      276              LOG_M_INFO("Window Size: {} snapshots", window_.si       
+           ze());                                                               
+      277              LOG_M_INFO("======================================       
+           ==");                                                                
+      278 +                                                                     
+      279 +            // 发送买入信号                                          
+      280 +            TradeSignal signal;                                      
+      281 +            signal.symbol = symbol_;                                 
+      282 +            signal.side = TradeSignal::Side::BUY;                    
+      283 +            signal.price = breakout_price_;                          
+      284 +            signal.quantity = 100;  // 默认下单数量，可根据需        
+          +求调整                                                               
+      285 +            signal.trigger_time = latest.mdtime;                     
+      286 +            signal.strategy_name = this->name;                       
+      287 +            place_order(signal);                                     
+      288          }                                                            
+      289      }                                                                
+      290                                                                       
+                                                                                
+● Now let me update main.cpp to create the appropriate context and update the   
+  strategy factory.                                                             
+                                                                                
+● Update(src/main.cpp)                                                          
+  ⎿  Added 1 line                                                               
+      24  #include "backtest_config.h"                                          
+      25  #include "strategy_factory.h"                                         
+      26  #include "strategy_ids.h"                                             
+      27 +#include "strategy_context.h"                                         
+      28                                                                        
+      29  // 引入日志模块                                                       
+      30  #include "logger.h"                                                   
+                                                                                
+● Update(src/main.cpp)                                                          
+  ⎿  Added 1 line, removed 1 line                                               
+      55      // 策略默认禁用，需要通过 ZMQ 命令 enable 时带入 target_pri       
+          ce                                                                    
+      56      factory.register_strategy("BreakoutPriceVolumeStrategy",          
+      57          [](const std::string& symbol, const std::string& /*para       
+          ms*/) -> std::unique_ptr<Strategy> {                                  
+      58 -            auto strat = std::make_unique<BreakoutPriceVolumeSt       
+         -rategy>(symbol + "_Breakout");                                        
+      58 +            auto strat = std::make_unique<BreakoutPriceVolumeSt       
+         +rategy>(symbol + "_Breakout", symbol);                                
+      59              strat->strategy_type_id = StrategyIds::BREAKOUT_PRI       
+          CE_VOLUME;                                                            
+      60              // 构造函数中已默认禁用                                   
+      61              return strat;                                             
+                                                                                
+● Now let me add the BacktestContext creation and setting in the backtest mode. 
+                                                                                
+● Update(src/main.cpp)                                                          
+  ⎿  Added 6 lines                                                              
+      168          return;                                                      
+      169      }                                                                
+      170                                                                       
+      171 +    // 创建回测上下文                                                
+      172 +    auto backtest_ctx = std::make_unique<BacktestContext>();         
+      173 +                                                                     
+      174 +    // 为所有策略设置上下文                                          
+      175 +    engine.set_context_for_all_strategies(backtest_ctx.get());       
+      176 +                                                                     
+      177      LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy eng       
+           ine with {} symbols...", valid_symbols.size());                      
+      178      engine.start();                                                  
+      179                                                                       
+                                                                                
+● Now let me add the LiveContext creation in the live mode. I'll add it after   
+  the ZMQ client is created.                                                    
+                                                                                
+● Update(src/main.cpp)                                                          
+  ⎿  Added 3 lines                                                              
+      271      LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy eng       
+           ine with {} symbols...", valid_symbols.size());                      
+      272      engine.start();                                                  
+      273                                                                       
+      274 +    // 创建实盘上下文（稍后在 ZMQ 客户端启动后设置）                 
+      275 +    std::unique_ptr<LiveContext> live_ctx;                           
+      276 +                                                                     
+      277      // 初始化 ZMQ 客户端（可通过 DISABLE_ZMQ=1 禁用）                
+      278      // 注意：某些系统上 ZMQ 可能因 signaler 问题导致 abort           
+      279      const char* disable_zmq = std::getenv("DISABLE_ZMQ");            
+                                                                                
+● Update(src/main.cpp)                                                          
+  ⎿  Added 4 lines                                                              
+      291          if (g_zmq_client->start()) {                                 
+      292              LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client st       
+           arted, endpoint: {}", endpoint);                                     
+      293              LOG_MODULE_INFO(logger, MOD_ENGINE, "Runtime strat       
+           egy management enabled via ZMQ");                                    
+      294 +                                                                     
+      295 +            // 创建实盘上下文并设置给所有策略                        
+      296 +            live_ctx = std::make_unique<LiveContext>(g_zmq_cli       
+          +ent.get());                                                          
+      297 +            engine.set_context_for_all_strategies(live_ctx.get       
+          +());                                                                 
+      298          } else {                                                     
+      299              LOG_MODULE_WARNING(logger, MOD_ENGINE, "Failed to        
+           start ZMQ client, continuing without it");                           
+      300          }                                                            
+                                                                                
+● Now I need to add the set_context_for_all_strategies method to StrategyEngine.
+   Let me read the file first.                                                  
+                                                                                
+● Read(include/strategy_engine.h)                                               
+  ⎿  Read 518 lines                                                             
+                                                                                
+● Now I need to add the set_context_for_all_strategies method to StrategyEngine.
+                                                                                
+● Update(include/strategy_engine.h)                                             
+  ⎿  Added 8 lines                                                              
+      280          return owned_strategies_.size();                             
+      281      }                                                                
+      282                                                                       
+      283 +    // 为所有策略设置上下文                                          
+      284 +    void set_context_for_all_strategies(StrategyContext* ctx)        
+          +{                                                                    
+      285 +        std::shared_lock<std::shared_mutex> lock(registry_mute       
+          +x_);                                                                 
+      286 +        for (auto& kv : owned_strategies_) {                         
+      287 +            kv.second->set_context(ctx);                             
+      288 +        }                                                            
+      289 +    }                                                                
+      290 +                                                                     
+      291      // ==========================================                    
+      292      // 策略启用/禁用控制                                             
+      293      // ==========================================                    
+                                                                                
+● Let me add the forward declaration for StrategyContext in strategy_engine.h.  
+                                                                                
+● Update(include/strategy_engine.h)                                             
+  ⎿  Added 3 lines                                                              
+      19  #include "strategy_base.h"                                            
+      20  #include "strategy_ids.h"                                             
+      21                                                                        
+      22 +// 前向声明                                                           
+      23 +class StrategyContext;                                                
+      24 +                                                                      
+      25  // ==========================================                         
+      26  // 分支预测优化宏                                                     
+      27  // ==========================================                         
+                                                                                
+● Bash(./build.sh engine 2>&1) timeout: 3m 0s                                   
+  ⎿  [BUILD] Trading Engine Build System (Local)                                
+     [WARN] This build is for LOCAL TESTING ONLY                                
+     [WARN] For production deployment, use: ./docker-build.sh                   
+     … +386 lines (ctrl+o to expand)                                            
+                                                                                
+● Build completed successfully. Let me update the todo list and summarize the   
+  implementation.                                                               
+                                                                                
+● Implementation completed successfully. Here's a summary of the changes:       
+                                                                                
+  Files Created                                                                 
+                                                                                
+  1. include/trade_signal.h - TradeSignal struct with symbol, side, price,      
+  quantity, trigger_time, strategy_name                                         
+  2. include/strategy_context.h - StrategyContext interface + BacktestContext + 
+  LiveContext implementations                                                   
+  3. src/strategy_context.cpp - LiveContext::place_order() implementation (calls
+   ZmqClient::send_place_order())                                               
+                                                                                
+  Files Modified                                                                
+                                                                                
+  4. include/strategy_base.h - Added:                                           
+    - StrategyContext* ctx_ member                                              
+    - set_context(StrategyContext* ctx) method                                  
+    - place_order(const TradeSignal& signal) protected method                   
+  5. src/strategy_base.cpp - Added place_order() implementation                 
+  6. src/strategy/BreakoutPriceVolumeStrategy.h:                                
+    - Added symbol_ member                                                      
+    - Updated constructor to accept symbol                                      
+    - Added place_order() call when signal triggers                             
+  7. src/main.cpp:                                                              
+    - Backtest mode: creates BacktestContext and sets it on all strategies      
+    - Live mode: creates LiveContext with ZmqClient and sets it on all          
+  strategies                                                                    
+  8. include/strategy_engine.h - Added set_context_for_all_strategies() method  
+  9. CMakeLists.txt - Added src/strategy_context.cpp to source files            
+                                                                                
+  Verification                                                                  
+                                                                                
+  - Backtest mode: Signal triggers will log to logs/backtest_biz.log with       
+  [BACKTEST] prefix                                                             
+  - Live mode: Signal triggers will log to logs/live_biz.log with [LIVE] prefix 
+  and send order via ZMQ                                                        
+                                                                                
+  You can test with:                                                            
+  python run_backtest.py 20260114                                               
+  # Then check logs/backtest_biz.log for order records                          
+                                                                                
+✻ Cogitated for 4m 8s                                                           
+                                                                                
+❯ 为什么实盘和回测模式创建策略的逻辑区别这么大？我在回测里没看到factory.reg     
+  ister_strategy                                                                
+  ⎿  ⧉ Selected 1 lines from src/main.cpp in Visual Studio Code                 
+                                                                                
+● 你说得对，让我解释一下这里的逻辑：                                            
+                                                                                
+  实际上实盘和回测模式创建策略的逻辑是完全一样的。你选中的                      
+  factory.register_strategy 是在 register_all_strategies()                      
+  函数里，这个函数在两个模式中都会被调用。                                      
+                                                                                
+  让我展示一下代码结构：                                                        
+                                                                                
+● Read(src/main.cpp)                                                            
+  ⎿  Read 70 lines                                                              
+                                                                                
+● 两者的逻辑其实是一样的，区别在于两个不同层次的 "register"：                   
+  函数: factory.register_strategy()                                             
+  作用: 注册策略工厂（告诉系统如何创建某类策略）                                
+  调用位置: register_all_strategies() 中，两个模式都调用                        
+  ────────────────────────────────────────                                      
+  函数: engine.register_strategy()                                              
+  作用: 注册策略实例到引擎（真正创建并运行的策略）                              
+  调用位置: 两个模式的循环中都有                                                
+  流程是这样的：                                                                
+                                                                                
+  1. register_all_strategies()           ← 两个模式都调用（第107行/第217行）    
+     └─ factory.register_strategy(...)   ← 注册工厂：教系统"如何创建"各类策略   
+                                                                                
+  2. 解析配置文件 (backtest.conf / live.conf)                                   
+                                                                                
+  3. 循环处理每个配置：                                                         
+     └─ factory.create(...)              ← 用工厂创建策略实例                   
+     └─ engine.register_strategy(...)    ← 把实例注册到引擎                     
+                                                                                
+  回测和实盘的策略创建逻辑完全相同（157-158 行 vs 251-252 行）。唯一的区别是：  
+                                                                                
+  1. 配置文件不同：config/backtest.conf vs config/live.conf                     
+  2. 回测多了数据检查：检查/下载历史数据（141-153 行）                          
+  3. 数据来源不同：回测从文件读取，实盘从网关接收                               
+  4. Context 不同：这是我们刚实现的 BacktestContext vs LiveContext              
+                                                                                
+❯ 请向我详细介绍一下策略创建逻辑                                                
+  ⎿ ⧉ Selected 1 lines from src/strategy/BreakoutPriceVolumeStrategy.h in Visual
+     Studio Code                                                                
+                                                                                
+● 让我详细介绍策略创建的完整流程。                                              
+                                                                                
+● Read(include/strategy_factory.h)                                              
+  ⎿  Read 93 lines                                                              
+                                                                                
+● Read(include/backtest_config.h)                                               
+  ⎿  Read 127 lines                                                             
+                                                                                
+● 策略创建完整流程                                                              
+                                                                                
+  第一步：策略工厂注册（程序启动时）                                            
+                                                                                
+  main()                                                                        
+    └─ run_backtest_mode() / run_live_mode()                                    
+         └─ register_all_strategies()    ← 在这里注册所有策略工厂               
+                                                                                
+  main.cpp:42-97 中的 register_all_strategies() 向工厂注册"如何创建"每种策略：  
+                                                                                
+  factory.register_strategy("BreakoutPriceVolumeStrategy",                      
+      [](const std::string& symbol, const std::string& params) ->               
+  std::unique_ptr<Strategy> {                                                   
+          // 这是一个 lambda 函数，教工厂如何创建这个策略                       
+          auto strat = std::make_unique<BreakoutPriceVolumeStrategy>(           
+              symbol + "_Breakout",  // strategy_name（你选中的那个）           
+              symbol                  // 股票代码                               
+          );                                                                    
+          strat->strategy_type_id = StrategyIds::BREAKOUT_PRICE_VOLUME;         
+          return strat;                                                         
+      });                                                                       
+                                                                                
+  此时还没有创建任何策略实例，只是告诉工厂"如果要创建                           
+  BreakoutPriceVolumeStrategy，就按这个方法做"。                                
+                                                                                
+  ---                                                                           
+  第二步：解析配置文件                                                          
+                                                                                
+  配置文件格式（config/backtest.conf 或 config/live.conf）：                    
+  # 股票代码,策略名称[,可选参数]                                                
+  600759,BreakoutPriceVolumeStrategy                                            
+  000001,PriceLevelVolumeStrategy,98500                                         
+                                                                                
+  解析后得到 BacktestEntry 列表：                                               
+  struct BacktestEntry {                                                        
+      std::string symbol;         // "600759.SH"（自动补全后缀）                
+      std::string strategy_name;  // "BreakoutPriceVolumeStrategy"              
+      std::string params;         // "" 或 "98500"                              
+  };                                                                            
+                                                                                
+  ---                                                                           
+  第三步：创建策略实例                                                          
+                                                                                
+  遍历配置，用工厂创建策略：                                                    
+                                                                                
+  for (const auto& cfg : configs) {                                             
+      // 1. 检查策略类型是否存在                                                
+      if (!factory.has_strategy(cfg.strategy_name)) {                           
+          continue;  // 跳过未知策略                                            
+      }                                                                         
+                                                                                
+      // 2. 用工厂创建策略实例                                                  
+      auto strategy = factory.create(                                           
+          cfg.strategy_name,  // "BreakoutPriceVolumeStrategy"                  
+          cfg.symbol,         // "600759.SH"                                    
+          cfg.params          // ""                                             
+      );                                                                        
+                                                                                
+      // 3. 注册到引擎                                                          
+      engine.register_strategy(cfg.symbol, std::move(strategy));                
+  }                                                                             
+                                                                                
+  factory.create() 内部调用之前注册的 lambda：                                  
+  std::unique_ptr<Strategy> create(name, symbol, params) {                      
+      return creators_[name](symbol, params);  // 调用 lambda                   
+  }                                                                             
+                                                                                
+  ---                                                                           
+  第四步：策略注册到引擎                                                        
+                                                                                
+  engine.register_strategy("600759.SH", std::move(strategy));                   
+                                                                                
+  引擎内部做两件事：                                                            
+                                                                                
+  1. 保存所有权（owned_strategies_）：                                          
+  uint32_t key = make_strategy_key(symbol, strategy_type_id);                   
+  owned_strategies_[key] = std::move(strategy);  // unique_ptr 转移             
+  2. 注册到分片路由表（registry_）：                                            
+  int shard_id = get_shard_id(symbol);  // 根据 symbol hash 分配到某个 worker   
+  registry_[shard_id][symbol].push_back(raw_ptr);                               
+                                                                                
+  ---                                                                           
+  第五步：设置 Context（我们刚实现的）                                          
+                                                                                
+  // 回测模式                                                                   
+  auto backtest_ctx = std::make_unique<BacktestContext>();                      
+  engine.set_context_for_all_strategies(backtest_ctx.get());                    
+                                                                                
+  // 实盘模式                                                                   
+  auto live_ctx = std::make_unique<LiveContext>(g_zmq_client.get());            
+  engine.set_context_for_all_strategies(live_ctx.get());                        
+                                                                                
+  ---                                                                           
+  第六步：启动引擎                                                              
+                                                                                
+  engine.start();                                                               
+                                                                                
+  1. 调用所有策略的 on_start()                                                  
+  2. 启动 4 个 worker 线程处理市场数据                                          
+                                                                                
+  ---                                                                           
+  完整流程图                                                                    
+                                                                                
+  ┌─────────────────────────────────────────────────────────────────┐           
+  │                        程序启动                                  │          
+  └─────────────────────────────────────────────────────────────────┘           
+                                │                                               
+                                ▼                                               
+  ┌─────────────────────────────────────────────────────────────────┐           
+  │  register_all_strategies()                                      │           
+  │  ┌─────────────────────────────────────────────────────────┐   │            
+  │  │ factory.register_strategy("BreakoutPriceVolumeStrategy", │   │           
+  │  │     [](symbol, params) { return make_unique<...>(); }    │   │           
+  │  │ )                                                        │   │           
+  │  └─────────────────────────────────────────────────────────┘   │            
+  │  工厂注册：策略名 → 创建函数（lambda）                           │          
+  └─────────────────────────────────────────────────────────────────┘           
+                                │                                               
+                                ▼                                               
+  ┌─────────────────────────────────────────────────────────────────┐           
+  │  parse_backtest_config("config/backtest.conf")                  │           
+  │  ┌─────────────────────────────────────────────────────────┐   │            
+  │  │ 600759,BreakoutPriceVolumeStrategy                      │   │            
+  │  │ 000001,PriceLevelVolumeStrategy,98500                   │   │            
+  │  └─────────────────────────────────────────────────────────┘   │            
+  │  解析配置：symbol + strategy_name + params                      │           
+  └─────────────────────────────────────────────────────────────────┘           
+                                │                                               
+                                ▼                                               
+  ┌─────────────────────────────────────────────────────────────────┐           
+  │  for each config:                                               │           
+  │    strategy = factory.create(strategy_name, symbol, params)     │           
+  │    engine.register_strategy(symbol, std::move(strategy))        │           
+  │                                                                 │           
+  │  创建实例 + 注册到引擎                                           │          
+  └─────────────────────────────────────────────────────────────────┘           
+                                │                                               
+                                ▼                                               
+  ┌─────────────────────────────────────────────────────────────────┐           
+  │  engine.set_context_for_all_strategies(ctx)                     │           
+  │  设置 BacktestContext 或 LiveContext                            │           
+  └─────────────────────────────────────────────────────────────────┘           
+                                │                                               
+                                ▼                                               
+  ┌─────────────────────────────────────────────────────────────────┐           
+  │  engine.start()                                                 │           
+  │  ┌─────────────────────────────────────────────────────────┐   │            
+  │  │ for each strategy: strategy->on_start()                 │   │            
+  │  │ 启动 4 个 worker 线程                                    │   │           
+  │  └─────────────────────────────────────────────────────────┘   │            
+  └─────────────────────────────────────────────────────────────────┘           
+                                │                                               
+                                ▼                                               
+  ┌─────────────────────────────────────────────────────────────────┐           
+  │  市场数据到达 → 路由到对应 worker → 调用策略回调                  │         
+  │  on_tick() / on_order() / on_transaction()                      │           
+  │                     │                                           │           
+  │                     ▼                                           │           
+  │  策略触发信号 → place_order(signal)                              │          
+  │                     │                                           │           
+  │                     ▼                                           │           
+  │  ctx_->place_order() → BacktestContext（记日志）                 │          
+  │                      → LiveContext（发送 ZMQ）                   │          
+  └─────────────────────────────────────────────────────────────────┘           
+                                                                                
+  ---                                                                           
+  strategy_name 的来源                                                          
+                                                                                
+  你选中的 strategy_name 是在构造函数中设置的：                                 
+                                                                                
+  // main.cpp 中的工厂注册                                                      
+  auto strat = std::make_unique<BreakoutPriceVolumeStrategy>(                   
+      symbol + "_Breakout",  // ← 这就是 strategy_name，如 "600759.SH_Breakout" 
+      symbol                                                                    
+  );                                                                            
+                                                                                
+  // BreakoutPriceVolumeStrategy 构造函数                                       
+  explicit BreakoutPriceVolumeStrategy(const std::string& strategy_name,        
+                                       const std::string& symbol = "") {        
+      this->name = strategy_name;  // ← 保存到基类的 name 成员                  
+      this->symbol_ = symbol;                                                   
+      // ...                                                                    
+  }                                                                             
+                                                                                
+✻ Cogitated for 42s                                                             
+                                                                                
+❯ 为什么BreakoutPriceVolumeStrategy的构造函数里有symbol，别的策略里没有呢？     
+                                                                                
+● 因为这是我刚才实现时只改了 BreakoutPriceVolumeStrategy，其他策略还没改。      
+                                                                                
+  让我看一下其他策略的构造函数：                                                
+                                                                                
+● Bash(grep -n "explicit.*Strategy.*strategy_name"                              
+      /home/dy/screwdriver/src/strategy/*.h)                                    
+  ⎿  /home/dy/screwdriver/src/strategy/BreakoutPriceVolumeStrategy.h:83:        
+     explicit BreakoutPriceVolumeStrategy(const std::string& strategy_name,     
+     /home/dy/screwdriver/src/strategy/GapUpVolumeBreakoutStrategy.h:102:       
+     … +7 lines (ctrl+o to expand)                                              
+                                                                                
+● 对比一下：                                                                    
+  ┌──────────────────────────────┬────────────────────────────────────┐         
+  │             策略             │              构造函数              │         
+  ├──────────────────────────────┼────────────────────────────────────┤         
+  │ BreakoutPriceVolumeStrategy  │ (strategy_name, symbol) ← 我刚改的 │         
+  ├──────────────────────────────┼────────────────────────────────────┤         
+  │ GapUpVolumeBreakoutStrategy  │ (strategy_name)                    │         
+  ├──────────────────────────────┼────────────────────────────────────┤         
+  │ OpeningRangeBreakoutStrategy │ (strategy_name)                    │         
+  ├──────────────────────────────┼────────────────────────────────────┤         
+  │ PriceLevelVolumeStrategy     │ (strategy_name, ...)               │         
+  └──────────────────────────────┴────────────────────────────────────┘         
+  让我看看 main.cpp 中工厂注册时是怎么调用的：                                  
+                                                                                
+● Read(src/main.cpp)                                                            
+  ⎿  Read 56 lines                                                              
+                                                                                
+● 现在很清楚了：                                                                
+  策略: BreakoutPriceVolumeStrategy                                             
+  工厂调用: (symbol + "_Breakout", symbol)                                      
+  是否传 symbol: ✅ 传了                                                        
+  ────────────────────────────────────────                                      
+  策略: PriceLevelVolumeStrategy                                                
+  工厂调用: (symbol + "_PriceLevel")                                            
+  是否传 symbol: ❌ 没传                                                        
+  ────────────────────────────────────────                                      
+  策略: GapUpVolumeBreakoutStrategy                                             
+  工厂调用: (symbol + "_GUVB")                                                  
+  是否传 symbol: ❌ 没传                                                        
+  ────────────────────────────────────────                                      
+  策略: OpeningRangeBreakoutStrategy                                            
+  工厂调用: (symbol + "_ORB")                                                   
+  是否传 symbol: ❌ 没传                                                        
+  ────────────────────────────────────────                                      
+  策略: 其他...                                                                 
+  工厂调用: (symbol + "_xxx")                                                   
+  是否传 symbol: ❌ 没传                                                        
+  原因：我刚才实现 place_order() 功能时，只改了                                 
+  BreakoutPriceVolumeStrategy，因为计划中只要求修改这一个策略来演示下单功能。   
+                                                                                
+  问题：这造成了不一致。如果将来其他策略也需要下单，它们不知道自己监控的是哪个股
+  票。                                                                          
+                                                                                
+  解决方案：有两种方式：                                                        
+                                                                                
+  1. 方式一：给每个需要下单的策略都加 symbol_ 成员（当前做法）                  
+  2. 方式二：把 symbol_ 提升到基类 Strategy 中（更统一）                        
+                                                                                
+  要不要我把 symbol_                                                            
+  移到基类，让所有策略都能访问？这样更统一，将来任何策略想下单都可以直接用。    
+                                                                                
+✻ Baked for 30s                                                                 
+                                                                                
+❯ 我觉得可以移到基类。但是我想问一个问题，将来如果有策略需要监听多只股票的      
+  行情数据，架构该怎么设计？                                                    
+  ⎿  ⧉ Selected 1 lines from src/main.cpp in Visual Studio Code                 
+                                                                                
+● 这是个很好的架构问题。让我分析当前架构的限制和几种解决方案：                  
+                                                                                
+  当前架构                                                                      
+                                                                                
+  ┌─────────────────────────────────────────────────────────┐                   
+  │  市场数据到达                                            │                  
+  │       │                                                 │                   
+  │       ▼                                                 │                   
+  │  按 symbol hash 分配到 shard                            │                   
+  │       │                                                 │                   
+  │       ▼                                                 │                   
+  │  registry_[shard_id][symbol] → 策略列表                  │                  
+  │       │                                                 │                   
+  │       ▼                                                 │                   
+  │  调用策略回调（只收到自己 symbol 的数据）                  │                
+  └─────────────────────────────────────────────────────────┘                   
+                                                                                
+  一个策略实例 ←bindTo→ 一个 symbol（1:1 绑定）                                 
+                                                                                
+  多股票监听的几种方案                                                          
+                                                                                
+  方案一：多实例 + 共享状态（最小改动）                                         
+                                                                                
+  // 创建多个实例，共享一个状态对象                                             
+  struct SharedState {                                                          
+      std::atomic<double> stock_a_price;                                        
+      std::atomic<double> stock_b_price;                                        
+      std::mutex mtx;                                                           
+      // ...                                                                    
+  };                                                                            
+                                                                                
+  auto shared = std::make_shared<SharedState>();                                
+                                                                                
+  // 每个股票一个策略实例，共享状态                                             
+  auto strat_a = make_unique<PairStrategy>("A", shared);                        
+  auto strat_b = make_unique<PairStrategy>("B", shared);                        
+                                                                                
+  engine.register_strategy("600000.SH", std::move(strat_a));                    
+  engine.register_strategy("000001.SZ", std::move(strat_b));                    
+                                                                                
+  优点：不改引擎架构                                                            
+  缺点：状态同步复杂，跨 shard 有锁竞争                                         
+                                                                                
+  ---                                                                           
+  方案二：订阅模式（改引擎）                                                    
+                                                                                
+  class Strategy {                                                              
+      std::string primary_symbol_;              // 主股票（下单用）             
+      std::vector<std::string> subscriptions_;  // 订阅列表                     
+  };                                                                            
+                                                                                
+  // 引擎维护反向索引                                                           
+  // symbol → [订阅了这个 symbol 的策略列表]                                    
+  std::unordered_map<std::string, std::vector<Strategy*>> subscribers_;         
+                                                                                
+  // 注册时                                                                     
+  void register_strategy(Strategy* strat) {                                     
+      for (auto& sym : strat->subscriptions_) {                                 
+          subscribers_[sym].push_back(strat);                                   
+      }                                                                         
+  }                                                                             
+                                                                                
+  优点：灵活，策略可订阅任意多股票                                              
+  缺点：需要改引擎，跨 shard 数据路由复杂                                       
+                                                                                
+  ---                                                                           
+  方案三：全局行情快照（推荐）                                                  
+                                                                                
+  class MarketDataSnapshot {                                                    
+      // 线程安全的全局行情快照                                                 
+      std::unordered_map<std::string, LatestQuote> quotes_;  // lock-free 或 RCU
+                                                                                
+  public:                                                                       
+      // 任何策略都可以查询任意股票的最新行情                                   
+      std::optional<LatestQuote> get_quote(const std::string& symbol);          
+  };                                                                            
+                                                                                
+  class StrategyEngine {                                                        
+      MarketDataSnapshot snapshot_;  // 全局快照                                
+                                                                                
+      void on_market_data(const Data& data) {                                   
+          snapshot_.update(data);           // 1. 更新快照                      
+          dispatch_to_strategies(data);     // 2. 分发给绑定的策略              
+      }                                                                         
+  };                                                                            
+                                                                                
+  class Strategy {                                                              
+  protected:                                                                    
+      MarketDataSnapshot* snapshot_;  // 可以查询任意股票                       
+                                                                                
+      void on_tick(const MDStockStruct& stock) override {                       
+          // 收到自己绑定的股票数据                                             
+          auto price_a = stock.lastpx;                                          
+                                                                                
+          // 主动查询其他股票                                                   
+          auto quote_b = snapshot_->get_quote("000001.SZ");                     
+          if (quote_b) {                                                        
+              double spread = price_a - quote_b->lastpx;                        
+              // 配对交易逻辑...                                                
+          }                                                                     
+      }                                                                         
+  };                                                                            
+                                                                                
+  优点：                                                                        
+  - 架构改动小                                                                  
+  - 策略可查询任意股票                                                          
+  - 保持当前的 shard 分片模型                                                   
+                                                                                
+  缺点：                                                                        
+  - 查询的数据可能有微小延迟（不同 shard 更新时间略有差异）                     
+                                                                                
+  ---                                                                           
+  方案四：协调器模式                                                            
+                                                                                
+  // 协调器负责聚合多个股票的信号                                               
+  class PairTradingCoordinator {                                                
+      std::string symbol_a_, symbol_b_;                                         
+      LatestData data_a_, data_b_;                                              
+      StrategyContext* ctx_;                                                    
+                                                                                
+  public:                                                                       
+      void on_update_a(const Data& data) {                                      
+          data_a_ = data;                                                       
+          check_signal();                                                       
+      }                                                                         
+                                                                                
+      void on_update_b(const Data& data) {                                      
+          data_b_ = data;                                                       
+          check_signal();                                                       
+      }                                                                         
+                                                                                
+      void check_signal() {                                                     
+          if (data_a_.valid && data_b_.valid) {                                 
+              double spread = data_a_.price - data_b_.price;                    
+              if (spread > threshold_) {                                        
+                  ctx_->place_order(...);                                       
+              }                                                                 
+          }                                                                     
+      }                                                                         
+  };                                                                            
+                                                                                
+  // 两个轻量策略，只负责转发数据给协调器                                       
+  class ProxyStrategy : public Strategy {                                       
+      PairTradingCoordinator* coordinator_;                                     
+      bool is_leg_a_;                                                           
+                                                                                
+      void on_tick(const MDStockStruct& stock) override {                       
+          if (is_leg_a_) coordinator_->on_update_a(stock);                      
+          else coordinator_->on_update_b(stock);                                
+      }                                                                         
+  };                                                                            
+                                                                                
+  ---                                                                           
+  我的建议                                                                      
+                                                                                
+  对于你的场景，我推荐 方案三（全局行情快照）：                                 
+                                                                                
+  1. 改动最小：只需添加一个全局快照组件                                         
+  2. 兼容现有架构：不改 shard 分片模型                                          
+  3. 灵活性高：任何策略都能查询任意股票                                         
+  4. 性能可控：快照用 lock-free 结构实现                                        
+                                                                                
+  ┌─────────────────────────────────────────────────────────────┐               
+  │                      StrategyEngine                         │               
+  │  ┌─────────────────────────────────────────────────────┐   │                
+  │  │  MarketDataSnapshot（全局快照，lock-free）           │   │               
+  │  │  ┌─────────┬─────────┬─────────┬─────────┐         │   │                 
+  │  │  │600000.SH│000001.SZ│600519.SH│  ...    │         │   │                 
+  │  │  └─────────┴─────────┴─────────┴─────────┘         │   │                 
+  │  └─────────────────────────────────────────────────────┘   │                
+  │       ▲ 更新                    │ 查询                     │                
+  │       │                        ▼                          │                 
+  │  ┌────┴────┐  ┌─────────┐  ┌─────────┐                   │                  
+  │  │ Shard 0 │  │ Shard 1 │  │ Shard 2 │  ...              │                  
+  │  │         │  │         │  │         │                   │                  
+  │  │ 策略A   │  │ 策略B   │  │ 策略C   │                   │                  
+  │  │bindTo   │  │bindTo   │  │bindTo   │                   │                  
+  │  │600000   │  │000001   │  │600519   │                   │                  
+  │  │         │  │         │  │         │                   │                  
+  │  │可查询   │  │可查询   │  │可查询   │                   │                  
+  │  │任意股票 │  │任意股票 │  │任意股票 │                   │                  
+  │  └─────────┘  └─────────┘  └─────────┘                   │                  
+  └─────────────────────────────────────────────────────────────┘               
+                                                                                
+  要不要我先把 symbol_ 移到基类，然后再实现全局快照功能？                       
+                                                                                
+✻ Churned for 47s                                                               
+                                                                                
+❯ 先把 symbol_ 移到基类，全局快照功能现在还不需要。                             
+                                                                                
+● 好的，我来把 symbol_ 移到基类。                                               
+                                                                                
+● Read(include/strategy_base.h)                                                 
+  ⎿  Read 60 lines                                                              
+                                                                                
+● Update(include/strategy_base.h)                                               
+  ⎿  Added 1 line                                                               
+      37      // 唯一标识符，用于移除策略                                       
+      38      uint64_t id = 0;                                                  
+      39      std::string name;                                                 
+      40 +    std::string symbol;  // 股票代码（如 "600000.SH"）                
+      41                                                                        
+      42      // 策略类型 ID（8-bit，由工厂设置，用于快速匹配控制消息）         
+      43      uint8_t strategy_type_id = 0;                                     
+                                                                                
+● Update(src/strategy/BreakoutPriceVolumeStrategy.h)                            
+  ⎿  Error editing file                                                         
+                                                                                
+● Read(src/strategy/BreakoutPriceVolumeStrategy.h)                              
+  ⎿  Read 330 lines                                                             
+                                                                                
+● Update(src/strategy/BreakoutPriceVolumeStrategy.h)                            
+  ⎿  Removed 5 lines                                                            
+      41      bool signal_triggered_ = false;                                   
+      42                                                                        
+      43      // ==========================================                     
+      44 -    // 股票代码                                                       
+      45 -    // ==========================================                     
+      46 -    std::string symbol_;  // 股票代码（如 "600000.SH"）               
+      47 -                                                                      
+      48 -    // ==========================================                     
+      44      // 价格（乘以10000的整数格式）                                    
+      45      // ==========================================                     
+      46      uint32_t breakout_price_ = 0;    // 突破价格，例如97900表示       
+          9.79元                                                                
+                                                                                
+● Update(src/strategy/BreakoutPriceVolumeStrategy.h)                            
+  ⎿  Added 2 lines, removed 2 lines                                             
+      76      // 构造函数：无需传入突破价格，策略默认禁用                       
+      77      // 突破价格通过 ControlMessage 的 param 在 enable 时传入          
+      78      explicit BreakoutPriceVolumeStrategy(const std::string& str       
+          ategy_name,                                                           
+      79 -                                         const std::string& sym       
+         -bol = "") {                                                           
+      79 +                                         const std::string& sym       
+         + = "") {                                                              
+      80          this->name = strategy_name;                                   
+      81 -        this->symbol_ = symbol;                                       
+      81 +        this->symbol = sym;  // 使用基类的 symbol 成员                
+      82          this->enabled_ = false;  // 默认禁用，等待 enable 消息        
+          带入 target_price                                                     
+      83          state_ = MonitoringState::MONITORING;                         
+      84      }                                                                 
+                                                                                
+● Update(src/strategy/BreakoutPriceVolumeStrategy.h)                            
+  ⎿  Added 1 line, removed 1 line                                               
+      253                                                                       
+      254              // 发送买入信号                                          
+      255              TradeSignal signal;                                      
+      256 -            signal.symbol = symbol_;                                 
+      256 +            signal.symbol = this->symbol;  // 使用基类的 symbo       
+          +l                                                                    
+      257              signal.side = TradeSignal::Side::BUY;                    
+      258              signal.price = breakout_price_;                          
+      259              signal.quantity = 100;  // 默认下单数量，可根据需        
+           求调整                                                               
+                                                                                
+● Read(src/strategy/GapUpVolumeBreakoutStrategy.h)                              
+  ⎿  Read 20 lines                                                              
+                                                                                
+● Read(src/strategy/OpeningRangeBreakoutStrategy.h)                             
+  ⎿  Read 20 lines                                                              
+                                                                                
+● Read(src/strategy/PriceLevelVolumeStrategy.h)                                 
+  ⎿  Read 20 lines                                                              
+                                                                                
+● Read(src/strategy/TestStrategy.h)                                             
+  ⎿  Read 50 lines                                                              
+                                                                                
+● Update(src/strategy/GapUpVolumeBreakoutStrategy.h)                            
+  ⎿  Added 3 lines, removed 1 line                                              
+       99      quill::Logger* logger_ = nullptr;                                
+      100                                                                       
+      101  public:                                                              
+      102 -    explicit GapUpVolumeBreakoutStrategy(const std::string& st       
+          -rategy_name) {                                                       
+      102 +    explicit GapUpVolumeBreakoutStrategy(const std::string& st       
+          +rategy_name,                                                         
+      103 +                                         const std::string& sy       
+          +m = "") {                                                            
+      104          this->name = strategy_name;                                  
+      105 +        this->symbol = sym;                                          
+      106      }                                                                
+      107                                                                       
+      108      virtual ~GapUpVolumeBreakoutStrategy() = default;                
+                                                                                
+● Update(src/strategy/OpeningRangeBreakoutStrategy.h)                           
+  ⎿  Added 3 lines, removed 1 line                                              
+       97      std::map<std::string, ORBState> stock_states_;                   
+       98                                                                       
+       99  public:                                                              
+      100 -    explicit OpeningRangeBreakoutStrategy(const std::string& s       
+          -trategy_name) {                                                      
+      100 +    explicit OpeningRangeBreakoutStrategy(const std::string& s       
+          +trategy_name,                                                        
+      101 +                                          const std::string& s       
+          +ym = "") {                                                           
+      102          this->name = strategy_name;                                  
+      103 +        this->symbol = sym;                                          
+      104      }                                                                
+      105                                                                       
+      106      virtual ~OpeningRangeBreakoutStrategy() = default;               
+                                                                                
+● Update(src/strategy/PriceLevelVolumeStrategy.h)                               
+  ⎿  Added 2 lines                                                              
+      75                                                                        
+      76  public:                                                               
+      77      explicit PriceLevelVolumeStrategy(const std::string& strate       
+          gy_name,                                                              
+      78 +                                       const std::string& sym =       
+         + "",                                                                  
+      79                                         uint32_t preclose_price        
+          = 0,                                                                  
+      80                                         uint32_t open_price = 0)       
+           {                                                                    
+      81          this->name = strategy_name;                                   
+      82 +        this->symbol = sym;                                           
+      83          // Note: std::deque does not have reserve(), unlike std       
+          ::vector                                                              
+      84                                                                        
+      85          // 如果提供了昨收价和开盘价，直接使用（用于回测）             
+                                                                                
+● Update(src/strategy/TestStrategy.h)                                           
+  ⎿  Added 5 lines, removed 2 lines                                             
+      43      int32_t random_offset_minute_ = 0;                                
+      44                                                                        
+      45  public:                                                               
+      46 -    explicit TestStrategy(const std::string& name, uint64_t sam       
+         -ple_interval = 100000)                                                
+      46 +    explicit TestStrategy(const std::string& strategy_name,           
+      47 +                          const std::string& sym = "",                
+      48 +                          uint64_t sample_interval = 100000)          
+      49          : sample_interval_(sample_interval) {                         
+      48 -        this->name = name;                                            
+      50 +        this->name = strategy_name;                                   
+      51 +        this->symbol = sym;                                           
+      52          start_time_ = std::chrono::steady_clock::now();               
+      53                                                                        
+      54          // 生成-1到+1分钟的随机偏移                                   
+                                                                                
+● Search(pattern: "explicit.*Strategy.*name", path:                             
+        "src/strategy/PrintStrategy.h", output_mode: "content")                 
+  ⎿  Found 0 lines                                                              
+                                                                                
+● Read(src/strategy/PrintStrategy.h)                                            
+  ⎿  Read 43 lines                                                              
+                                                                                
+● Update(src/strategy/PrintStrategy.h)                                          
+  ⎿  Added 4 lines, removed 2 lines                                             
+      11  // 每隔一定数量的订单打印一次最优报价                                 
+      12  class PrintStrategy : public Strategy {                               
+      13  public:                                                               
+      14 -    explicit PrintStrategy(const std::string& n) {                    
+      15 -        name = n;                                                     
+      14 +    explicit PrintStrategy(const std::string& strategy_name,          
+      15 +                           const std::string& sym = "") {             
+      16 +        this->name = strategy_name;                                   
+      17 +        this->symbol = sym;                                           
+      18      }                                                                 
+      19                                                                        
+      20      void on_tick(const MDStockStruct& stock) override {               
+                                                                                
+● Search(pattern: "class PerformanceStrategy", path: "src/strategy",            
+        output_mode: "content")                                                 
+  ⎿  Found 11 lines (ctrl+o to expand)                                          
+                                                                                
+● Update(src/strategy/TestStrategy.h)                                           
+  ⎿  Added 4 lines, removed 2 lines                                             
+      220      std::chrono::steady_clock::time_point start_time_;               
+      221                                                                       
+      222  public:                                                              
+      223 -    explicit PerformanceStrategy(const std::string& name) {          
+      224 -        this->name = name;                                           
+      223 +    explicit PerformanceStrategy(const std::string& strategy_n       
+          +ame,                                                                 
+      224 +                                  const std::string& sym = "")       
+          + {                                                                   
+      225 +        this->name = strategy_name;                                  
+      226 +        this->symbol = sym;                                          
+      227          start_time_ = std::chrono::steady_clock::now();              
+      228      }                                                                
+      229                                                                       
+                                                                                
+● Read(src/main.cpp)                                                            
+  ⎿  Read 60 lines                                                              
+                                                                                
+● Update(src/main.cpp)                                                          
+  ⎿  Added 1 line, removed 1 line                                               
+      45                                                                        
+      46      factory.register_strategy("PriceLevelVolumeStrategy",             
+      47          [](const std::string& symbol, const std::string& /*para       
+          ms*/) -> std::unique_ptr<Strategy> {                                  
+      48 -            auto strat = std::make_unique<PriceLevelVolumeStrat       
+         -egy>(symbol + "_PriceLevel");                                         
+      48 +            auto strat = std::make_unique<PriceLevelVolumeStrat       
+         +egy>(symbol + "_PriceLevel", symbol);                                 
+      49              strat->strategy_type_id = StrategyIds::PRICE_LEVEL_       
+          VOLUME;                                                               
+      50              return strat;                                             
+      51          });                                                           
+                                                                                
+● Update(src/main.cpp)                                                          
+  ⎿  Added 1 line, removed 1 line                                               
+      63                                                                        
+      64      factory.register_strategy("TestStrategy",                         
+      65          [](const std::string& symbol, const std::string& /*para       
+          ms*/) -> std::unique_ptr<Strategy> {                                  
+      66 -            auto strat = std::make_unique<TestStrategy>(symbol        
+         -+ "_Test");                                                           
+      66 +            auto strat = std::make_unique<TestStrategy>(symbol        
+         ++ "_Test", symbol);                                                   
+      67              strat->strategy_type_id = StrategyIds::TEST_STRATEG       
+          Y;                                                                    
+      68              return strat;                                             
+      69          });                                                           
+                                                                                
+● Update(src/main.cpp)                                                          
+  ⎿  Added 1 line, removed 1 line                                               
+      70                                                                        
+      71      factory.register_strategy("PerformanceStrategy",                  
+      72          [](const std::string& symbol, const std::string& /*para       
+          ms*/) -> std::unique_ptr<Strategy> {                                  
+      73 -            auto strat = std::make_unique<PerformanceStrategy>(       
+         -symbol + "_Perf");                                                    
+      73 +            auto strat = std::make_unique<PerformanceStrategy>(       
+         +symbol + "_Perf", symbol);                                            
+      74              strat->strategy_type_id = StrategyIds::PERFORMANCE_       
+          STRATEGY;                                                             
+      75              return strat;                                             
+      76          });                                                           
+                                                                                
+● Update(src/main.cpp)                                                          
+  ⎿  Added 1 line, removed 1 line                                               
+      77                                                                        
+      78      factory.register_strategy("PrintStrategy",                        
+      79          [](const std::string& symbol, const std::string& /*para       
+          ms*/) -> std::unique_ptr<Strategy> {                                  
+      80 -            auto strat = std::make_unique<PrintStrategy>(symbol       
+         - + "_Print");                                                         
+      80 +            auto strat = std::make_unique<PrintStrategy>(symbol       
+         + + "_Print", symbol);                                                 
+      81              strat->strategy_type_id = StrategyIds::PRINT_STRATE       
+          GY;                                                                   
+      82              return strat;                                             
+      83          });                                                           
+                                                                                
+● Update(src/main.cpp)                                                          
+  ⎿  Added 1 line, removed 1 line                                               
+      84                                                                        
+      85      factory.register_strategy("OpeningRangeBreakoutStrategy",         
+      86          [](const std::string& symbol, const std::string& /*para       
+          ms*/) -> std::unique_ptr<Strategy> {                                  
+      87 -            auto strat = std::make_unique<OpeningRangeBreakoutS       
+         -trategy>(symbol + "_ORB");                                            
+      87 +            auto strat = std::make_unique<OpeningRangeBreakoutS       
+         +trategy>(symbol + "_ORB", symbol);                                    
+      88              strat->strategy_type_id = StrategyIds::OPENING_RANG       
+          E_BREAKOUT;                                                           
+      89              return strat;                                             
+      90          });                                                           
+                                                                                
+● Update(src/main.cpp)                                                          
+  ⎿  Added 1 line, removed 1 line                                               
+      91                                                                        
+      92      factory.register_strategy("GapUpVolumeBreakoutStrategy",          
+      93          [](const std::string& symbol, const std::string& /*para       
+          ms*/) -> std::unique_ptr<Strategy> {                                  
+      94 -            auto strat = std::make_unique<GapUpVolumeBreakoutSt       
+         -rategy>(symbol + "_GUVB");                                            
+      94 +            auto strat = std::make_unique<GapUpVolumeBreakoutSt       
+         +rategy>(symbol + "_GUVB", symbol);                                    
+      95              strat->strategy_type_id = StrategyIds::GAP_UP_VOLUM       
+          E_BREAKOUT;                                                           
+      96              return strat;                                             
+      97          });                                                           
+                                                                                
+● Bash(./build.sh engine 2>&1) timeout: 3m 0s                                   
+  ⎿  [BUILD] Trading Engine Build System (Local)                                
+     [WARN] This build is for LOCAL TESTING ONLY                                
+     [WARN] For production deployment, use: ./docker-build.sh                   
+     … +386 lines (ctrl+o to expand)                                            
+                                                                                
+● 编译成功。                                                                    
+                                                                                
+● 完成。symbol 已移到基类，现在所有策略都统一了：                               
+                                                                                
+  修改总结                                                                      
+                                                                                
+  include/strategy_base.h                                                       
+  class Strategy {                                                              
+  public:                                                                       
+      uint64_t id = 0;                                                          
+      std::string name;                                                         
+      std::string symbol;  // ← 新增：所有策略都可以访问                        
+      uint8_t strategy_type_id = 0;                                             
+      // ...                                                                    
+  };                                                                            
+                                                                                
+  所有策略构造函数统一格式                                                      
+  explicit XxxStrategy(const std::string& strategy_name,                        
+                       const std::string& sym = "") {                           
+      this->name = strategy_name;                                               
+      this->symbol = sym;                                                       
+      // ...                                                                    
+  }                                                                             
+                                                                                
+  工厂注册统一传递 symbol                                                       
+  factory.register_strategy("XxxStrategy",                                      
+      [](const std::string& symbol, const std::string& params) {                
+          auto strat = std::make_unique<XxxStrategy>(symbol + "_Xxx", symbol);  
+          //                                          ↑ name        ↑ symbol    
+          strat->strategy_type_id = StrategyIds::XXX;                           
+          return strat;                                                         
+      });                                                                       
+                                                                                
+  现在所有策略都可以通过 this->symbol                                           
+  访问自己监控的股票代码，将来需要下单时直接使用即可。                          
+                                                                                
+✻ Baked for 3m 47s                                                              
+

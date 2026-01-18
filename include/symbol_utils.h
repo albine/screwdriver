@@ -46,6 +46,18 @@ inline bool is_shenzhen(const std::string& symbol) {
     return symbol[0] != '6';
 }
 
+// 价格转换：double 转 uint32_t（乘以 10000）
+// 用于将元为单位的价格转换为内部整数格式
+inline uint32_t price_to_int(double price) {
+    return static_cast<uint32_t>(price * 10000);
+}
+
+// 价格转换：uint32_t 转 double（除以 10000）
+// 用于将内部整数格式转换为元为单位的价格
+inline double int_to_price(uint32_t price_int) {
+    return price_int / 10000.0;
+}
+
 } // namespace symbol_utils
 
 #endif // SYMBOL_UTILS_H

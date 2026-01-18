@@ -7,6 +7,8 @@
 
 // 前向声明
 struct ControlMessage;
+struct TradeSignal;
+class StrategyContext;
 
 // ==========================================
 // 策略基类
@@ -35,6 +37,7 @@ public:
     // 唯一标识符，用于移除策略
     uint64_t id = 0;
     std::string name;
+    std::string symbol;  // 股票代码（如 "600000.SH"）
 
     // 策略类型 ID（8-bit，由工厂设置，用于快速匹配控制消息）
     uint8_t strategy_type_id = 0;
@@ -43,8 +46,15 @@ public:
     bool is_enabled() const { return enabled_; }
     void set_enabled(bool enabled) { enabled_ = enabled; }
 
+    // 设置策略上下文（用于下单等操作）
+    void set_context(StrategyContext* ctx) { ctx_ = ctx; }
+
 protected:
-    bool enabled_ = true;  // 默认启用
+    bool enabled_ = true;       // 默认启用
+    StrategyContext* ctx_ = nullptr;  // 策略上下文
+
+    // 下单方法（策略调用此方法发出交易信号）
+    void place_order(const TradeSignal& signal);
 };
 
 #endif // STRATEGY_BASE_H

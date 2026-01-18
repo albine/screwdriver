@@ -185,6 +185,24 @@ After running backtest, check logs:
 | `config/backtest.conf` | Backtest stock list | Testing different stocks |
 | `config/live.conf` | Live trading config | Production deployment |
 
+### Price Unit Conversion
+
+本项目内部使用整数表示价格（乘以 10000），避免浮点精度问题。
+
+**必须使用 `symbol_utils.h` 中的转换方法**：
+
+```cpp
+#include "symbol_utils.h"
+
+// double（元）转 uint32_t（内部格式）
+uint32_t price_int = symbol_utils::price_to_int(12.50);  // -> 125000
+
+// uint32_t（内部格式）转 double（元）
+double price = symbol_utils::int_to_price(125000);       // -> 12.50
+```
+
+**禁止直接使用 `* 10000` 或 `/ 10000.0`**，统一使用上述方法以保持代码一致性。
+
 ---
 
 ## Logging Standards

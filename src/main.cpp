@@ -24,6 +24,7 @@
 #include "backtest_config.h"
 #include "strategy_factory.h"
 #include "strategy_ids.h"
+#include "strategy_context.h"
 
 // 引入日志模块
 #include "logger.h"
@@ -44,60 +45,53 @@ void register_all_strategies() {
 
     factory.register_strategy("PriceLevelVolumeStrategy",
         [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<PriceLevelVolumeStrategy>(symbol + "_PriceLevel");
+            auto strat = std::make_unique<PriceLevelVolumeStrategy>(symbol + "_PriceLevel", symbol);
             strat->strategy_type_id = StrategyIds::PRICE_LEVEL_VOLUME;
             return strat;
         });
 
-    // BreakoutPriceVolumeStrategy: 配置格式 "股票代码,BreakoutPriceVolumeStrategy,突破价格"
-    // 例如: 600759,BreakoutPriceVolumeStrategy,98500
-    // params 为突破价格（整数，乘以10000的格式，如98500表示9.85元）
+    // BreakoutPriceVolumeStrategy: 配置格式 "股票代码,BreakoutPriceVolumeStrategy"
+    // 突破价格通过 ControlMessage 的 param 在 enable 时传入
+    // 策略默认禁用，需要通过 ZMQ 命令 enable 时带入 target_price
     factory.register_strategy("BreakoutPriceVolumeStrategy",
-        [](const std::string& symbol, const std::string& params) -> std::unique_ptr<Strategy> {
-            uint32_t breakout_price = 0;
-            if (!params.empty()) {
-                breakout_price = static_cast<uint32_t>(std::stoul(params));
-            }
-            if (breakout_price == 0) {
-                throw std::runtime_error("BreakoutPriceVolumeStrategy requires breakout_price parameter (e.g., 98500 for 9.85 yuan)");
-            }
-            auto strat = std::make_unique<BreakoutPriceVolumeStrategy>(symbol + "_Breakout", breakout_price);
+        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
+            auto strat = std::make_unique<BreakoutPriceVolumeStrategy>(symbol + "_Breakout", symbol);
             strat->strategy_type_id = StrategyIds::BREAKOUT_PRICE_VOLUME;
-            strat->set_enabled(false);  // 默认禁用，需要通过 ZMQ 命令启用
+            // 构造函数中已默认禁用
             return strat;
         });
 
     factory.register_strategy("TestStrategy",
         [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<TestStrategy>(symbol + "_Test");
+            auto strat = std::make_unique<TestStrategy>(symbol + "_Test", symbol);
             strat->strategy_type_id = StrategyIds::TEST_STRATEGY;
             return strat;
         });
 
     factory.register_strategy("PerformanceStrategy",
         [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<PerformanceStrategy>(symbol + "_Perf");
+            auto strat = std::make_unique<PerformanceStrategy>(symbol + "_Perf", symbol);
             strat->strategy_type_id = StrategyIds::PERFORMANCE_STRATEGY;
             return strat;
         });
 
     factory.register_strategy("PrintStrategy",
         [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<PrintStrategy>(symbol + "_Print");
+            auto strat = std::make_unique<PrintStrategy>(symbol + "_Print", symbol);
             strat->strategy_type_id = StrategyIds::PRINT_STRATEGY;
             return strat;
         });
 
     factory.register_strategy("OpeningRangeBreakoutStrategy",
         [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<OpeningRangeBreakoutStrategy>(symbol + "_ORB");
+            auto strat = std::make_unique<OpeningRangeBreakoutStrategy>(symbol + "_ORB", symbol);
             strat->strategy_type_id = StrategyIds::OPENING_RANGE_BREAKOUT;
             return strat;
         });
 
     factory.register_strategy("GapUpVolumeBreakoutStrategy",
         [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<GapUpVolumeBreakoutStrategy>(symbol + "_GUVB");
+            auto strat = std::make_unique<GapUpVolumeBreakoutStrategy>(symbol + "_GUVB", symbol);
             strat->strategy_type_id = StrategyIds::GAP_UP_VOLUME_BREAKOUT;
             return strat;
         });
@@ -174,6 +168,12 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
         return;
     }
 
+    // 创建回测上下文
+    auto backtest_ctx = std::make_unique<BacktestContext>();
+
+    // 为所有策略设置上下文
+    engine.set_context_for_all_strategies(backtest_ctx.get());
+
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine with {} symbols...", valid_symbols.size());
     engine.start();
 
@@ -209,24 +209,9 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
 }
 
 // ==========================================
-// 全局 ZMQ 客户端（用于发送信号）
+// 全局 ZMQ 客户端
 // ==========================================
 static std::unique_ptr<ZmqClient> g_zmq_client;
-
-// 发送交易信号到外部系统
-void send_signal(const std::string& signal_type, const json& data) {
-    if (g_zmq_client && g_zmq_client->is_running()) {
-        json payload;
-        payload["type"] = signal_type;
-        payload["data"] = data;
-        payload["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-
-        std::string req_id = signal_type + "_" + std::to_string(
-            std::chrono::steady_clock::now().time_since_epoch().count());
-        g_zmq_client->send(req_id, payload);
-    }
-}
 
 // ==========================================
 // 实盘模式
@@ -286,6 +271,9 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine with {} symbols...", valid_symbols.size());
     engine.start();
 
+    // 创建实盘上下文（稍后在 ZMQ 客户端启动后设置）
+    std::unique_ptr<LiveContext> live_ctx;
+
     // 初始化 ZMQ 客户端（可通过 DISABLE_ZMQ=1 禁用）
     // 注意：某些系统上 ZMQ 可能因 signaler 问题导致 abort
     const char* disable_zmq = std::getenv("DISABLE_ZMQ");
@@ -303,6 +291,10 @@ void run_live_mode(quill::Logger* logger, const std::string& config_file = "conf
         if (g_zmq_client->start()) {
             LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client started, endpoint: {}", endpoint);
             LOG_MODULE_INFO(logger, MOD_ENGINE, "Runtime strategy management enabled via ZMQ");
+
+            // 创建实盘上下文并设置给所有策略
+            live_ctx = std::make_unique<LiveContext>(g_zmq_client.get());
+            engine.set_context_for_all_strategies(live_ctx.get());
         } else {
             LOG_MODULE_WARNING(logger, MOD_ENGINE, "Failed to start ZMQ client, continuing without it");
         }

@@ -8,6 +8,7 @@
 #include <atomic>
 #include <memory>
 #include <chrono>
+#include <mutex>
 #include "logger.h"
 #include "zmq_protocol.h"
 #include "strategy_engine.h"
@@ -158,6 +159,7 @@ public:
     }
 
     // 发送消息（DEALER模式，直接发送，无需手动加空帧）
+    // 线程安全：多个策略线程可能同时调用
     bool send(const std::string& req_id, const json& payload) {
         if (!socket_ || !running_) return false;
 
@@ -166,7 +168,8 @@ public:
         msg["payload"] = payload;
         std::string data = msg.dump();
 
-        // DEALER 直接发送数据，ZMQ 会自动处理路由
+        // 加锁保护 zmq_send（ZMQ socket 非线程安全）
+        std::lock_guard<std::mutex> lock(send_mutex_);
         int rc = zmq_send(socket_, data.c_str(), data.size(), 0);
         if (rc >= 0) {
             LOG_M_INFO("Sent message: req_id={}, size={}", req_id, data.size());
@@ -266,9 +269,9 @@ private:
 
             LOG_M_INFO("REP received: action={}", action);
 
-            if (action == "add_hot_stock") {
+            if (action == "add_hot_stock_ht") {
                 return handle_rep_add_hot_stock(request);
-            } else if (action == "remove_hot_stock") {
+            } else if (action == "remove_hot_stock_ht") {
                 return handle_rep_remove_hot_stock(request);
             } else {
                 response["error"] = "Unknown action: " + action;
@@ -282,10 +285,11 @@ private:
         return response.dump();
     }
 
-    // 处理 add_hot_stock 请求（启用已存在的 BreakoutPriceVolumeStrategy）
+    // 处理 add_hot_stock_ht 请求（启用已存在的 BreakoutPriceVolumeStrategy）
     std::string handle_rep_add_hot_stock(const json& request) {
         json response;
         std::string symbol = request.value("symbol", "");
+        double target_price = request.value("target_price", 0.0);
 
         if (symbol.empty()) {
             response["success"] = false;
@@ -303,11 +307,12 @@ private:
 
         std::string strategy_name = "BreakoutPriceVolumeStrategy";
 
-        if (engine_->enable_strategy(symbol, strategy_name)) {
-            LOG_M_INFO("REP add_hot_stock: enabled {}:{}", symbol, strategy_name);
+        if (engine_->enable_strategy(symbol, strategy_name, symbol_utils::price_to_int(target_price))) {
+            LOG_M_INFO("REP add_hot_stock_ht: enabled {}:{}, target_price={}", symbol, strategy_name, target_price);
             response["success"] = true;
             response["symbol"] = symbol;
             response["strategy"] = strategy_name;
+            response["target_price"] = target_price;
         } else {
             response["success"] = false;
             response["error"] = "Strategy not found: " + symbol + ":" + strategy_name;
@@ -316,7 +321,7 @@ private:
         return response.dump();
     }
 
-    // 处理 remove_hot_stock 请求（禁用 BreakoutPriceVolumeStrategy）
+    // 处理 remove_hot_stock_ht 请求（禁用 BreakoutPriceVolumeStrategy）
     std::string handle_rep_remove_hot_stock(const json& request) {
         json response;
         std::string symbol = request.value("symbol", "");
@@ -338,7 +343,7 @@ private:
         std::string strategy_name = "BreakoutPriceVolumeStrategy";
 
         if (engine_->disable_strategy(symbol, strategy_name)) {
-            LOG_M_INFO("REP remove_hot_stock: disabled {}:{}", symbol, strategy_name);
+            LOG_M_INFO("REP remove_hot_stock_ht: disabled {}:{}", symbol, strategy_name);
             response["success"] = true;
             response["symbol"] = symbol;
             response["strategy"] = strategy_name;
@@ -667,6 +672,7 @@ private:
     std::thread recv_thread_;
     std::thread heartbeat_thread_;
     std::thread rep_thread_;    // REP 服务端接收线程
+    std::mutex send_mutex_;     // 保护 socket_ 的发送操作
     StrategyEngine* engine_;
 };
 

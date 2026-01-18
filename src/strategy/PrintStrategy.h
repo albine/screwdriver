@@ -11,8 +11,10 @@
 // 每隔一定数量的订单打印一次最优报价
 class PrintStrategy : public Strategy {
 public:
-    explicit PrintStrategy(const std::string& n) {
-        name = n;
+    explicit PrintStrategy(const std::string& strategy_name,
+                           const std::string& sym = "") {
+        this->name = strategy_name;
+        this->symbol = sym;
     }
 
     void on_tick(const MDStockStruct& stock) override {

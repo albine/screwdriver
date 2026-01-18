@@ -1,0 +1,20 @@
+{
+    // clangd 配置
+    "clangd.path": "clangd",
+    "clangd.arguments": [
+        "--background-index",
+        "--clang-tidy",
+        "--header-insertion=never",
+        "--completion-style=detailed",
+        "--function-arg-placeholders=false",
+        "--log=error"
+    ],
+
+    // 禁用 VSCode 内置的 C++ IntelliSense（使用 clangd 代替）
+    "C_Cpp.intelliSenseEngine": "disabled",
+
+    // 文件关联
+    "files.associations": {
+        "*.h": "cpp"
+    }
+}

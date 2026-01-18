@@ -4,6 +4,7 @@
 #include "strategy_base.h"
 #include "market_data_structs.h"
 #include "logger.h"
+#include "symbol_utils.h"
 #include <map>
 #include <deque>
 #include <string>
@@ -98,8 +99,10 @@ private:
     quill::Logger* logger_ = nullptr;
 
 public:
-    explicit GapUpVolumeBreakoutStrategy(const std::string& strategy_name) {
+    explicit GapUpVolumeBreakoutStrategy(const std::string& strategy_name,
+                                         const std::string& sym = "") {
         this->name = strategy_name;
+        this->symbol = sym;
     }
 
     virtual ~GapUpVolumeBreakoutStrategy() = default;
@@ -109,21 +112,10 @@ public:
     // ==========================================
     void on_start() override {
         logger_ = hft::logger::get_logger();
-        LOG_M_INFO("========================================");
-        LOG_M_INFO("GapUpVolumeBreakoutStrategy started: {}", name);
-        LOG_M_INFO("Phase 1: Gap-up detection with 30s price lock");
-        LOG_M_INFO("Phase 2: Volume monitoring (200ms window, delta_n >= n)");
-        LOG_M_INFO("========================================");
     }
 
     void on_stop() override {
-        LOG_M_INFO("========================================");
-        LOG_M_INFO("GapUpVolumeBreakoutStrategy stopped: {}", name);
-        LOG_M_INFO("Statistics:");
-        LOG_M_INFO("  - Ticks: {}", tick_count_.load());
-        LOG_M_INFO("  - Orders: {}", order_count_.load());
-        LOG_M_INFO("  - Transactions: {}", transaction_count_.load());
-        LOG_M_INFO("========================================");
+        // 空实现，日志已移至引擎层汇总
     }
 
     // ==========================================
@@ -190,7 +182,7 @@ public:
 
             if (consolidation_duration >= THIRTY_SECONDS_MS) {
                 // Lock the breakout price
-                state.locked_breakout_price = static_cast<uint32_t>(state.highest_price * 10000);
+                state.locked_breakout_price = symbol_utils::price_to_int(state.highest_price);
                 state.state = State::MONITORING_VOLUME;
 
                 LOG_M_INFO("{} Breakout price LOCKED at {:.4f} ({}), starting volume monitoring",

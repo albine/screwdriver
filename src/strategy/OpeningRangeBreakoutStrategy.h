@@ -97,8 +97,10 @@ private:
     std::map<std::string, ORBState> stock_states_;
 
 public:
-    explicit OpeningRangeBreakoutStrategy(const std::string& strategy_name) {
+    explicit OpeningRangeBreakoutStrategy(const std::string& strategy_name,
+                                          const std::string& sym = "") {
         this->name = strategy_name;
+        this->symbol = sym;
     }
 
     virtual ~OpeningRangeBreakoutStrategy() = default;

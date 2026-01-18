@@ -1,0 +1,12 @@
+# clangd 配置文件
+# https://clangd.llvm.org/config
+
+CompileFlags:
+  # 移除 clangd 不支持的编译器标志
+  Remove:
+    - -Wno-gnu-zero-variadic-macro-arguments
+
+# 对于头文件，如果没有匹配的 compile_commands 条目，
+# clangd 会尝试从最近的 cpp 文件推断设置
+If:
+  PathMatch: .*\.h

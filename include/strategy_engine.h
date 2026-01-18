@@ -9,6 +9,7 @@
 #include <cstring>
 #include <algorithm>
 #include <unordered_map>
+#include <map>
 #include <memory>
 #include <variant>
 #include <array>
@@ -18,6 +19,12 @@
 #include "market_data_structs.h"
 #include "strategy_base.h"
 #include "strategy_ids.h"
+#include "logger.h"
+
+#define LOG_MODULE MOD_ENGINE
+
+// 前向声明
+class StrategyContext;
 
 // ==========================================
 // 分支预测优化宏
@@ -41,13 +48,15 @@ struct ControlMessage {
     Type type;
     uint32_t unique_id;      // 唯一 ID (stock_code << 9 | exchange << 8 | strategy_id)
     char symbol[48];         // 保留用于 shard 路由
+    uint32_t param = 0;      // 通用参数（如 target_price，价格*10000的整数格式）
 
-    static ControlMessage enable(const std::string& sym, const std::string& strat_name) {
+    static ControlMessage enable(const std::string& sym, const std::string& strat_name, uint32_t param_value = 0) {
         ControlMessage msg;
         msg.type = Type::ENABLE;
         msg.unique_id = StrategyIds::make_unique_id(sym, strat_name);
         strncpy(msg.symbol, sym.c_str(), sizeof(msg.symbol) - 1);
         msg.symbol[sizeof(msg.symbol) - 1] = '\0';
+        msg.param = param_value;
         return msg;
     }
 
@@ -57,6 +66,7 @@ struct ControlMessage {
         msg.unique_id = StrategyIds::make_unique_id(sym, strat_name);
         strncpy(msg.symbol, sym.c_str(), sizeof(msg.symbol) - 1);
         msg.symbol[sizeof(msg.symbol) - 1] = '\0';
+        msg.param = 0;
         return msg;
     }
 };
@@ -277,6 +287,14 @@ public:
         return owned_strategies_.size();
     }
 
+    // 为所有策略设置上下文
+    void set_context_for_all_strategies(StrategyContext* ctx) {
+        std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+        for (auto& kv : owned_strategies_) {
+            kv.second->set_context(ctx);
+        }
+    }
+
     // ==========================================
     // 策略启用/禁用控制
     // ==========================================
@@ -288,8 +306,8 @@ public:
         q->enqueue(MarketMessage{std::in_place_type<ControlMessage>, ctrl});
     }
 
-    // 启用策略
-    bool enable_strategy(const std::string& symbol, const std::string& strategy_name) {
+    // 启用策略（可选传入 param，如 target_price）
+    bool enable_strategy(const std::string& symbol, const std::string& strategy_name, uint32_t param = 0) {
         uint32_t key = make_strategy_key(symbol, strategy_name);
         {
             std::shared_lock<std::shared_mutex> lock(registry_mutex_);
@@ -297,7 +315,7 @@ public:
                 return false;
             }
         }
-        send_control_message(ControlMessage::enable(symbol, strategy_name));
+        send_control_message(ControlMessage::enable(symbol, strategy_name, param));
         return true;
     }
 
@@ -316,13 +334,24 @@ public:
 
     // 启动引擎
     void start() {
-        // 调用所有策略的 on_start()
+        // 调用所有策略的 on_start() 并统计数量
+        std::map<uint8_t, int> strategy_counts;  // key: strategy_type_id
+        int total = 0;
+
         for (int i = 0; i < SHARD_COUNT; ++i) {
             for (auto& kv : registry_[i]) {
                 for (auto* strat : kv.second) {
                     strat->on_start();
+                    strategy_counts[strat->strategy_type_id]++;
+                    total++;
                 }
             }
+        }
+
+        // 打印汇总日志
+        LOG_M_INFO("Initialized {} strategies:", total);
+        for (const auto& [id, count] : strategy_counts) {
+            LOG_M_INFO("  - {}: {} instances", StrategyIds::id_to_name(id), count);
         }
 
         // 启动 worker 线程
@@ -511,4 +540,5 @@ private:
     }
 };
 
+#undef LOG_MODULE
 #endif // STRATEGY_ENGINE_H

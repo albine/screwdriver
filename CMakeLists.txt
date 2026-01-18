@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(TradingEngine)
 
+# 生成 compile_commands.json 供 clangd 使用
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # 强制使用 C++17 (如果升级了GCC) 或 C++11 (如果用默认GCC)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,6 +48,7 @@ add_executable(engine
     src/main.cpp
     src/FastOrderBook.cpp
     src/strategy_base.cpp
+    src/strategy_context.cpp
 )
 target_include_directories(engine PRIVATE
     ${CMAKE_SOURCE_DIR}/fastfish/include/mdc_gateway_client/include

@@ -75,9 +75,11 @@ private:
 
 public:
     explicit PriceLevelVolumeStrategy(const std::string& strategy_name,
+                                       const std::string& sym = "",
                                        uint32_t preclose_price = 0,
                                        uint32_t open_price = 0) {
         this->name = strategy_name;
+        this->symbol = sym;
         // Note: std::deque does not have reserve(), unlike std::vector
 
         // 如果提供了昨收价和开盘价，直接使用（用于回测）
@@ -95,35 +97,10 @@ public:
     // ==========================================
     void on_start() override {
         logger_ = hft::logger::get_logger();
-
-        LOG_M_INFO("========================================");
-        LOG_M_INFO("PriceLevelVolumeStrategy started: {}", name);
-        LOG_M_INFO("Configuration:");
-        LOG_M_INFO("  - Window Size: 200ms rolling");
-        LOG_M_INFO("  - Monitoring: Preclose price level");
-        LOG_M_INFO("  - n = Avg volume in window");
-        LOG_M_INFO("  - delta_n = Sum of buy trades in window");
-        LOG_M_INFO("  - Trigger: delta_n >= n");
-
-        if (state_ == MonitoringState::MONITORING) {
-            LOG_M_INFO("  - Preclose Price: {} ({}元)", preclose_price_, price_to_yuan(preclose_price_));
-            LOG_M_INFO("  - Open Price: {} ({}元)", open_price_, price_to_yuan(open_price_));
-            LOG_M_INFO("  - State: MONITORING (initialized from parameters)");
-        }
-
-        LOG_M_INFO("========================================");
     }
 
     void on_stop() override {
-        LOG_M_INFO("========================================");
-        LOG_M_INFO("PriceLevelVolumeStrategy stopped: {}", name);
-        LOG_M_INFO("Statistics:");
-        LOG_M_INFO("  - Ticks: {}", tick_count_.load());
-        LOG_M_INFO("  - Orders: {}", order_count_.load());
-        LOG_M_INFO("  - Transactions: {}", transaction_count_.load());
-        LOG_M_INFO("  - Buy Trades (at preclose): {}", buy_trade_count_.load());
-        LOG_M_INFO("  - Signal Triggered: {}", signal_triggered_);
-        LOG_M_INFO("========================================");
+        // 空实现，日志已移至引擎层汇总
     }
 
     // ==========================================
