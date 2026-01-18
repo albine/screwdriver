@@ -514,7 +514,7 @@ private:
             }
 
             // 打印基本信息
-            LOG_BIZ(BIZ_ORDR, "[OB_SNAP] sym={} time={} last={:.2f} vol={} cnt={}",
+            LOG_MODULE_DEBUG(hft::logger::get_logger(), "Market", "[OB_SNAP] sym={} time={} last={:.2f} vol={} cnt={}",
                 security_id, snapshot.mdtime(),
                 snapshot.lastpx() * multiplier,
                 snapshot.totalvolumetrade(),
@@ -524,7 +524,7 @@ private:
             int buy_levels = std::min(snapshot.buyentries_size(), 10);
             for (int i = 0; i < buy_levels; ++i) {
                 const auto& entry = snapshot.buyentries(i);
-                LOG_BIZ(BIZ_ORDR, "[OB_SNAP] sym={} BID[{}] px={:.2f} qty={} orders={}",
+                LOG_MODULE_DEBUG(hft::logger::get_logger(), "Market", "[OB_SNAP] sym={} BID[{}] px={:.2f} qty={} orders={}",
                     security_id, i + 1,
                     entry.price() * multiplier,
                     entry.totalqty(),
@@ -535,7 +535,7 @@ private:
             int sell_levels = std::min(snapshot.sellentries_size(), 10);
             for (int i = 0; i < sell_levels; ++i) {
                 const auto& entry = snapshot.sellentries(i);
-                LOG_BIZ(BIZ_ORDR, "[OB_SNAP] sym={} ASK[{}] px={:.2f} qty={} orders={}",
+                LOG_MODULE_DEBUG(hft::logger::get_logger(), "Market", "[OB_SNAP] sym={} ASK[{}] px={:.2f} qty={} orders={}",
                     security_id, i + 1,
                     entry.price() * multiplier,
                     entry.totalqty(),
