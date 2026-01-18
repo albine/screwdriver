@@ -60,11 +60,6 @@ private:
     std::deque<WindowSnapshot> window_;
 
     // ==========================================
-    // 日志器
-    // ==========================================
-    quill::Logger* logger_ = nullptr;
-
-    // ==========================================
     // 统计信息
     // ==========================================
     std::atomic<uint64_t> tick_count_{0};
@@ -89,7 +84,7 @@ public:
     // 生命周期回调
     // ==========================================
     void on_start() override {
-        logger_ = hft::logger::get_logger();
+        // 空实现，日志宏 LOG_M_* 已内置 logger
     }
 
     void on_stop() override {

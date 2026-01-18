@@ -93,11 +93,6 @@ private:
     static constexpr int64_t THIRTY_SECONDS_MS = 30000000;  // 30秒 (mdtime格式)
     static constexpr int64_t TEN_MINUTES_MS = 600000000;    // 10分钟 (mdtime格式)
 
-    // ==========================================
-    // 日志器
-    // ==========================================
-    quill::Logger* logger_ = nullptr;
-
 public:
     explicit GapUpVolumeBreakoutStrategy(const std::string& strategy_name,
                                          const std::string& sym = "") {
@@ -111,7 +106,7 @@ public:
     // 生命周期回调
     // ==========================================
     void on_start() override {
-        logger_ = hft::logger::get_logger();
+        // 空实现，日志宏 LOG_M_* 已内置 logger
     }
 
     void on_stop() override {
