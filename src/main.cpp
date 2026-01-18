@@ -7,6 +7,8 @@
 #include <map>
 #include <memory>
 #include <algorithm>
+#include <csignal>
+#include <atomic>
 
 // 引入策略引擎和适配器
 #include "strategy_engine.h"
@@ -213,6 +215,17 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
 // 全局 ZMQ 客户端
 // ==========================================
 static std::unique_ptr<ZmqClient> g_zmq_client;
+
+// ==========================================
+// 信号处理
+// ==========================================
+static std::atomic<bool> g_running{true};
+
+static void signal_handler(int signum) {
+    if (signum == SIGINT || signum == SIGTERM) {
+        g_running.store(false, std::memory_order_relaxed);
+    }
+}
 
 // ==========================================
 // 实盘模式
@@ -450,14 +463,15 @@ void run_live_mode(quill::Logger* logger,
 
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Subscription successful");
 
-    // 保持运行直到用户中断
+    // 保持运行直到收到退出信号
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Running... Press Ctrl+C to stop");
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+    while (g_running.load(std::memory_order_relaxed)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    // 清理（注意：这段代码在正常情况下不会执行，因为上面是无限循环）
-    // 实际应该通过信号处理器来优雅关闭
+    // 优雅关闭
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "Received shutdown signal, cleaning up...");
+
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Stopping ZMQ client...");
     if (g_zmq_client) {
         g_zmq_client->stop();
@@ -479,6 +493,10 @@ void run_live_mode(quill::Logger* logger,
 // 主入口
 // ==========================================
 int main(int argc, char* argv[]) {
+    // 注册信号处理器
+    std::signal(SIGINT, signal_handler);
+    std::signal(SIGTERM, signal_handler);
+
     // 初始化 FastFish SDK 环境 (ACE 框架)
     com::htsc::mdc::gateway::init_env();
 
