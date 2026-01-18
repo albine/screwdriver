@@ -1,0 +1,16 @@
+zmq发送加锁
+
+重构strategy，加入全局context
+
+TODO：行情中心，设计在2026-01-17-MarketDataSnapshot.txt
+
+把symbol放到策略基类
+
+add_hot_stock信息中价格从double转成int
+
+vscode clangd配置
+
+清理创建策略时的日志，on_start, on_stop日志也删除（刷屏）
+
+TODO：测速结果，从华泰到TS和从公司到TS都是8ms。但是从华泰到TS的TCP连接有大量TCP DUP重复包
+
