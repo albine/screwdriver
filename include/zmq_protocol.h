@@ -78,7 +78,7 @@ struct AddStrategyMsg {
     static AddStrategyMsg from_json(const nlohmann::json& j) {
         AddStrategyMsg msg;
         msg.symbol = j.value("symbol", "");
-        msg.strategy_name = j.value("strategy", "PriceLevelVolumeStrategy");
+        msg.strategy_name = j.value("strategy", "BreakoutPriceVolumeStrategy");
         msg.params = j.value("params", nlohmann::json::object());
         return msg;
     }

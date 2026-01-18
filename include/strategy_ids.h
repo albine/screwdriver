@@ -12,13 +12,8 @@ namespace StrategyIds {
 // ==========================================
 constexpr uint8_t UNKNOWN                         = 0;
 constexpr uint8_t OPENING_RANGE_BREAKOUT          = 1;
-constexpr uint8_t PRICE_LEVEL_VOLUME              = 2;
-constexpr uint8_t GAP_UP_VOLUME_BREAKOUT          = 3;
 constexpr uint8_t WEAK_TO_STRONG_RED_OPEN         = 4;
 constexpr uint8_t BREAKOUT_PRICE_VOLUME           = 5;
-constexpr uint8_t PERFORMANCE_STRATEGY            = 252;
-constexpr uint8_t TEST_STRATEGY                   = 254;
-constexpr uint8_t PRINT_STRATEGY                  = 255;
 
 // ==========================================
 // 策略名称 <-> ID 映射
@@ -26,13 +21,8 @@ constexpr uint8_t PRINT_STRATEGY                  = 255;
 inline uint8_t name_to_id(const std::string& name) {
     static const std::unordered_map<std::string, uint8_t> map = {
         {"OpeningRangeBreakoutStrategy", OPENING_RANGE_BREAKOUT},
-        {"PriceLevelVolumeStrategy", PRICE_LEVEL_VOLUME},
-        {"GapUpVolumeBreakoutStrategy", GAP_UP_VOLUME_BREAKOUT},
         {"WeakToStrongRedOpenStrategy", WEAK_TO_STRONG_RED_OPEN},
         {"BreakoutPriceVolumeStrategy", BREAKOUT_PRICE_VOLUME},
-        {"PerformanceStrategy", PERFORMANCE_STRATEGY},
-        {"TestStrategy", TEST_STRATEGY},
-        {"PrintStrategy", PRINT_STRATEGY},
     };
     auto it = map.find(name);
     return (it != map.end()) ? it->second : UNKNOWN;
@@ -41,13 +31,8 @@ inline uint8_t name_to_id(const std::string& name) {
 inline const char* id_to_name(uint8_t id) {
     switch (id) {
         case OPENING_RANGE_BREAKOUT:   return "OpeningRangeBreakoutStrategy";
-        case PRICE_LEVEL_VOLUME:       return "PriceLevelVolumeStrategy";
-        case GAP_UP_VOLUME_BREAKOUT:   return "GapUpVolumeBreakoutStrategy";
         case WEAK_TO_STRONG_RED_OPEN:  return "WeakToStrongRedOpenStrategy";
         case BREAKOUT_PRICE_VOLUME:    return "BreakoutPriceVolumeStrategy";
-        case PERFORMANCE_STRATEGY:     return "PerformanceStrategy";
-        case TEST_STRATEGY:            return "TestStrategy";
-        case PRINT_STRATEGY:           return "PrintStrategy";
         default:                       return "Unknown";
     }
 }

@@ -15,7 +15,7 @@
 // ==========================================
 struct StrategyConfigEntry {
     std::string symbol;         // 股票代码，如 "600759.SH"
-    std::string strategy_name;  // 策略名称，如 "PriceLevelVolumeStrategy"
+    std::string strategy_name;  // 策略名称，如 "BreakoutPriceVolumeStrategy"
     std::string params;         // 可选参数，如突破价格 "98500"
 };
 

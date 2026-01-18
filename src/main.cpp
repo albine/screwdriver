@@ -16,12 +16,8 @@
 #include "live_market_adapter.h"
 
 // 引入策略
-#include "strategy/PriceLevelVolumeStrategy.h"
 #include "strategy/BreakoutPriceVolumeStrategy.h"
-#include "strategy/TestStrategy.h"
-#include "strategy/PrintStrategy.h"
 #include "strategy/OpeningRangeBreakoutStrategy.h"
-#include "strategy/GapUpVolumeBreakoutStrategy.h"
 
 // 引入配置和策略工厂
 #include "backtest_config.h"
@@ -49,13 +45,6 @@
 void register_all_strategies() {
     auto& factory = StrategyFactory::instance();
 
-    factory.register_strategy("PriceLevelVolumeStrategy",
-        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<PriceLevelVolumeStrategy>(symbol + "_PriceLevel", symbol);
-            strat->strategy_type_id = StrategyIds::PRICE_LEVEL_VOLUME;
-            return strat;
-        });
-
     // BreakoutPriceVolumeStrategy: 配置格式 "股票代码,BreakoutPriceVolumeStrategy"
     // 突破价格通过 ControlMessage 的 param 在 enable 时传入
     // 策略默认禁用，需要通过 ZMQ 命令 enable 时带入 target_price
@@ -67,38 +56,10 @@ void register_all_strategies() {
             return strat;
         });
 
-    factory.register_strategy("TestStrategy",
-        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<TestStrategy>(symbol + "_Test", symbol);
-            strat->strategy_type_id = StrategyIds::TEST_STRATEGY;
-            return strat;
-        });
-
-    factory.register_strategy("PerformanceStrategy",
-        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<PerformanceStrategy>(symbol + "_Perf", symbol);
-            strat->strategy_type_id = StrategyIds::PERFORMANCE_STRATEGY;
-            return strat;
-        });
-
-    factory.register_strategy("PrintStrategy",
-        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<PrintStrategy>(symbol + "_Print", symbol);
-            strat->strategy_type_id = StrategyIds::PRINT_STRATEGY;
-            return strat;
-        });
-
     factory.register_strategy("OpeningRangeBreakoutStrategy",
         [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
             auto strat = std::make_unique<OpeningRangeBreakoutStrategy>(symbol + "_ORB", symbol);
             strat->strategy_type_id = StrategyIds::OPENING_RANGE_BREAKOUT;
-            return strat;
-        });
-
-    factory.register_strategy("GapUpVolumeBreakoutStrategy",
-        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<GapUpVolumeBreakoutStrategy>(symbol + "_GUVB", symbol);
-            strat->strategy_type_id = StrategyIds::GAP_UP_VOLUME_BREAKOUT;
             return strat;
         });
 }
@@ -116,7 +77,7 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
     auto configs = parse_strategy_config(config_file);
     if (configs.empty()) {
         LOG_MODULE_ERROR(logger, MOD_ENGINE, "No valid configurations found in {}", config_file);
-        LOG_MODULE_INFO(logger, MOD_ENGINE, "Config format: stock_code,strategy_name (e.g., 600759,PriceLevelVolumeStrategy)");
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "Config format: stock_code,strategy_name (e.g., 600759,BreakoutPriceVolumeStrategy)");
         return;
     }
 
@@ -246,7 +207,7 @@ void run_live_mode(quill::Logger* logger,
     auto configs = parse_strategy_config(strategy_config_file);
     if (configs.empty()) {
         LOG_MODULE_ERROR(logger, MOD_ENGINE, "No valid configurations found in {}", strategy_config_file);
-        LOG_MODULE_INFO(logger, MOD_ENGINE, "Config format: stock_code,strategy_name (e.g., 600759,PriceLevelVolumeStrategy)");
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "Config format: stock_code,strategy_name (e.g., 600759,BreakoutPriceVolumeStrategy)");
         return;
     }
 
