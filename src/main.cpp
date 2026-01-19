@@ -19,6 +19,7 @@
 #include "strategy/BreakoutPriceVolumeStrategy.h"
 #include "strategy/BreakoutPriceVolumeStrategy_v2.h"
 #include "strategy/OpeningRangeBreakoutStrategy.h"
+#include "strategy/TestOrderbookStrategy.h"
 
 // 引入配置和策略工厂
 #include "backtest_config.h"
@@ -72,7 +73,15 @@ void register_all_strategies() {
             strat->strategy_type_id = StrategyIds::OPENING_RANGE_BREAKOUT;
             return strat;
         });
+    factory.register_strategy("TestOrderbookStrategy",
+        [](const std::string& symbol, const std::string& params) -> std::unique_ptr<Strategy> {
+            int64_t target_seq = params.empty() ? -1 : std::stoll(params);
+            auto strat = std::make_unique<TestOrderbookStrategy>(symbol + "_TOS", symbol, target_seq);
+            strat->strategy_type_id = StrategyIds::TEST_ORDERBOOK;
+            return strat;
+        });
 }
+
 
 
 // ==========================================

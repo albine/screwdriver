@@ -1,0 +1,69 @@
+2026-01-19 14:55:50.059253991 [81653] [INFO] Logger initialized, rdtsc=true
+2026-01-19 14:55:50.059425286 [81653] [INFO] [Engine] === Live Trading Mode ===
+2026-01-19 14:55:50.059459827 [81653] [INFO] [Engine] Loaded engine config from config/engine.conf
+2026-01-19 14:55:50.066499465 [81653] [INFO] [Engine] Loaded 5183 configurations from config/strategy_live.conf
+2026-01-19 14:55:50.066567557 [81653] [INFO] [Engine]   - BreakoutPriceVolumeStrategy_v2: 5183 symbols
+2026-01-19 14:55:50.199261108 [81653] [INFO] [Engine] Starting strategy engine with 5183 symbols...
+2026-01-19 14:55:50.199562586 [81653] [INFO] [Engine] Initialized 5183 strategies:
+2026-01-19 14:55:50.199562946 [81653] [INFO] [Engine]   - BreakoutPriceVolumeStrategy_v2: 5183 instances
+2026-01-19 14:55:50.200468743 [81653] [INFO] [ZMQ] ZMQ DEALER connected to tcp://localhost:13380
+2026-01-19 14:55:50.200497214 [81653] [INFO] [ZMQ] Sent message: req_id=register_0, size=113
+2026-01-19 14:55:50.200498784 [81653] [INFO] [ZMQ] Sent register message to ROUTER
+2026-01-19 14:55:50.200664499 [81653] [INFO] [ZMQ] REP server listening on tcp://*:13381
+2026-01-19 14:55:50.200708060 [81653] [INFO] [ZMQ] ZMQ client started with heartbeat every 60s
+2026-01-19 14:55:50.200730201 [81653] [INFO] [Engine] ZMQ client started, DEALER endpoint: tcp://localhost:13380, REP endpoint: tcp://*:13381
+2026-01-19 14:55:50.200730391 [81653] [INFO] [Engine] Runtime strategy management enabled via ZMQ
+2026-01-19 14:55:50.210715065 [81653] [INFO] [PersistLayer] Initializing PersistLayer: date=20260119 dir=data/raw/2026/01/19/
+2026-01-19 14:55:50.210797037 [81653] [INFO] [MmapWriter] Opening mmap file: data/raw/2026/01/19/orders.bin capacity=320000000 struct_size=144 total_size=46080000064
+2026-01-19 14:55:50.211618152 [81653] [INFO] [MmapWriter] Initializing new file header, magic=0x4D444F52
+2026-01-19 14:55:50.211628782 [81653] [INFO] [MmapWriter] Opening mmap file: data/raw/2026/01/19/transactions.bin capacity=270000000 struct_size=128 total_size=34560000064
+2026-01-19 14:55:50.211704054 [81653] [INFO] [MmapWriter] Initializing new file header, magic=0x4D445458
+2026-01-19 14:55:50.211707034 [81653] [INFO] [MmapWriter] Opening mmap file: data/raw/2026/01/19/ticks.bin capacity=40000000 struct_size=2216 total_size=88640000064
+2026-01-19 14:55:50.211799467 [81653] [INFO] [MmapWriter] Initializing new file header, magic=0x4D44544B
+2026-01-19 14:55:50.211803737 [81653] [INFO] [MmapWriter] Opening mmap file: data/raw/2026/01/19/snapshots.bin capacity=400000000 struct_size=728 total_size=291200000064
+2026-01-19 14:55:50.211997063 [81653] [INFO] [MmapWriter] Initializing new file header, magic=0x4D444F42
+2026-01-19 14:55:50.212028554 [81653] [INFO] [PersistLayer] PersistLayer initialized successfully, writer_cpu=127
+2026-01-19 14:55:50.212028924 [81653] [INFO] [Engine] PersistLayer initialized: date=20260119 dir=data/raw
+2026-01-19 14:55:50.212119736 [81653] [INFO] [Engine] Connecting to market data gateway...
+2026-01-19 14:55:50.212127757 [81668] [INFO] [PersistLayer] Writer thread pinned to CPU 127
+2026-01-19 14:55:50.212404435 [81653] [INFO] [Engine] Logging in to gateway at 168.9.100.93:18088...
+2026-01-19 14:56:06.040708493 [81653] [INFO] [Engine] Login successful
+2026-01-19 14:56:06.040720893 [81653] [INFO] [Engine] Subscribing to market data (StockType, XSHG+XSHE)...
+2026-01-19 14:56:06.235296886 [81653] [INFO] [Engine] Subscription successful
+2026-01-19 14:56:06.235298176 [81653] [INFO] [Engine] Running... Press Ctrl+C to stop
+2026-01-19 14:56:50.212275659 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=801615 txns=867262 ticks=74440 snaps=1569277
+2026-01-19 14:56:50.228186618 [81666] [INFO] [ZMQ] Sent message: req_id=hb_1, size=116
+2026-01-19 14:57:50.212280263 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=1112981 txns=994059 ticks=140140 snaps=1831826
+2026-01-19 14:57:50.255304561 [81666] [INFO] [ZMQ] Sent message: req_id=hb_2, size=116
+2026-01-19 14:58:50.212283741 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=1271252 txns=994059 ticks=196803 snaps=1831826
+2026-01-19 14:58:50.282564543 [81666] [INFO] [ZMQ] Sent message: req_id=hb_3, size=116
+2026-01-19 14:59:50.212285834 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=1440040 txns=994059 ticks=251029 snaps=1831826
+2026-01-19 14:59:50.309611143 [81666] [INFO] [ZMQ] Sent message: req_id=hb_4, size=116
+2026-01-19 15:00:50.212284432 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2116569 txns=1885621 ticks=283018 snaps=1831826
+2026-01-19 15:00:50.336907186 [81666] [INFO] [ZMQ] Sent message: req_id=hb_5, size=116
+2026-01-19 15:01:50.212287100 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2116569 txns=1885621 ticks=297760 snaps=1831826
+2026-01-19 15:01:50.363354193 [81666] [INFO] [ZMQ] Sent message: req_id=hb_6, size=116
+2026-01-19 15:02:50.212283738 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2116569 txns=1885621 ticks=309809 snaps=1831826
+2026-01-19 15:02:50.389879744 [81666] [INFO] [ZMQ] Sent message: req_id=hb_7, size=116
+2026-01-19 15:03:50.212287849 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2116569 txns=1885621 ticks=320349 snaps=1831826
+2026-01-19 15:03:50.417164332 [81666] [INFO] [ZMQ] Sent message: req_id=hb_8, size=116
+2026-01-19 15:04:50.212290132 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2116569 txns=1885621 ticks=330246 snaps=1831826
+2026-01-19 15:04:50.443799305 [81666] [INFO] [ZMQ] Sent message: req_id=hb_9, size=116
+2026-01-19 15:05:50.212289300 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2118908 txns=1885635 ticks=342769 snaps=1831826
+2026-01-19 15:05:50.470768684 [81666] [INFO] [ZMQ] Sent message: req_id=hb_10, size=118
+2026-01-19 15:06:50.212290094 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2118908 txns=1885645 ticks=352554 snaps=1831826
+2026-01-19 15:06:50.497350440 [81666] [INFO] [ZMQ] Sent message: req_id=hb_11, size=118
+2026-01-19 15:07:50.212287106 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2118908 txns=1885664 ticks=362233 snaps=1831826
+2026-01-19 15:07:50.523755988 [81666] [INFO] [ZMQ] Sent message: req_id=hb_12, size=118
+2026-01-19 15:08:50.212300139 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2118908 txns=1885671 ticks=371840 snaps=1831826
+2026-01-19 15:08:50.550176074 [81666] [INFO] [ZMQ] Sent message: req_id=hb_13, size=118
+2026-01-19 15:09:50.212300522 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2118908 txns=1885685 ticks=381353 snaps=1831826
+2026-01-19 15:09:50.576661602 [81666] [INFO] [ZMQ] Sent message: req_id=hb_14, size=118
+2026-01-19 15:10:50.212295655 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2118908 txns=1885691 ticks=390723 snaps=1831826
+2026-01-19 15:10:50.603207979 [81666] [INFO] [ZMQ] Sent message: req_id=hb_15, size=118
+2026-01-19 15:11:50.212301088 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2118908 txns=1885701 ticks=400166 snaps=1831826
+2026-01-19 15:11:50.629652926 [81666] [INFO] [ZMQ] Sent message: req_id=hb_16, size=118
+2026-01-19 15:12:50.212301877 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2118908 txns=1885706 ticks=409497 snaps=1831826
+2026-01-19 15:12:50.655968926 [81666] [INFO] [ZMQ] Sent message: req_id=hb_17, size=118
+2026-01-19 15:13:50.212299710 [81668] [INFO] [PersistLayer] PersistLayer stats: written orders=2118908 txns=1885719 ticks=418833 snaps=1831826
+2026-01-19 15:13:50.682342955 [81666] [INFO] [ZMQ] Sent message: req_id=hb_18, size=118
