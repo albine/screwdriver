@@ -120,8 +120,12 @@ check_prerequisites() {
         log_warn "Strategy config file not found: ${STRATEGY_CONFIG_DIR}/backtest.conf"
     fi
 
-    if [[ ! -f "${STRATEGY_CONFIG_DIR}/live.conf" ]]; then
-        log_warn "Strategy config file not found: ${STRATEGY_CONFIG_DIR}/live.conf"
+    if [[ ! -f "${STRATEGY_CONFIG_DIR}/strategy_live.conf" ]]; then
+        log_warn "Strategy config file not found: ${STRATEGY_CONFIG_DIR}/strategy_live.conf"
+    fi
+
+    if [[ ! -f "${STRATEGY_CONFIG_DIR}/engine.conf" ]]; then
+        log_warn "Engine config file not found: ${STRATEGY_CONFIG_DIR}/engine.conf"
     fi
 
     # Check certificates
@@ -173,14 +177,17 @@ create_package() {
         cp "${CONFIG_DIR}/htsc-insight-cpp-config.conf" "${DEPLOY_ROOT}/config/"
     fi
 
-    # Copy strategy config files (backtest.conf, live.conf)
+    # Copy strategy config files (backtest.conf, strategy_live.conf, engine.conf)
     if [[ -d "${STRATEGY_CONFIG_DIR}" ]]; then
         log_info "Copying strategy config files..."
         if [[ -f "${STRATEGY_CONFIG_DIR}/backtest.conf" ]]; then
             cp "${STRATEGY_CONFIG_DIR}/backtest.conf" "${DEPLOY_ROOT}/config/"
         fi
-        if [[ -f "${STRATEGY_CONFIG_DIR}/live.conf" ]]; then
-            cp "${STRATEGY_CONFIG_DIR}/live.conf" "${DEPLOY_ROOT}/config/"
+        if [[ -f "${STRATEGY_CONFIG_DIR}/strategy_live.conf" ]]; then
+            cp "${STRATEGY_CONFIG_DIR}/strategy_live.conf" "${DEPLOY_ROOT}/config/"
+        fi
+        if [[ -f "${STRATEGY_CONFIG_DIR}/engine.conf" ]]; then
+            cp "${STRATEGY_CONFIG_DIR}/engine.conf" "${DEPLOY_ROOT}/config/"
         fi
     fi
 
