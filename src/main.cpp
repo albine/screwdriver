@@ -259,13 +259,22 @@ void run_live_mode(quill::Logger* logger,
     }
 
     // 为所有股票添加默认策略 BreakoutPriceVolumeStrategy（默认禁用，需通过 ZMQ 命令启用）
+    // 注意：如果配置文件已经有该策略，则跳过以避免重复注册导致悬垂指针
+    int default_added = 0;
     for (const auto& symbol : valid_symbols) {
+        if (engine.has_strategy(symbol, "BreakoutPriceVolumeStrategy")) {
+            continue;  // 已有策略，跳过
+        }
         try {
             auto default_strategy = factory.create("BreakoutPriceVolumeStrategy", symbol, "");
             engine.register_strategy(symbol, std::move(default_strategy));
+            default_added++;
         } catch (const std::exception& e) {
             LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create default strategy for {}: {}", symbol, e.what());
         }
+    }
+    if (default_added > 0) {
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "Added {} default BreakoutPriceVolumeStrategy instances", default_added);
     }
 
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine with {} symbols...", valid_symbols.size());

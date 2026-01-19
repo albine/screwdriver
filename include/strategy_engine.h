@@ -159,20 +159,30 @@ public:
     // 注册策略（转移所有权）- 启动前调用
     // symbol: 股票代码（如 "600000.SH"）
     // strat: 策略实例（需要设置 strat->name 和 strat->strategy_type_id）
-    void register_strategy(const std::string& symbol, std::unique_ptr<Strategy> strat) {
+    // 返回 true 表示注册成功，false 表示已存在相同策略（跳过）
+    bool register_strategy(const std::string& symbol, std::unique_ptr<Strategy> strat) {
         if (!strat) {
-            return;  // 忽略空指针
+            return false;  // 忽略空指针
+        }
+
+        uint32_t key = make_strategy_key(symbol, strat->strategy_type_id);
+
+        // 检查是否已存在相同策略（避免悬垂指针）
+        if (owned_strategies_.find(key) != owned_strategies_.end()) {
+            LOG_M_WARNING("Strategy already registered: symbol={} type_id={}, skipping",
+                          symbol, static_cast<int>(strat->strategy_type_id));
+            return false;
         }
 
         int shard_id = get_shard_id(symbol);
         Strategy* raw_ptr = strat.get();
-        uint32_t key = make_strategy_key(symbol, strat->strategy_type_id);
 
         // 1. 保存所有权（使用数字 key）
         owned_strategies_[key] = std::move(strat);
 
         // 2. 注册裸指针到分片（按 symbol 路由市场数据）
         registry_[shard_id][symbol].push_back(raw_ptr);
+        return true;
     }
 
     // ==========================================

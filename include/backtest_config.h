@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <filesystem>
 #include <cstdlib>
+#include <cstdio>
+#include <set>
 #include "utils/symbol_utils.h"
 
 // ==========================================
@@ -27,6 +29,7 @@ using BacktestEntry = StrategyConfigEntry;
 // ==========================================
 inline std::vector<StrategyConfigEntry> parse_strategy_config(const std::string& filepath) {
     std::vector<StrategyConfigEntry> entries;
+    std::set<std::string> seen_keys;  // 用于检测重复的 (symbol, strategy) 组合
     std::ifstream file(filepath);
 
     if (!file.is_open()) {
@@ -34,7 +37,10 @@ inline std::vector<StrategyConfigEntry> parse_strategy_config(const std::string&
     }
 
     std::string line;
+    int line_num = 0;
     while (std::getline(file, line)) {
+        line_num++;
+
         // 跳过空行和注释
         if (line.empty() || line[0] == '#') {
             continue;
@@ -71,8 +77,19 @@ inline std::vector<StrategyConfigEntry> parse_strategy_config(const std::string&
             trim(params);
 
             if (!symbol.empty() && !strategy.empty()) {
+                std::string normalized_symbol = symbol_utils::normalize_symbol(symbol);
+                std::string key = normalized_symbol + "|" + strategy;
+
+                // 检测重复配置
+                if (seen_keys.count(key) > 0) {
+                    std::fprintf(stderr, "WARNING: Duplicate config at line %d: %s,%s (skipped)\n",
+                                 line_num, normalized_symbol.c_str(), strategy.c_str());
+                    continue;
+                }
+                seen_keys.insert(key);
+
                 StrategyConfigEntry entry;
-                entry.symbol = symbol_utils::normalize_symbol(symbol);
+                entry.symbol = normalized_symbol;
                 entry.strategy_name = strategy;
                 entry.params = params;
                 entries.push_back(entry);
