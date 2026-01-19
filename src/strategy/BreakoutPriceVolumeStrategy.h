@@ -44,6 +44,7 @@ private:
     // 价格（乘以10000的整数格式）
     // ==========================================
     uint32_t breakout_price_ = 0;    // 突破价格，例如97900表示9.79元
+    uint32_t limit_up_price_ = 0;    // 涨停价（从 MDStockStruct.maxpx 获取）
 
     // ==========================================
     // 滚动窗口（200ms）
@@ -128,7 +129,11 @@ public:
     void on_tick(const MDStockStruct& stock) override {
         if (!is_enabled()) return;
         tick_count_++;
-        // 不需要检查任何条件，直接处于监控状态
+
+        // 更新涨停价（从 MDStockStruct 获取）
+        if (stock.maxpx > 0) {
+            limit_up_price_ = static_cast<uint32_t>(stock.maxpx);
+        }
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
@@ -140,7 +145,12 @@ public:
         }
 
         // 查询突破价档位的当前挂单量
-        uint64_t current_volume = book.get_volume_at_price(breakout_price_);
+        // 如果突破价已经小于卖一价，说明已被突破，current_volume 设为 0
+        uint64_t current_volume = 0;
+        auto best_ask = book.get_best_ask();
+        if (best_ask.has_value() && breakout_price_ >= best_ask.value()) {
+            current_volume = book.get_volume_at_price(breakout_price_);
+        }
 
         // 添加到窗口（委托事件没有成交量）
         add_to_window(order.mdtime, current_volume, 0);
@@ -158,7 +168,12 @@ public:
         }
 
         // 查询突破价档位的当前挂单量
-        uint64_t current_volume = book.get_volume_at_price(breakout_price_);
+        // 如果突破价已经小于卖一价，说明已被突破，current_volume 设为 0
+        uint64_t current_volume = 0;
+        auto best_ask = book.get_best_ask();
+        if (best_ask.has_value() && breakout_price_ >= best_ask.value()) {
+            current_volume = book.get_volume_at_price(breakout_price_);
+        }
 
         // 判断是否是主买成交
         uint64_t buy_trade_qty = 0;
@@ -197,6 +212,47 @@ private:
     // ==========================================
     void check_trigger_condition() {
         if (signal_triggered_ || window_.empty()) {
+            return;
+        }
+
+        // 获取最新数据点
+        const auto& latest = window_.back();
+
+        // 如果 current_volume = 0（突破价已小于卖一价），直接触发
+        if (latest.volume == 0) {
+            signal_triggered_ = true;
+            state_ = MonitoringState::SIGNAL_TRIGGERED;
+
+            LOG_BIZ("SIGNAL",
+                    "BUY SIGNAL (BREAKOUT) | Time={} | Price={} | "
+                    "current_volume=0 (price below best_ask)",
+                    time_util::format_mdtime(latest.mdtime),
+                    price_util::format_price_display(breakout_price_));
+
+            LOG_M_INFO("========================================");
+            LOG_M_INFO("SIGNAL TRIGGERED (BREAKOUT) at {}",
+                       time_util::format_mdtime(latest.mdtime));
+            LOG_M_INFO("Price Level: {} ({}元)",
+                       breakout_price_,
+                       price_util::price_to_yuan(breakout_price_));
+            LOG_M_INFO("Reason: breakout_price < best_ask (已突破)");
+            LOG_M_INFO("========================================");
+
+            // 发送买入信号
+            // 下单价格 = min(breakout_price_ * 1.017, 涨停价)
+            uint32_t order_price = static_cast<uint32_t>(breakout_price_ * 1.017);
+            if (limit_up_price_ > 0 && order_price > limit_up_price_) {
+                order_price = limit_up_price_;
+            }
+
+            TradeSignal signal;
+            signal.symbol = this->symbol;
+            signal.side = TradeSignal::Side::BUY;
+            signal.price = order_price;
+            signal.quantity = 100;
+            signal.trigger_time = latest.mdtime;
+            signal.strategy_name = this->name;
+            place_order(signal);
             return;
         }
 
@@ -251,10 +307,16 @@ private:
             LOG_M_INFO("========================================");
 
             // 发送买入信号
+            // 下单价格 = min(breakout_price_ * 1.017, 涨停价)
+            uint32_t order_price = static_cast<uint32_t>(breakout_price_ * 1.017);
+            if (limit_up_price_ > 0 && order_price > limit_up_price_) {
+                order_price = limit_up_price_;
+            }
+
             TradeSignal signal;
             signal.symbol = this->symbol;  // 使用基类的 symbol
             signal.side = TradeSignal::Side::BUY;
-            signal.price = breakout_price_;
+            signal.price = order_price;
             signal.quantity = 100;  // 默认下单数量，可根据需求调整
             signal.trigger_time = latest.mdtime;
             signal.strategy_name = this->name;
