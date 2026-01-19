@@ -51,8 +51,8 @@ public:
     //   SNAPSHOT:    2400 万/天 -> 30M
     static constexpr size_t ORDER_CAPACITY    = 320000000;
     static constexpr size_t TXN_CAPACITY      = 270000000;
-    static constexpr size_t TICK_CAPACITY     = 25000000;
-    static constexpr size_t SNAPSHOT_CAPACITY = 30000000;
+    static constexpr size_t TICK_CAPACITY     = 40000000;
+    static constexpr size_t SNAPSHOT_CAPACITY = 400000000;
 
     // 队列初始容量 (用于预分配内部块)
     static constexpr size_t ORDER_QUEUE_SIZE    = 131072;  // 128K
