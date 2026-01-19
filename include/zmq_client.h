@@ -285,11 +285,12 @@ private:
         return response.dump();
     }
 
-    // 处理 add_hot_stock_ht 请求（启用已存在的 BreakoutPriceVolumeStrategy）
+    // 处理 add_hot_stock_ht 请求（启用已存在的策略）
     std::string handle_rep_add_hot_stock(const json& request) {
         json response;
         std::string symbol = request.value("symbol", "");
         double target_price = request.value("target_price", 0.0);
+        std::string strategy_name = request.value("strategy", "BreakoutPriceVolumeStrategy_v2");
 
         if (symbol.empty()) {
             response["success"] = false;
@@ -304,8 +305,6 @@ private:
             response["error"] = "Engine not initialized";
             return response.dump();
         }
-
-        std::string strategy_name = "BreakoutPriceVolumeStrategy";
 
         if (engine_->enable_strategy(symbol, strategy_name, symbol_utils::price_to_int(target_price))) {
             LOG_M_INFO("REP add_hot_stock_ht: enabled {}:{}, target_price={}", symbol, strategy_name, target_price);
@@ -321,10 +320,11 @@ private:
         return response.dump();
     }
 
-    // 处理 remove_hot_stock_ht 请求（禁用 BreakoutPriceVolumeStrategy）
+    // 处理 remove_hot_stock_ht 请求（禁用策略）
     std::string handle_rep_remove_hot_stock(const json& request) {
         json response;
         std::string symbol = request.value("symbol", "");
+        std::string strategy_name = request.value("strategy", "BreakoutPriceVolumeStrategy_v2");
 
         if (symbol.empty()) {
             response["success"] = false;
@@ -339,8 +339,6 @@ private:
             response["error"] = "Engine not initialized";
             return response.dump();
         }
-
-        std::string strategy_name = "BreakoutPriceVolumeStrategy";
 
         if (engine_->disable_strategy(symbol, strategy_name)) {
             LOG_M_INFO("REP remove_hot_stock_ht: disabled {}:{}", symbol, strategy_name);

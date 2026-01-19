@@ -9,9 +9,6 @@
 
 #include <cstring>
 #include <algorithm>
-#include <type_traits>
-#include <atomic>
-#include <chrono>
 
 // 持久化层 (可选)
 #include "persist_layer.h"
@@ -478,69 +475,63 @@ private:
     }
 
     // ==========================================
-    // OrderBook Snapshot 处理（备份/对比用）
+    // OrderBook Snapshot 处理
     // ==========================================
     void on_orderbook_snapshot(const com::htsc::mdc::insight::model::ADOrderbookSnapshot& snapshot) {
         // 转换并转发到策略引擎
-        MDOrderbookStruct ob_struct;
-        convert_to_orderbook_snapshot_fast(snapshot, ob_struct);
+        MDOrderbookStruct ob;
+        convert_to_orderbook_snapshot_fast(snapshot, ob);
         // 持久化 (入队，不阻塞)
-        if (persist_) persist_->log_snapshot(ob_struct);
-        engine_->on_market_orderbook_snapshot(ob_struct);
+        if (persist_) persist_->log_snapshot(ob);
+        engine_->on_market_orderbook_snapshot(ob);
 
-        const std::string& security_id = snapshot.htscsecurityid();
+        // 只打印 603277 的快照
+        if (std::strncmp(ob.htscsecurityid, "603277", 6) != 0) {
+            return;
+        }
 
-        // 采样控制：每100000次 或 每10分钟 打印一次
-        static std::atomic<uint64_t> snapshot_count{0};
-        static std::atomic<int64_t> last_log_time{0};  // 上次打印时间（秒）
+        // 计算价格乘数
+        double multiplier = 1.0;
+        int32_t power = ob.datamultiplepowerof10;
+        if (power > 0) {
+            for (int i = 0; i < power; ++i) multiplier *= 10.0;
+        } else if (power < 0) {
+            for (int i = 0; i < -power; ++i) multiplier /= 10.0;
+        }
 
-        uint64_t count = snapshot_count.fetch_add(1, std::memory_order_relaxed);
-        int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-        int64_t last_time = last_log_time.load(std::memory_order_relaxed);
+        // 打印所有字段到业务日志
+        LOG_BIZ(BIZ_SESS, "[OB_SNAP] ========== {} ==========", ob.htscsecurityid);
+        LOG_BIZ(BIZ_SESS, "[OB_SNAP] mddate={} mdtime={} datatimestamp={} snapshotmddatetime={}",
+            ob.mddate, ob.mdtime, ob.datatimestamp, ob.snapshotmddatetime);
+        LOG_BIZ(BIZ_SESS, "[OB_SNAP] tradingphasecode={} securityidsource={} securitytype={} channelno={} applseqnum={}",
+            ob.tradingphasecode, ob.securityidsource, ob.securitytype, ob.channelno, ob.applseqnum);
+        LOG_BIZ(BIZ_SESS, "[OB_SNAP] lastpx={:.4f} openpx={:.4f} closepx={:.4f} highpx={:.4f} lowpx={:.4f}",
+            ob.lastpx * multiplier, ob.openpx * multiplier, ob.closepx * multiplier,
+            ob.highpx * multiplier, ob.lowpx * multiplier);
+        LOG_BIZ(BIZ_SESS, "[OB_SNAP] maxpx={:.4f} minpx={:.4f} preclosepx={:.4f}",
+            ob.maxpx * multiplier, ob.minpx * multiplier, ob.preclosepx * multiplier);
+        LOG_BIZ(BIZ_SESS, "[OB_SNAP] numtrades={} totalvolumetrade={} totalvaluetrade={}",
+            ob.numtrades, ob.totalvolumetrade, ob.totalvaluetrade);
+        LOG_BIZ(BIZ_SESS, "[OB_SNAP] totalbuyqty={} totalsellqty={} weightedavgbuypx={:.4f} weightedavgsellpx={:.4f}",
+            ob.totalbuyqty, ob.totalsellqty, ob.weightedavgbuypx * multiplier, ob.weightedavgsellpx * multiplier);
+        LOG_BIZ(BIZ_SESS, "[OB_SNAP] totalbuynumber={} totalsellnumber={} numbuyorders={} numsellorders={}",
+            ob.totalbuynumber, ob.totalsellnumber, ob.numbuyorders, ob.numsellorders);
+        LOG_BIZ(BIZ_SESS, "[OB_SNAP] datamultiplepowerof10={}", ob.datamultiplepowerof10);
 
-        bool should_log = (count % 100000 == 0) || (now - last_time >= 600);  // 600秒 = 10分钟
+        // 打印买盘档位
+        LOG_BIZ(BIZ_SESS, "[OB_SNAP] BUY ENTRIES (count={}):", ob.buyentries_count);
+        for (int i = 0; i < ob.buyentries_count; ++i) {
+            const auto& e = ob.buyentries[i];
+            LOG_BIZ(BIZ_SESS, "[OB_SNAP]   BID[{}] level={} price={:.4f} totalqty={} orders={}",
+                i + 1, e.level, e.price * multiplier, e.totalqty, e.numberoforders);
+        }
 
-        if (should_log) {
-            last_log_time.store(now, std::memory_order_relaxed);
-
-            // 计算价格乘数
-            int32_t power = snapshot.datamultiplepowerof10();
-            double multiplier = 1.0;
-            if (power > 0) {
-                for (int i = 0; i < power; ++i) multiplier *= 10.0;
-            } else if (power < 0) {
-                for (int i = 0; i < -power; ++i) multiplier /= 10.0;
-            }
-
-            // 打印基本信息
-            LOG_MODULE_DEBUG(hft::logger::get_logger(), "Market", "[OB_SNAP] sym={} time={} last={:.2f} vol={} cnt={}",
-                security_id, snapshot.mdtime(),
-                snapshot.lastpx() * multiplier,
-                snapshot.totalvolumetrade(),
-                count);
-
-            // 打印买盘10档
-            int buy_levels = std::min(snapshot.buyentries_size(), 10);
-            for (int i = 0; i < buy_levels; ++i) {
-                const auto& entry = snapshot.buyentries(i);
-                LOG_MODULE_DEBUG(hft::logger::get_logger(), "Market", "[OB_SNAP] sym={} BID[{}] px={:.2f} qty={} orders={}",
-                    security_id, i + 1,
-                    entry.price() * multiplier,
-                    entry.totalqty(),
-                    entry.numberoforders());
-            }
-
-            // 打印卖盘10档
-            int sell_levels = std::min(snapshot.sellentries_size(), 10);
-            for (int i = 0; i < sell_levels; ++i) {
-                const auto& entry = snapshot.sellentries(i);
-                LOG_MODULE_DEBUG(hft::logger::get_logger(), "Market", "[OB_SNAP] sym={} ASK[{}] px={:.2f} qty={} orders={}",
-                    security_id, i + 1,
-                    entry.price() * multiplier,
-                    entry.totalqty(),
-                    entry.numberoforders());
-            }
+        // 打印卖盘档位
+        LOG_BIZ(BIZ_SESS, "[OB_SNAP] SELL ENTRIES (count={}):", ob.sellentries_count);
+        for (int i = 0; i < ob.sellentries_count; ++i) {
+            const auto& e = ob.sellentries[i];
+            LOG_BIZ(BIZ_SESS, "[OB_SNAP]   ASK[{}] level={} price={:.4f} totalqty={} orders={}",
+                i + 1, e.level, e.price * multiplier, e.totalqty, e.numberoforders);
         }
     }
 };

@@ -17,6 +17,7 @@
 
 // 引入策略
 #include "strategy/BreakoutPriceVolumeStrategy.h"
+#include "strategy/BreakoutPriceVolumeStrategy_v2.h"
 #include "strategy/OpeningRangeBreakoutStrategy.h"
 
 // 引入配置和策略工厂
@@ -52,6 +53,15 @@ void register_all_strategies() {
         [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
             auto strat = std::make_unique<BreakoutPriceVolumeStrategy>(symbol + "_Breakout", symbol);
             strat->strategy_type_id = StrategyIds::BREAKOUT_PRICE_VOLUME;
+            // 构造函数中已默认禁用
+            return strat;
+        });
+
+    // BreakoutPriceVolumeStrategy_v2: 使用 OrderBook 快照获取挂单量（不依赖 FastOrderBook）
+    factory.register_strategy("BreakoutPriceVolumeStrategy_v2",
+        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
+            auto strat = std::make_unique<BreakoutPriceVolumeStrategy_v2>(symbol + "_Breakout_v2", symbol);
+            strat->strategy_type_id = StrategyIds::BREAKOUT_PRICE_VOLUME_V2;
             // 构造函数中已默认禁用
             return strat;
         });
@@ -259,15 +269,15 @@ void run_live_mode(quill::Logger* logger,
         return;
     }
 
-    // 为所有股票添加默认策略 BreakoutPriceVolumeStrategy（默认禁用，需通过 ZMQ 命令启用）
+    // 为所有股票添加默认策略 BreakoutPriceVolumeStrategy_v2（默认禁用，需通过 ZMQ 命令启用）
     // 注意：如果配置文件已经有该策略，则跳过以避免重复注册导致悬垂指针
     int default_added = 0;
     for (const auto& symbol : valid_symbols) {
-        if (engine.has_strategy(symbol, "BreakoutPriceVolumeStrategy")) {
+        if (engine.has_strategy(symbol, "BreakoutPriceVolumeStrategy_v2")) {
             continue;  // 已有策略，跳过
         }
         try {
-            auto default_strategy = factory.create("BreakoutPriceVolumeStrategy", symbol, "");
+            auto default_strategy = factory.create("BreakoutPriceVolumeStrategy_v2", symbol, "");
             engine.register_strategy(symbol, std::move(default_strategy));
             default_added++;
         } catch (const std::exception& e) {
@@ -275,7 +285,7 @@ void run_live_mode(quill::Logger* logger,
         }
     }
     if (default_added > 0) {
-        LOG_MODULE_INFO(logger, MOD_ENGINE, "Added {} default BreakoutPriceVolumeStrategy instances", default_added);
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "Added {} default BreakoutPriceVolumeStrategy_v2 instances", default_added);
     }
 
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine with {} symbols...", valid_symbols.size());
@@ -288,13 +298,14 @@ void run_live_mode(quill::Logger* logger,
     if (engine_cfg.disable_zmq) {
         LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client disabled via config");
     } else {
-        g_zmq_client = std::make_unique<ZmqClient>(engine_cfg.zmq_endpoint);
+        g_zmq_client = std::make_unique<ZmqClient>(engine_cfg.zmq_endpoint, engine_cfg.zmq_rep_endpoint);
 
         // 注入策略引擎引用（支持运行时动态添加/删除策略）
         g_zmq_client->set_engine(&engine);
 
         if (g_zmq_client->start()) {
-            LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client started, endpoint: {}", engine_cfg.zmq_endpoint);
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client started, DEALER endpoint: {}, REP endpoint: {}",
+                           engine_cfg.zmq_endpoint, engine_cfg.zmq_rep_endpoint);
             LOG_MODULE_INFO(logger, MOD_ENGINE, "Runtime strategy management enabled via ZMQ");
 
             // 创建实盘上下文并设置给所有策略
