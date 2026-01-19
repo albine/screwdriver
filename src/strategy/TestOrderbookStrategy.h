@@ -3,6 +3,7 @@
 
 #include "strategy_base.h"
 #include "market_data_structs.h"
+#include "trade_signal.h"
 #include "logger.h"
 #include "utils/time_util.h"
 #include "utils/symbol_utils.h"
@@ -51,6 +52,16 @@ public:
                        order.orderqty,
                        order.orderbsflag == 1 ? "BUY" : "SELL");
             book.print_orderbook(10, "After Order " + std::to_string(order.applseqnum));
+
+            // 测试发送下单消息到 ROUTER
+            TradeSignal signal;
+            signal.strategy_name = name;
+            signal.symbol = symbol;
+            signal.side = TradeSignal::Side::BUY;
+            signal.price = order.orderprice;
+            signal.quantity = 100;
+            signal.trigger_time = order.mdtime;
+            place_order(signal);
         }
     }
 

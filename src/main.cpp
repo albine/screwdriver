@@ -152,11 +152,15 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
         return;
     }
 
-    // 创建回测上下文
-    auto backtest_ctx = std::make_unique<BacktestContext>();
+    // 创建 ZmqClient 和 LiveContext（用于测试 ZMQ 下单消息发送）
+    auto zmq_client = std::make_unique<ZmqClient>();
+    if (!zmq_client->start()) {
+        LOG_MODULE_WARNING(logger, MOD_ENGINE, "ZmqClient failed to start, place_order will not send ZMQ messages");
+    }
+    auto live_ctx = std::make_unique<LiveContext>(zmq_client.get());
 
     // 为所有策略设置上下文
-    engine.set_context_for_all_strategies(backtest_ctx.get());
+    engine.set_context_for_all_strategies(live_ctx.get());
 
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Starting strategy engine with {} symbols...", valid_symbols.size());
     engine.start();
