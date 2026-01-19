@@ -110,8 +110,8 @@ inline std::vector<StrategyConfigEntry> parse_backtest_config(const std::string&
 // ==========================================
 struct EngineConfig {
     // ZMQ 配置
-    std::string zmq_endpoint = "tcp://localhost:13380";  // DEALER 连接的 ROUTER 地址
-    std::string zmq_rep_endpoint = "tcp://*:13381";      // REP server 绑定地址
+    std::string zmq_endpoint = "tcp://localhost:13380";   // DEALER1 连接的 ROUTER 地址
+    std::string zmq_endpoint2 = "tcp://localhost:13381";  // DEALER2 连接的 ROUTER 地址
     bool disable_zmq = false;
 
     // 持久化配置
@@ -170,8 +170,8 @@ inline EngineConfig parse_engine_config(const std::string& filepath) {
         // 设置配置值
         if (key == "zmq_endpoint") {
             config.zmq_endpoint = value;
-        } else if (key == "zmq_rep_endpoint") {
-            config.zmq_rep_endpoint = value;
+        } else if (key == "zmq_endpoint2" || key == "zmq_rep_endpoint") {
+            config.zmq_endpoint2 = value;
         } else if (key == "disable_zmq") {
             config.disable_zmq = (value == "true" || value == "1");
         } else if (key == "disable_persist") {
