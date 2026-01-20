@@ -325,10 +325,10 @@ private:
             std::string message = payload.value("message", "");
             LOG_M_INFO("DEALER{} registered: status={}, message={}", dealer.index, status, message);
 
-        } else if (action == "add_hot_stock_ht") {
+        } else if (action == "add_hot_stock" || action == "add_hot_stock_ht") {
             handle_add_hot_stock_ht(dealer, req_id, payload);
 
-        } else if (action == "remove_hot_stock_ht") {
+        } else if (action == "remove_hot_stock" || action == "remove_hot_stock_ht") {
             handle_remove_hot_stock_ht(dealer, req_id, payload);
 
         } else if (action == zmq_ht_proto::Action::ADD_STRATEGY) {
@@ -355,100 +355,142 @@ private:
     // 策略管理命令处理
     // ==========================================
 
-    void handle_add_strategy(DealerConnection& dealer, const std::string& req_id, const json& payload) {
+    // 添加策略的结果
+    struct AddStrategyResult {
+        bool success = false;
+        std::string error_msg;
+        std::string available_strategies;  // 当策略类型不存在时填充
+        std::string symbol_internal;       // 带后缀的 symbol
+        std::string strategy_name;
+        std::string params_str;
+    };
+
+    // 核心添加策略逻辑（不发送响应）
+    AddStrategyResult try_add_strategy(const std::string& symbol_raw,
+                                       const std::string& strategy_name,
+                                       const json& params) {
+        AddStrategyResult result;
+        result.strategy_name = strategy_name;
+
         if (!engine_) {
-            LOG_M_ERROR("Engine not initialized, cannot add strategy");
-            send_response(dealer, req_id, "error", {{"message", "Engine not initialized"}});
-            return;
+            result.error_msg = "Engine not initialized";
+            return result;
         }
 
-        auto msg = zmq_ht_proto::AddStrategyMsg::from_json(payload);
-
-        if (msg.symbol.empty()) {
-            LOG_M_WARNING("ADD_STRATEGY: missing symbol");
-            send_response(dealer, req_id, "error", {{"message", "Missing symbol"}});
-            return;
+        if (symbol_raw.empty()) {
+            result.error_msg = "Missing symbol";
+            return result;
         }
 
-        std::string symbol = symbol_utils::normalize_symbol(msg.symbol);
+        result.symbol_internal = symbol_utils::normalize_symbol(symbol_raw);
 
-        if (engine_->has_strategy(symbol, msg.strategy_name)) {
-            LOG_M_WARNING("ADD_STRATEGY: strategy already exists {}:{}", symbol, msg.strategy_name);
-            send_response(dealer, req_id, "error", {{"message", "Strategy already exists: " + symbol + ":" + msg.strategy_name}});
-            return;
+        if (engine_->has_strategy(result.symbol_internal, strategy_name)) {
+            result.error_msg = "Strategy already exists: " + result.symbol_internal + ":" + strategy_name;
+            return result;
         }
 
         auto& factory = StrategyFactory::instance();
-        if (!factory.has_strategy(msg.strategy_name)) {
-            LOG_M_WARNING("ADD_STRATEGY: unknown strategy type {}", msg.strategy_name);
+        if (!factory.has_strategy(strategy_name)) {
             auto available = factory.get_registered_strategies();
-            std::string avail_str;
-            for (const auto& s : available) avail_str += s + " ";
-            send_response(dealer, req_id, "error", {
-                {"message", "Unknown strategy: " + msg.strategy_name},
-                {"available", avail_str}
-            });
-            return;
+            for (const auto& s : available) result.available_strategies += s + " ";
+            result.error_msg = "Unknown strategy: " + strategy_name;
+            return result;
         }
 
-        std::string params_str = parse_strategy_params(msg.params);
+        result.params_str = parse_strategy_params(params);
 
         try {
-            auto strategy = factory.create(msg.strategy_name, symbol, params_str);
-            if (engine_->register_strategy_runtime(symbol, std::move(strategy))) {
-                LOG_M_INFO("ADD_STRATEGY: added {} -> {} (params={})", symbol, msg.strategy_name, params_str);
-                send_response(dealer, req_id, "success", {
-                    {"message", "Strategy added"},
-                    {"symbol", symbol},
-                    {"strategy", msg.strategy_name},
-                    {"params", params_str}
-                });
+            auto strategy = factory.create(strategy_name, result.symbol_internal, result.params_str);
+            if (engine_->register_strategy_runtime(result.symbol_internal, std::move(strategy))) {
+                result.success = true;
             } else {
-                LOG_M_ERROR("ADD_STRATEGY: failed to register {}", symbol);
-                send_response(dealer, req_id, "error", {{"message", "Failed to register strategy"}});
+                result.error_msg = "Failed to register strategy";
             }
         } catch (const std::exception& e) {
-            LOG_M_ERROR("ADD_STRATEGY: exception - {}", e.what());
-            send_response(dealer, req_id, "error", {{"message", e.what()}});
+            result.error_msg = e.what();
+        }
+
+        return result;
+    }
+
+    void handle_add_strategy(DealerConnection& dealer, const std::string& req_id, const json& payload) {
+        auto msg = zmq_ht_proto::AddStrategyMsg::from_json(payload);
+        auto result = try_add_strategy(msg.symbol, msg.strategy_name, msg.params);
+
+        if (result.success) {
+            LOG_M_INFO("ADD_STRATEGY: added {}:{} (params={})", result.symbol_internal, result.strategy_name, result.params_str);
+            send_response(dealer, req_id, "success", {
+                {"message", "Strategy added"},
+                {"symbol", result.symbol_internal},
+                {"strategy", result.strategy_name},
+                {"params", result.params_str}
+            });
+        } else {
+            LOG_M_WARNING("ADD_STRATEGY: {}", result.error_msg);
+            json err_data = {{"message", result.error_msg}};
+            if (!result.available_strategies.empty()) {
+                err_data["available"] = result.available_strategies;
+            }
+            send_response(dealer, req_id, "error", err_data);
         }
     }
 
-    void handle_remove_strategy(DealerConnection& dealer, const std::string& req_id, const json& payload) {
+    // 移除策略的结果
+    struct RemoveStrategyResult {
+        bool success = false;
+        std::string error_msg;
+        std::string symbol_internal;  // 带后缀的 symbol
+        std::string strategy_name;
+    };
+
+    // 核心移除策略逻辑（不发送响应）
+    RemoveStrategyResult try_remove_strategy(const std::string& symbol_raw,
+                                             const std::string& strategy_name) {
+        RemoveStrategyResult result;
+        result.strategy_name = strategy_name;
+
         if (!engine_) {
-            LOG_M_ERROR("Engine not initialized, cannot remove strategy");
-            send_response(dealer, req_id, "error", {{"message", "Engine not initialized"}});
-            return;
+            result.error_msg = "Engine not initialized";
+            return result;
         }
 
+        if (symbol_raw.empty()) {
+            result.error_msg = "Missing symbol";
+            return result;
+        }
+
+        if (strategy_name.empty()) {
+            result.error_msg = "Missing strategy name";
+            return result;
+        }
+
+        result.symbol_internal = symbol_utils::normalize_symbol(symbol_raw);
+
+        if (!engine_->has_strategy(result.symbol_internal, strategy_name)) {
+            result.error_msg = "Strategy not found: " + result.symbol_internal + ":" + strategy_name;
+            return result;
+        }
+
+        engine_->unregister_strategy(result.symbol_internal, strategy_name);
+        result.success = true;
+        return result;
+    }
+
+    void handle_remove_strategy(DealerConnection& dealer, const std::string& req_id, const json& payload) {
         auto msg = zmq_ht_proto::RemoveStrategyMsg::from_json(payload);
+        auto result = try_remove_strategy(msg.symbol, msg.strategy_name);
 
-        if (msg.symbol.empty()) {
-            LOG_M_WARNING("REMOVE_STRATEGY: missing symbol");
-            send_response(dealer, req_id, "error", {{"message", "Missing symbol"}});
-            return;
+        if (result.success) {
+            LOG_M_INFO("REMOVE_STRATEGY: removed {}:{}", result.symbol_internal, result.strategy_name);
+            send_response(dealer, req_id, "success", {
+                {"message", "Strategy removed"},
+                {"symbol", result.symbol_internal},
+                {"strategy", result.strategy_name}
+            });
+        } else {
+            LOG_M_WARNING("REMOVE_STRATEGY: {}", result.error_msg);
+            send_response(dealer, req_id, "error", {{"message", result.error_msg}});
         }
-
-        if (msg.strategy_name.empty()) {
-            LOG_M_WARNING("REMOVE_STRATEGY: missing strategy name");
-            send_response(dealer, req_id, "error", {{"message", "Missing strategy name"}});
-            return;
-        }
-
-        std::string symbol = symbol_utils::normalize_symbol(msg.symbol);
-
-        if (!engine_->has_strategy(symbol, msg.strategy_name)) {
-            LOG_M_WARNING("REMOVE_STRATEGY: strategy not found {}:{}", symbol, msg.strategy_name);
-            send_response(dealer, req_id, "error", {{"message", "Strategy not found: " + symbol + ":" + msg.strategy_name}});
-            return;
-        }
-
-        engine_->unregister_strategy(symbol, msg.strategy_name);
-        LOG_M_INFO("REMOVE_STRATEGY: removed {}:{}", symbol, msg.strategy_name);
-        send_response(dealer, req_id, "success", {
-            {"message", "Strategy removed"},
-            {"symbol", symbol},
-            {"strategy", msg.strategy_name}
-        });
     }
 
     void handle_list_strategies(DealerConnection& dealer, const std::string& req_id) {
@@ -550,77 +592,62 @@ private:
     // ==========================================
 
     void handle_add_hot_stock_ht(DealerConnection& dealer, const std::string& req_id, const json& payload) {
+        // 消息格式: { "action": "add_hot_stock", "symbol": "600000", "strategy": "BreakoutPriceVolumeStrategy", "params": {"breakout_price": 12.50} }
         std::string symbol = payload.value("symbol", "");
-        double target_price = payload.value("target_price", 0.0);
-        std::string strategy_name = payload.value("strategy", "BreakoutPriceVolumeStrategy_v2");
+        std::string strategy_name = payload.value("strategy", "BreakoutPriceVolumeStrategy");
+        json params = payload.contains("params") ? payload["params"] : json{};
 
-        if (symbol.empty()) {
-            send_response(dealer, req_id, "add_hot_stock_ht_resp", {{"success", false}, {"msg", "Missing symbol"}});
-            return;
-        }
+        auto result = try_add_strategy(symbol, strategy_name, params);
+        std::string symbol_resp = symbol_utils::strip_suffix(result.symbol_internal);
 
-        std::string symbol_internal = symbol_utils::normalize_symbol(symbol);
-        std::string symbol_resp = symbol_utils::strip_suffix(symbol_internal);
-
-        if (!engine_) {
-            send_response(dealer, req_id, "add_hot_stock_ht_resp", {{"success", false}, {"msg", "Engine not initialized"}});
-            return;
-        }
-
-        if (engine_->enable_strategy(symbol_internal, strategy_name, symbol_utils::price_to_int(target_price))) {
+        if (result.success) {
             // 记录 symbol 来源通道（用于下单时路由）
             {
                 std::unique_lock lock(symbol_dealer_mutex_);
-                symbol_dealer_map_[symbol_internal] = dealer.index;
+                symbol_dealer_map_[result.symbol_internal] = dealer.index;
             }
-            LOG_M_INFO("add_hot_stock_ht: enabled {}:{}, target_price={}, dealer={}", symbol_internal, strategy_name, target_price, dealer.index);
-            send_response(dealer, req_id, "add_hot_stock_ht_resp", {
+            LOG_M_INFO("add_hot_stock: added {}:{}, params={}, dealer={}", result.symbol_internal, result.strategy_name, result.params_str, dealer.index);
+            send_response(dealer, req_id, "add_hot_stock_resp", {
                 {"success", true},
                 {"symbol", symbol_resp},
-                {"strategy", strategy_name},
-                {"target_price", target_price}
+                {"strategy", result.strategy_name},
+                {"params", result.params_str}
             });
         } else {
-            send_response(dealer, req_id, "add_hot_stock_ht_resp", {
-                {"success", false},
-                {"msg", "Strategy not found: " + symbol_resp + ":" + strategy_name}
-            });
+            LOG_M_WARNING("add_hot_stock: {}", result.error_msg);
+            json err_data = {{"success", false}, {"msg", result.error_msg}};
+            if (!result.available_strategies.empty()) {
+                err_data["available"] = result.available_strategies;
+            }
+            send_response(dealer, req_id, "add_hot_stock_resp", err_data);
         }
     }
 
     void handle_remove_hot_stock_ht(DealerConnection& dealer, const std::string& req_id, const json& payload) {
+        // 消息格式: { "action": "remove_hot_stock", "symbol": "600000" }
         std::string symbol = payload.value("symbol", "");
-        std::string strategy_name = payload.value("strategy", "BreakoutPriceVolumeStrategy_v2");
+        std::string strategy_name = payload.value("strategy", "BreakoutPriceVolumeStrategy");
 
-        if (symbol.empty()) {
-            send_response(dealer, req_id, "remove_hot_stock_ht_resp", {{"success", false}, {"msg", "Missing symbol"}});
-            return;
-        }
+        auto result = try_remove_strategy(symbol, strategy_name);
+        std::string symbol_resp = symbol_utils::strip_suffix(result.symbol_internal);
 
-        std::string symbol_internal = symbol_utils::normalize_symbol(symbol);
-        std::string symbol_resp = symbol_utils::strip_suffix(symbol_internal);
-
-        if (!engine_) {
-            send_response(dealer, req_id, "remove_hot_stock_ht_resp", {{"success", false}, {"msg", "Engine not initialized"}});
-            return;
-        }
-
-        if (engine_->disable_strategy(symbol_internal, strategy_name)) {
+        if (result.success) {
             // 移除 symbol 来源记录
             {
                 std::unique_lock lock(symbol_dealer_mutex_);
-                symbol_dealer_map_.erase(symbol_internal);
+                symbol_dealer_map_.erase(result.symbol_internal);
             }
-            LOG_M_INFO("remove_hot_stock_ht: disabled {}:{}", symbol_internal, strategy_name);
-            send_response(dealer, req_id, "remove_hot_stock_ht_resp", {
+            LOG_M_INFO("remove_hot_stock: removed {}:{}", result.symbol_internal, result.strategy_name);
+            send_response(dealer, req_id, "remove_hot_stock_resp", {
                 {"success", true},
                 {"symbol", symbol_resp},
-                {"strategy", strategy_name}
+                {"strategy", result.strategy_name}
             });
         } else {
-            send_response(dealer, req_id, "remove_hot_stock_ht_resp", {
+            LOG_M_WARNING("remove_hot_stock: {}", result.error_msg);
+            send_response(dealer, req_id, "remove_hot_stock_resp", {
                 {"success", false},
-                {"msg", "Strategy not found: " + symbol_resp + ":" + strategy_name}
+                {"msg", result.error_msg}
             });
         }
     }

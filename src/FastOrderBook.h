@@ -1,3 +1,6 @@
+#ifndef FAST_ORDER_BOOK_H
+#define FAST_ORDER_BOOK_H
+
 #include <vector>
 #include <cstdint>
 #include <unordered_map>
@@ -184,3 +187,5 @@ private:
     // 辅助：安全获取 Level 引用
     Level* get_level_ptr(uint32_t price);
 };
+
+#endif // FAST_ORDER_BOOK_H

@@ -3,16 +3,19 @@
 Mock ZMQ ROUTER for testing trading engine's ZMQ client.
 
 Usage:
-    python script/mock_zmq_router.py [--port 13380] [--rep-port 13381]
+    python script/mock_zmq_router.py [--port1 13380] [--port2 13381]
 
 Architecture:
-    This script acts as:
+    This script acts as two ROUTER sockets:
     1. ROUTER (port 13380) - sends commands to engine's DEALER socket
-    2. REQ client (port 13381) - sends requests to engine's REP socket
+    2. ROUTER (port 13381) - sends commands to engine's DEALER socket
 
 Message formats:
     ROUTER -> DEALER: {"req_id": "...", "payload": {"action": "...", ...}}
-    REQ -> REP:       {"action": "add_hot_stock_ht", "symbol": "...", "target_price": ...}
+
+Supported actions:
+    - add_hot_stock_ht: Add hot stock with target price
+    - remove_hot_stock_ht: Remove hot stock
 """
 
 import zmq
@@ -20,16 +23,16 @@ import json
 import time
 import argparse
 import threading
-import sys
 from datetime import datetime
 
 # Default strategy name
-DEFAULT_STRATEGY = "BreakoutPriceVolumeStrategy_v2"
+DEFAULT_STRATEGY = "BreakoutPriceVolumeStrategy"
 
 
 class MockZmqRouter:
-    def __init__(self, port: int = 13380):
+    def __init__(self, port: int, name: str = "ROUTER"):
         self.port = port
+        self.name = name
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.ROUTER)
         self.running = False
@@ -40,9 +43,7 @@ class MockZmqRouter:
     def start(self):
         endpoint = f"tcp://*:{self.port}"
         self.socket.bind(endpoint)
-        print(f"[ROUTER] Listening on {endpoint}")
-        print(f"[ROUTER] Waiting for DEALER connections...")
-        print()
+        print(f"[{self.name}] Listening on {endpoint}")
 
         self.running = True
 
@@ -93,12 +94,12 @@ class MockZmqRouter:
             # Format output based on action type
             if action == "heartbeat":
                 # Silent for heartbeat, just show a dot
-                print(f"\r[{timestamp}] <-- [{identity_str}] ♥ heartbeat seq={payload.get('seq', '?')}")
+                print(f"\r[{timestamp}] [{self.name}:{self.port}] <-- [{identity_str}] heartbeat seq={payload.get('seq', '?')}")
             elif action == "register":
-                print(f"\r[{timestamp}] <-- [{identity_str}] ✓ REGISTERED (client={payload.get('client', '?')})")
+                print(f"\r[{timestamp}] [{self.name}:{self.port}] <-- [{identity_str}] REGISTERED (client={payload.get('client', '?')})")
             else:
                 # Response from client (success/error/etc)
-                print(f"\r[{timestamp}] <-- [{identity_str}] {action}")
+                print(f"\r[{timestamp}] [{self.name}:{self.port}] <-- [{identity_str}] {action}")
                 if "data" in payload:
                     print(f"    data: {json.dumps(payload['data'], ensure_ascii=False, indent=2)}")
                 else:
@@ -107,14 +108,14 @@ class MockZmqRouter:
             print("> ", end="", flush=True)
 
         except json.JSONDecodeError as e:
-            print(f"\r[ERROR] Invalid JSON from {identity_str}: {e}")
+            print(f"\r[ERROR] [{self.name}:{self.port}] Invalid JSON from {identity_str}: {e}")
             print(f"    raw: {data[:200]}")
             print("> ", end="", flush=True)
 
     def send_to_client(self, identity_str: str, payload: dict):
         """Send a message to a specific client (format: {req_id, payload})."""
         self.msg_seq += 1
-        req_id = f"router_{self.msg_seq}"
+        req_id = f"router_{self.port}_{self.msg_seq}"
 
         # Message format matching zmq_client.h expectation
         msg = {
@@ -134,7 +135,7 @@ class MockZmqRouter:
         self.socket.send_multipart([identity_bytes, data.encode()])
 
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        print(f"[{timestamp}] --> [{identity_str}] {payload.get('action', 'unknown')}")
+        print(f"[{timestamp}] [{self.name}:{self.port}] --> [{identity_str}] {payload.get('action', 'unknown')}")
         print(f"    msg: {json.dumps(msg, ensure_ascii=False)}")
 
     def broadcast(self, payload: dict):
@@ -143,7 +144,7 @@ class MockZmqRouter:
             clients_copy = dict(self.clients)
 
         if not clients_copy:
-            print("[WARN] No clients connected. Waiting for client to connect...")
+            print(f"[WARN] [{self.name}:{self.port}] No clients connected.")
             return
 
         for identity in clients_copy:
@@ -152,61 +153,6 @@ class MockZmqRouter:
     def get_clients(self):
         with self.lock:
             return dict(self.clients)
-
-
-class ReqClient:
-    """REQ client for sending requests to engine's REP socket (port 13381)."""
-
-    def __init__(self, endpoint: str = "tcp://localhost:13381"):
-        self.endpoint = endpoint
-        self.context = zmq.Context()
-        self.socket = None
-
-    def connect(self):
-        """Connect to the REP server."""
-        self.socket = self.context.socket(zmq.REQ)
-        self.socket.setsockopt(zmq.RCVTIMEO, 5000)  # 5s timeout
-        self.socket.setsockopt(zmq.SNDTIMEO, 5000)
-        self.socket.connect(self.endpoint)
-
-    def close(self):
-        if self.socket:
-            self.socket.close()
-            self.socket = None
-
-    def send_request(self, payload: dict) -> dict:
-        """Send a request and wait for response."""
-        if not self.socket:
-            self.connect()
-
-        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-
-        try:
-            data = json.dumps(payload, ensure_ascii=False)
-            print(f"[{timestamp}] REQ --> {self.endpoint}")
-            print(f"    {data}")
-
-            self.socket.send_string(data)
-            response = self.socket.recv_string()
-
-            print(f"[{timestamp}] REP <--")
-            try:
-                resp_json = json.loads(response)
-                print(f"    {json.dumps(resp_json, ensure_ascii=False, indent=2)}")
-                return resp_json
-            except json.JSONDecodeError:
-                print(f"    {response}")
-                return {"raw": response}
-
-        except zmq.Again:
-            print(f"[{timestamp}] REQ timeout - no response from {self.endpoint}")
-            # Reconnect for next request
-            self.close()
-            return {"error": "timeout"}
-        except zmq.ZMQError as e:
-            print(f"[{timestamp}] REQ error: {e}")
-            self.close()
-            return {"error": str(e)}
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -222,93 +168,67 @@ def normalize_symbol(symbol: str) -> str:
 
 def print_help():
     print("""
-═══════════════════════════════════════════════════════════════════════════════
-                        Mock ZMQ ROUTER - Commands
-═══════════════════════════════════════════════════════════════════════════════
+===========================================================================
+                    Mock ZMQ ROUTER - Commands
+===========================================================================
 
-  Via ROUTER -> DEALER (port 13380):
-  ──────────────────────────────────
-    add <symbol> [strategy] [price]   - Add a new strategy instance
-    remove <symbol> [strategy]        - Remove a strategy instance
-    enable <symbol> [strategy]        - Enable an existing strategy
-    disable <symbol> [strategy]       - Disable a strategy
-    list                              - List all strategies
-    status                            - Query engine status
+  Commands (sent via ROUTER/DEALER to both ports):
+  ------------------------------------------------
+    add <symbol> <price>       - add_hot_stock_ht (add hot stock)
+    remove <symbol>            - remove_hot_stock_ht (remove hot stock)
 
-  Via REQ -> REP (port 13381):
-  ────────────────────────────
-    ht_add <symbol> <price>           - add_hot_stock_ht (enable BreakoutPriceVolumeStrategy_v2)
-    ht_remove <symbol>                - remove_hot_stock_ht (disable BreakoutPriceVolumeStrategy_v2)
+  Target port selection:
+    1 <cmd>                    - Send to port 13380 only
+    2 <cmd>                    - Send to port 13381 only
+    <cmd>                      - Send to both ports (default)
 
   System:
-    clients                           - Show connected DEALER clients
-    raw <json>                        - Send raw payload via ROUTER
-    req <json>                        - Send raw request via REQ
+    clients                    - Show connected DEALER clients
+    raw <json>                 - Send raw payload to both routers
 
   Other:
-    help                              - Show this help
-    quit/exit/q                       - Exit
+    help                       - Show this help
+    quit/exit/q                - Exit
 
-═══════════════════════════════════════════════════════════════════════════════
+===========================================================================
   Examples:
-    # ROUTER commands (async, no response expected)
-    add 600000 98.5
-    enable 600000
-    disable 600000
-    list
-
-    # REQ commands (sync, waits for response)
-    ht_add 600000 98.50               - Enable strategy with target price
-    ht_remove 600000                  - Disable strategy
-
-    raw {"action": "status"}
-    req {"action": "add_hot_stock_ht", "symbol": "600000", "target_price": 98.5}
-═══════════════════════════════════════════════════════════════════════════════
+    add 600000 98.50           - Send add_hot_stock_ht to both ports
+    remove 600000              - Send remove_hot_stock_ht to both ports
+    1 add 600000 98.50         - Send add_hot_stock_ht to port 13380 only
+    2 remove 600000            - Send remove_hot_stock_ht to port 13381 only
+    raw {"action": "add_hot_stock_ht", "symbol": "600000.SH", "target_price": 98.5}
+===========================================================================
 """)
-
-
-def parse_add_args(args_str: str):
-    """Parse add command arguments: <symbol> [strategy] [price]"""
-    parts = args_str.split()
-    if not parts:
-        return None, None, None
-
-    symbol = normalize_symbol(parts[0])
-    strategy = DEFAULT_STRATEGY
-    price = 0.0
-
-    if len(parts) >= 2:
-        # Check if second arg is a number (price) or strategy name
-        try:
-            price = float(parts[1])
-        except ValueError:
-            strategy = parts[1]
-            if len(parts) >= 3:
-                try:
-                    price = float(parts[2])
-                except ValueError:
-                    pass
-
-    return symbol, strategy, price
 
 
 def main():
     parser = argparse.ArgumentParser(description="Mock ZMQ ROUTER for testing trading engine")
-    parser.add_argument("--port", type=int, default=13380, help="ROUTER port to listen on (default: 13380)")
-    parser.add_argument("--rep-port", type=int, default=13381, help="REP port to connect to (default: 13381)")
-    parser.add_argument("--rep-host", type=str, default="localhost", help="REP host to connect to (default: localhost)")
+    parser.add_argument("--port1", type=int, default=13380, help="First ROUTER port (default: 13380)")
+    parser.add_argument("--port2", type=int, default=13381, help="Second ROUTER port (default: 13381)")
     args = parser.parse_args()
 
-    router = MockZmqRouter(port=args.port)
-    router.start()
+    # Create two ROUTER sockets
+    router1 = MockZmqRouter(port=args.port1, name="ROUTER1")
+    router2 = MockZmqRouter(port=args.port2, name="ROUTER2")
 
-    # REQ client for sending to engine's REP socket
-    req_endpoint = f"tcp://{args.rep_host}:{args.rep_port}"
-    req_client = ReqClient(endpoint=req_endpoint)
-    print(f"[REQ] Will connect to {req_endpoint} for ht_add/ht_remove commands")
+    router1.start()
+    router2.start()
+
+    print(f"[INFO] Both ROUTER sockets started (ports {args.port1}, {args.port2})")
+    print(f"[INFO] Waiting for DEALER connections...")
     print()
 
     print_help()
+
+    def broadcast_to_routers(payload: dict, target: str = "both"):
+        """Send to specified router(s)."""
+        if target == "1":
+            router1.broadcast(payload)
+        elif target == "2":
+            router2.broadcast(payload)
+        else:  # both
+            router1.broadcast(payload)
+            router2.broadcast(payload)
 
     try:
         while True:
@@ -319,6 +239,15 @@ def main():
 
             if not cmd:
                 continue
+
+            # Check for target prefix (1 or 2)
+            target = "both"
+            if cmd.startswith("1 "):
+                target = "1"
+                cmd = cmd[2:].strip()
+            elif cmd.startswith("2 "):
+                target = "2"
+                cmd = cmd[2:].strip()
 
             parts = cmd.split(maxsplit=1)
             action = parts[0].lower()
@@ -331,109 +260,34 @@ def main():
                 print_help()
 
             elif action == "clients":
-                clients = router.get_clients()
-                if not clients:
-                    print("No clients connected")
+                print(f"\n[ROUTER1:{router1.port}] clients:")
+                clients1 = router1.get_clients()
+                if not clients1:
+                    print("  No clients connected")
                 else:
-                    print(f"Connected clients ({len(clients)}):")
-                    for identity, info in clients.items():
+                    for identity, info in clients1.items():
                         ago = time.time() - info["last_seen"]
-                        print(f"  • {identity} (last seen {ago:.1f}s ago)")
+                        print(f"  - {identity} (last seen {ago:.1f}s ago)")
 
-            elif action == "status":
-                router.broadcast({"action": "status"})
-
-            elif action == "list":
-                router.broadcast({"action": "list_strategies"})
+                print(f"\n[ROUTER2:{router2.port}] clients:")
+                clients2 = router2.get_clients()
+                if not clients2:
+                    print("  No clients connected")
+                else:
+                    for identity, info in clients2.items():
+                        ago = time.time() - info["last_seen"]
+                        print(f"  - {identity} (last seen {ago:.1f}s ago)")
+                print()
 
             elif action == "add":
                 if not args_str:
-                    print("Usage: add <symbol> [strategy] [price]")
-                    print("  e.g., add 600000 98.5")
-                    continue
-
-                symbol, strategy, price = parse_add_args(args_str)
-                payload = {
-                    "action": "add_strategy",
-                    "symbol": symbol,
-                    "strategy": strategy,
-                }
-                # params can be number, string, or object
-                if price > 0:
-                    payload["params"] = int(price * 10000)  # Convert to internal price format
-
-                router.broadcast(payload)
-
-            elif action == "remove":
-                if not args_str:
-                    print("Usage: remove <symbol> [strategy]")
-                    continue
-
-                parts = args_str.split()
-                symbol = normalize_symbol(parts[0])
-                strategy = parts[1] if len(parts) > 1 else DEFAULT_STRATEGY
-
-                payload = {
-                    "action": "remove_strategy",
-                    "symbol": symbol,
-                    "strategy": strategy
-                }
-                router.broadcast(payload)
-
-            elif action == "enable":
-                if not args_str:
-                    print("Usage: enable <symbol> [strategy]")
-                    continue
-
-                parts = args_str.split()
-                symbol = normalize_symbol(parts[0])
-                strategy = parts[1] if len(parts) > 1 else DEFAULT_STRATEGY
-
-                payload = {
-                    "action": "enable_strategy",
-                    "symbol": symbol,
-                    "strategy": strategy
-                }
-                router.broadcast(payload)
-
-            elif action == "disable":
-                if not args_str:
-                    print("Usage: disable <symbol> [strategy]")
-                    continue
-
-                parts = args_str.split()
-                symbol = normalize_symbol(parts[0])
-                strategy = parts[1] if len(parts) > 1 else DEFAULT_STRATEGY
-
-                payload = {
-                    "action": "disable_strategy",
-                    "symbol": symbol,
-                    "strategy": strategy
-                }
-                router.broadcast(payload)
-
-            elif action == "raw":
-                if not args_str:
-                    print("Usage: raw <json>")
-                    print('  e.g., raw {"action": "status"}')
-                    continue
-                try:
-                    payload = json.loads(args_str)
-                    router.broadcast(payload)
-                except json.JSONDecodeError as e:
-                    print(f"Invalid JSON: {e}")
-
-            # ============ REQ -> REP commands ============
-
-            elif action == "ht_add":
-                if not args_str:
-                    print("Usage: ht_add <symbol> <price>")
-                    print("  e.g., ht_add 600000 98.50")
+                    print("Usage: add <symbol> <price>")
+                    print("  e.g., add 600000 98.50")
                     continue
 
                 parts = args_str.split()
                 if len(parts) < 2:
-                    print("Usage: ht_add <symbol> <price>")
+                    print("Usage: add <symbol> <price>")
                     continue
 
                 symbol = normalize_symbol(parts[0])
@@ -449,11 +303,11 @@ def main():
                     "target_price": price,
                     "strategy": DEFAULT_STRATEGY
                 }
-                req_client.send_request(payload)
+                broadcast_to_routers(payload, target)
 
-            elif action == "ht_remove":
+            elif action == "remove":
                 if not args_str:
-                    print("Usage: ht_remove <symbol>")
+                    print("Usage: remove <symbol>")
                     continue
 
                 symbol = normalize_symbol(args_str.split()[0])
@@ -462,16 +316,16 @@ def main():
                     "symbol": symbol,
                     "strategy": DEFAULT_STRATEGY
                 }
-                req_client.send_request(payload)
+                broadcast_to_routers(payload, target)
 
-            elif action == "req":
+            elif action == "raw":
                 if not args_str:
-                    print("Usage: req <json>")
-                    print('  e.g., req {"action": "add_hot_stock_ht", "symbol": "600000", "target_price": 98.5}')
+                    print("Usage: raw <json>")
+                    print('  e.g., raw {"action": "add_hot_stock_ht", "symbol": "600000.SH", "target_price": 98.5}')
                     continue
                 try:
                     payload = json.loads(args_str)
-                    req_client.send_request(payload)
+                    broadcast_to_routers(payload, target)
                 except json.JSONDecodeError as e:
                     print(f"Invalid JSON: {e}")
 
@@ -481,8 +335,8 @@ def main():
     except KeyboardInterrupt:
         print("\nShutting down...")
 
-    req_client.close()
-    router.stop()
+    router1.stop()
+    router2.stop()
     print("Bye!")
 
 

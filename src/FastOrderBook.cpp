@@ -46,23 +46,26 @@ FastOrderBook::FastOrderBook(uint32_t code, ObjectPool<OrderNode>& pool, uint32_
 bool FastOrderBook::on_order(const MDOrderStruct& order) {
     // 映射 MDOrderStruct.ordertype 到内部 OrderType
     // 约定 (基于 OrderBook.cpp): 1=Market, 2=Limit, 3=Best, 4=Cancel
-    // 注意：使用orderno作为订单唯一标识，因为成交回报中使用orderno
+    // 注意：深圳使用 orderindex 作为订单唯一标识（与成交回报中的 TradeBuyNo/TradeSellNo 匹配）
+    //      上海使用 orderno
+    uint64_t order_id = (order.orderno != 0) ? order.orderno : order.orderindex;
+
     switch (order.ordertype) {
         case 1: // Market Order
-            return add_order(order.orderno, OrderType::Market,
+            return add_order(order_id, OrderType::Market,
                              (order.orderbsflag == 1 ? Side::Buy : Side::Sell),
                              (uint32_t)order.orderprice, (uint32_t)order.orderqty);
         case 2: // Limit Order
-            return add_order(order.orderno, OrderType::Limit,
+            return add_order(order_id, OrderType::Limit,
                              (order.orderbsflag == 1 ? Side::Buy : Side::Sell),
                              (uint32_t)order.orderprice, (uint32_t)order.orderqty);
         case 3: // Best Order
-            return add_order(order.orderno, OrderType::Best,
+            return add_order(order_id, OrderType::Best,
                              (order.orderbsflag == 1 ? Side::Buy : Side::Sell),
                              (uint32_t)order.orderprice, (uint32_t)order.orderqty);
         case 4:  // Cancel (Standard)
         case 10: // ShanghaiCancel
-            return cancel_order(order.orderno, (uint32_t)order.orderqty);
+            return cancel_order(order_id, (uint32_t)order.orderqty);
         default:
             return false;
     }
@@ -484,12 +487,12 @@ void FastOrderBook::print_orderbook(int n, const std::string& context) const {
         LOG_M_INFO("{}", context);
     }
 
-    // 打印卖十档（从高到低价格）
+    // 打印卖十档（从低到高价格，Sell1=最优卖价=最低价）
     LOG_M_INFO("--- SELL SIDE (ASK) ---");
     auto ask_levels = get_ask_levels(n);
-    for (int i = ask_levels.size() - 1; i >= 0; --i) {
+    for (size_t i = 0; i < ask_levels.size(); ++i) {
         LOG_M_INFO("  Sell{}: Price={} ({}元) Volume={}",
-                   ask_levels.size() - i,
+                   i + 1,
                    ask_levels[i].first,
                    ask_levels[i].first / 10000.0,
                    ask_levels[i].second);
