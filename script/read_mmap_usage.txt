@@ -1,0 +1,12 @@
+显示 60000 order 第26页 每页50条
+python read_mmap.py data/raw/2026/01/20 600000 order 26 50
+
+显示 300758 tick 第1页 每页50条
+python read_mmap.py data/raw/2026/01/20 300758 tick 1 50
+
+显示 order 最后20条
+python read_mmap.py data/raw/2026/01/20 --tail order 20
+
+查找order最后1000条里有多少上海/深圳
+python read_mmap.py data/raw/2026/01/20 --tail order 1000 2>/dev/null | grep -c "\.SH"
+python read_mmap.py data/raw/2026/01/20 --tail order 1000 2>/dev/null | grep -c "\.SZ"
