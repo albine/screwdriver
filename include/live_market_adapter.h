@@ -9,9 +9,12 @@
 
 #include <cstring>
 #include <algorithm>
+#include <atomic>
 
 // 持久化层 (可选)
 #include "persist_layer.h"
+
+#define LOG_MODULE "LiveAdapter"
 
     // ==========================================
 // 高性能拷贝宏
@@ -59,6 +62,19 @@ private:
     StrategyEngine* engine_;
     PersistLayer* persist_;  // 可选，为 nullptr 时不持久化
 
+    // ==========================================
+    // 行情首条标志位 (DEBUG 用，只打印一次)
+    // ==========================================
+    // 上海: XSHG=101, 深圳: XSHE=102
+    std::atomic<bool> sh_tick_logged_{false};
+    std::atomic<bool> sz_tick_logged_{false};
+    std::atomic<bool> sh_order_logged_{false};
+    std::atomic<bool> sz_order_logged_{false};
+    std::atomic<bool> sh_txn_logged_{false};
+    std::atomic<bool> sz_txn_logged_{false};
+    std::atomic<bool> sh_snapshot_logged_{false};
+    std::atomic<bool> sz_snapshot_logged_{false};
+
 public:
     // 构造函数
     // @param folder_name  数据文件夹名
@@ -84,6 +100,11 @@ public:
                 if (data.has_mdstock()) {
                     MDStockStruct stock;  // 栈上对象，不初始化
                     convert_to_stock_fast(data.mdstock(), stock);
+
+                    // DEBUG: 首条日志
+                    log_first_market_data("TICK", stock.securityidsource,
+                                          sh_tick_logged_, sz_tick_logged_);
+
                     // 持久化 (入队，不阻塞)
                     if (persist_) persist_->log_tick(stock);
                     engine_->on_market_tick(stock);
@@ -97,6 +118,11 @@ public:
                     if (pb_order.securitytype() != StockType) break;
                     MDOrderStruct order;  // 栈上对象，不初始化
                     convert_to_order_fast(pb_order, order);
+
+                    // DEBUG: 首条日志
+                    log_first_market_data("ORDER", order.securityidsource,
+                                          sh_order_logged_, sz_order_logged_);
+
                     // 持久化 (入队，不阻塞)
                     if (persist_) persist_->log_order(order);
                     engine_->on_market_order(order);
@@ -110,6 +136,11 @@ public:
                     if (pb_txn.securitytype() != StockType) break;
                     MDTransactionStruct transaction;  // 栈上对象，不初始化
                     convert_to_transaction_fast(pb_txn, transaction);
+
+                    // DEBUG: 首条日志
+                    log_first_market_data("TXN", transaction.securityidsource,
+                                          sh_txn_logged_, sz_txn_logged_);
+
                     // 持久化 (入队，不阻塞)
                     if (persist_) persist_->log_transaction(transaction);
                     engine_->on_market_transaction(transaction);
@@ -121,6 +152,11 @@ public:
                     const auto& snapshot = data.orderbooksnapshot();
                     // 过滤非股票类型
                     if (snapshot.securitytype() != StockType) break;
+
+                    // DEBUG: 首条日志
+                    log_first_market_data("SNAPSHOT", snapshot.securityidsource(),
+                                          sh_snapshot_logged_, sz_snapshot_logged_);
+
                     // 持久化 (在 on_orderbook_snapshot 内部处理)
                     on_orderbook_snapshot(snapshot);
                 }
@@ -132,6 +168,31 @@ public:
     }
 
 private:
+    // ==========================================
+    // 行情首条日志函数
+    // ==========================================
+    // 只在收到第一条时打印 INFO 日志，之后直接返回（无开销）
+    void log_first_market_data(const char* data_type, int32_t source,
+                               std::atomic<bool>& sh_logged,
+                               std::atomic<bool>& sz_logged) {
+        // XSHG=101, XSHE=102
+        if (source == 101) {
+            // 快速路径：已打印过直接返回
+            if (sh_logged.load(std::memory_order_relaxed)) return;
+            // CAS 确保只打印一次
+            bool expected = false;
+            if (sh_logged.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+                LOG_M_INFO("[SH] {} first received", data_type);
+            }
+        } else if (source == 102) {
+            if (sz_logged.load(std::memory_order_relaxed)) return;
+            bool expected = false;
+            if (sz_logged.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+                LOG_M_INFO("[SZ] {} first received", data_type);
+            }
+        }
+    }
+
     // 转换函数：将 protobuf MDStock 转换为 MDStockStruct
     MDStockStruct convert_to_stock(const com::htsc::mdc::insight::model::MDStock& pb_stock) {
         MDStockStruct stock = {};
@@ -485,55 +546,57 @@ private:
         if (persist_) persist_->log_snapshot(ob);
         engine_->on_market_orderbook_snapshot(ob);
 
-        // 只打印 603277 的快照
-        if (std::strncmp(ob.htscsecurityid, "603277", 6) != 0) {
-            return;
-        }
+        // // 只打印 603277 的快照
+        // if (std::strncmp(ob.htscsecurityid, "603277", 6) != 0) {
+        //     return;
+        // }
 
-        // 计算价格乘数
-        double multiplier = 1.0;
-        int32_t power = ob.datamultiplepowerof10;
-        if (power > 0) {
-            for (int i = 0; i < power; ++i) multiplier *= 10.0;
-        } else if (power < 0) {
-            for (int i = 0; i < -power; ++i) multiplier /= 10.0;
-        }
+        // // 计算价格乘数
+        // double multiplier = 1.0;
+        // int32_t power = ob.datamultiplepowerof10;
+        // if (power > 0) {
+        //     for (int i = 0; i < power; ++i) multiplier *= 10.0;
+        // } else if (power < 0) {
+        //     for (int i = 0; i < -power; ++i) multiplier /= 10.0;
+        // }
 
-        // 打印所有字段到业务日志
-        LOG_BIZ(BIZ_SESS, "[OB_SNAP] ========== {} ==========", ob.htscsecurityid);
-        LOG_BIZ(BIZ_SESS, "[OB_SNAP] mddate={} mdtime={} datatimestamp={} snapshotmddatetime={}",
-            ob.mddate, ob.mdtime, ob.datatimestamp, ob.snapshotmddatetime);
-        LOG_BIZ(BIZ_SESS, "[OB_SNAP] tradingphasecode={} securityidsource={} securitytype={} channelno={} applseqnum={}",
-            ob.tradingphasecode, ob.securityidsource, ob.securitytype, ob.channelno, ob.applseqnum);
-        LOG_BIZ(BIZ_SESS, "[OB_SNAP] lastpx={:.4f} openpx={:.4f} closepx={:.4f} highpx={:.4f} lowpx={:.4f}",
-            ob.lastpx * multiplier, ob.openpx * multiplier, ob.closepx * multiplier,
-            ob.highpx * multiplier, ob.lowpx * multiplier);
-        LOG_BIZ(BIZ_SESS, "[OB_SNAP] maxpx={:.4f} minpx={:.4f} preclosepx={:.4f}",
-            ob.maxpx * multiplier, ob.minpx * multiplier, ob.preclosepx * multiplier);
-        LOG_BIZ(BIZ_SESS, "[OB_SNAP] numtrades={} totalvolumetrade={} totalvaluetrade={}",
-            ob.numtrades, ob.totalvolumetrade, ob.totalvaluetrade);
-        LOG_BIZ(BIZ_SESS, "[OB_SNAP] totalbuyqty={} totalsellqty={} weightedavgbuypx={:.4f} weightedavgsellpx={:.4f}",
-            ob.totalbuyqty, ob.totalsellqty, ob.weightedavgbuypx * multiplier, ob.weightedavgsellpx * multiplier);
-        LOG_BIZ(BIZ_SESS, "[OB_SNAP] totalbuynumber={} totalsellnumber={} numbuyorders={} numsellorders={}",
-            ob.totalbuynumber, ob.totalsellnumber, ob.numbuyorders, ob.numsellorders);
-        LOG_BIZ(BIZ_SESS, "[OB_SNAP] datamultiplepowerof10={}", ob.datamultiplepowerof10);
+        // // 打印所有字段到业务日志
+        // LOG_BIZ(BIZ_SESS, "[OB_SNAP] ========== {} ==========", ob.htscsecurityid);
+        // LOG_BIZ(BIZ_SESS, "[OB_SNAP] mddate={} mdtime={} datatimestamp={} snapshotmddatetime={}",
+        //     ob.mddate, ob.mdtime, ob.datatimestamp, ob.snapshotmddatetime);
+        // LOG_BIZ(BIZ_SESS, "[OB_SNAP] tradingphasecode={} securityidsource={} securitytype={} channelno={} applseqnum={}",
+        //     ob.tradingphasecode, ob.securityidsource, ob.securitytype, ob.channelno, ob.applseqnum);
+        // LOG_BIZ(BIZ_SESS, "[OB_SNAP] lastpx={:.4f} openpx={:.4f} closepx={:.4f} highpx={:.4f} lowpx={:.4f}",
+        //     ob.lastpx * multiplier, ob.openpx * multiplier, ob.closepx * multiplier,
+        //     ob.highpx * multiplier, ob.lowpx * multiplier);
+        // LOG_BIZ(BIZ_SESS, "[OB_SNAP] maxpx={:.4f} minpx={:.4f} preclosepx={:.4f}",
+        //     ob.maxpx * multiplier, ob.minpx * multiplier, ob.preclosepx * multiplier);
+        // LOG_BIZ(BIZ_SESS, "[OB_SNAP] numtrades={} totalvolumetrade={} totalvaluetrade={}",
+        //     ob.numtrades, ob.totalvolumetrade, ob.totalvaluetrade);
+        // LOG_BIZ(BIZ_SESS, "[OB_SNAP] totalbuyqty={} totalsellqty={} weightedavgbuypx={:.4f} weightedavgsellpx={:.4f}",
+        //     ob.totalbuyqty, ob.totalsellqty, ob.weightedavgbuypx * multiplier, ob.weightedavgsellpx * multiplier);
+        // LOG_BIZ(BIZ_SESS, "[OB_SNAP] totalbuynumber={} totalsellnumber={} numbuyorders={} numsellorders={}",
+        //     ob.totalbuynumber, ob.totalsellnumber, ob.numbuyorders, ob.numsellorders);
+        // LOG_BIZ(BIZ_SESS, "[OB_SNAP] datamultiplepowerof10={}", ob.datamultiplepowerof10);
 
-        // 打印买盘档位
-        LOG_BIZ(BIZ_SESS, "[OB_SNAP] BUY ENTRIES (count={}):", ob.buyentries_count);
-        for (int i = 0; i < ob.buyentries_count; ++i) {
-            const auto& e = ob.buyentries[i];
-            LOG_BIZ(BIZ_SESS, "[OB_SNAP]   BID[{}] level={} price={:.4f} totalqty={} orders={}",
-                i + 1, e.level, e.price * multiplier, e.totalqty, e.numberoforders);
-        }
+        // // 打印买盘档位
+        // LOG_BIZ(BIZ_SESS, "[OB_SNAP] BUY ENTRIES (count={}):", ob.buyentries_count);
+        // for (int i = 0; i < ob.buyentries_count; ++i) {
+        //     const auto& e = ob.buyentries[i];
+        //     LOG_BIZ(BIZ_SESS, "[OB_SNAP]   BID[{}] level={} price={:.4f} totalqty={} orders={}",
+        //         i + 1, e.level, e.price * multiplier, e.totalqty, e.numberoforders);
+        // }
 
-        // 打印卖盘档位
-        LOG_BIZ(BIZ_SESS, "[OB_SNAP] SELL ENTRIES (count={}):", ob.sellentries_count);
-        for (int i = 0; i < ob.sellentries_count; ++i) {
-            const auto& e = ob.sellentries[i];
-            LOG_BIZ(BIZ_SESS, "[OB_SNAP]   ASK[{}] level={} price={:.4f} totalqty={} orders={}",
-                i + 1, e.level, e.price * multiplier, e.totalqty, e.numberoforders);
-        }
+        // // 打印卖盘档位
+        // LOG_BIZ(BIZ_SESS, "[OB_SNAP] SELL ENTRIES (count={}):", ob.sellentries_count);
+        // for (int i = 0; i < ob.sellentries_count; ++i) {
+        //     const auto& e = ob.sellentries[i];
+        //     LOG_BIZ(BIZ_SESS, "[OB_SNAP]   ASK[{}] level={} price={:.4f} totalqty={} orders={}",
+        //         i + 1, e.level, e.price * multiplier, e.totalqty, e.numberoforders);
+        // }
     }
 };
+
+#undef LOG_MODULE
 
 #endif // LIVE_MARKET_ADAPTER_H
