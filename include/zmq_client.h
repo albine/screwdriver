@@ -122,10 +122,11 @@ public:
 
     // 发送下单消息到 ROUTER（股票代码去掉后缀）
     // 根据 symbol 查找对应的 dealer 发送（确保使用 add_hot_stock_ht 时的同一通道）
-    void send_place_order(const std::string& symbol, double price) {
+    void send_place_order(const std::string& symbol, double price, const std::string& strategy_name) {
         static int order_seq = 0;
 
         // 查找该 symbol 应该使用的通道
+        LOG_M_INFO("send_place_order lookup: symbol={}", symbol);      
         int dealer_index = 1;  // 默认使用 DEALER1
         {
             std::shared_lock lock(symbol_dealer_mutex_);
@@ -144,12 +145,20 @@ public:
         payload["symbol"] = symbol_no_suffix;
         payload["price"] = price;
         payload["side"] = "buy";
+        payload["strategy"] = strategy_name;
         payload["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
 
         std::string req_id = "order_" + std::to_string(++order_seq);
+
+        // 打印完整消息便于调试
+        json full_msg;
+        full_msg["req_id"] = req_id;
+        full_msg["payload"] = payload;
+        LOG_M_INFO("place_order JSON: {}", full_msg.dump());
+
         send_via(dealer, req_id, payload);
-        LOG_M_INFO("Sent place_order: symbol={}, price={}, side=buy, dealer={}", symbol_no_suffix, price, dealer_index);
+        LOG_M_INFO("Sent place_order: symbol={}, price={:.4f}, strategy={}, dealer={}", symbol_no_suffix, price, strategy_name, dealer_index);
     }
 
 private:
@@ -372,20 +381,27 @@ private:
         AddStrategyResult result;
         result.strategy_name = strategy_name;
 
+        LOG_M_INFO("try_add_strategy: symbol_raw={}, strategy={}, params={}",
+                   symbol_raw, strategy_name, params.dump());
+
         if (!engine_) {
             result.error_msg = "Engine not initialized";
+            LOG_M_ERROR("try_add_strategy: {}", result.error_msg);
             return result;
         }
 
         if (symbol_raw.empty()) {
             result.error_msg = "Missing symbol";
+            LOG_M_ERROR("try_add_strategy: {}", result.error_msg);
             return result;
         }
 
         result.symbol_internal = symbol_utils::normalize_symbol(symbol_raw);
+        LOG_M_DEBUG("try_add_strategy: normalized symbol {} -> {}", symbol_raw, result.symbol_internal);
 
         if (engine_->has_strategy(result.symbol_internal, strategy_name)) {
             result.error_msg = "Strategy already exists: " + result.symbol_internal + ":" + strategy_name;
+            LOG_M_WARNING("try_add_strategy: {}", result.error_msg);
             return result;
         }
 
@@ -394,20 +410,27 @@ private:
             auto available = factory.get_registered_strategies();
             for (const auto& s : available) result.available_strategies += s + " ";
             result.error_msg = "Unknown strategy: " + strategy_name;
+            LOG_M_ERROR("try_add_strategy: {} (available: {})", result.error_msg, result.available_strategies);
             return result;
         }
 
         result.params_str = parse_strategy_params(params);
+        LOG_M_DEBUG("try_add_strategy: parsed params -> {}", result.params_str);
 
         try {
+            LOG_M_DEBUG("try_add_strategy: creating strategy via factory...");
             auto strategy = factory.create(strategy_name, result.symbol_internal, result.params_str);
+            LOG_M_DEBUG("try_add_strategy: registering strategy to engine...");
             if (engine_->register_strategy_runtime(result.symbol_internal, std::move(strategy))) {
                 result.success = true;
+                LOG_M_INFO("try_add_strategy: SUCCESS {}:{}", result.symbol_internal, strategy_name);
             } else {
                 result.error_msg = "Failed to register strategy";
+                LOG_M_ERROR("try_add_strategy: {}", result.error_msg);
             }
         } catch (const std::exception& e) {
             result.error_msg = e.what();
+            LOG_M_ERROR("try_add_strategy: exception: {}", result.error_msg);
         }
 
         return result;
@@ -598,7 +621,6 @@ private:
         json params = payload.contains("params") ? payload["params"] : json{};
 
         auto result = try_add_strategy(symbol, strategy_name, params);
-        std::string symbol_resp = symbol_utils::strip_suffix(result.symbol_internal);
 
         if (result.success) {
             // 记录 symbol 来源通道（用于下单时路由）
@@ -607,19 +629,8 @@ private:
                 symbol_dealer_map_[result.symbol_internal] = dealer.index;
             }
             LOG_M_INFO("add_hot_stock: added {}:{}, params={}, dealer={}", result.symbol_internal, result.strategy_name, result.params_str, dealer.index);
-            send_response(dealer, req_id, "add_hot_stock_resp", {
-                {"success", true},
-                {"symbol", symbol_resp},
-                {"strategy", result.strategy_name},
-                {"params", result.params_str}
-            });
         } else {
             LOG_M_WARNING("add_hot_stock: {}", result.error_msg);
-            json err_data = {{"success", false}, {"msg", result.error_msg}};
-            if (!result.available_strategies.empty()) {
-                err_data["available"] = result.available_strategies;
-            }
-            send_response(dealer, req_id, "add_hot_stock_resp", err_data);
         }
     }
 
@@ -629,7 +640,6 @@ private:
         std::string strategy_name = payload.value("strategy", "BreakoutPriceVolumeStrategy");
 
         auto result = try_remove_strategy(symbol, strategy_name);
-        std::string symbol_resp = symbol_utils::strip_suffix(result.symbol_internal);
 
         if (result.success) {
             // 移除 symbol 来源记录
@@ -638,17 +648,8 @@ private:
                 symbol_dealer_map_.erase(result.symbol_internal);
             }
             LOG_M_INFO("remove_hot_stock: removed {}:{}", result.symbol_internal, result.strategy_name);
-            send_response(dealer, req_id, "remove_hot_stock_resp", {
-                {"success", true},
-                {"symbol", symbol_resp},
-                {"strategy", result.strategy_name}
-            });
         } else {
             LOG_M_WARNING("remove_hot_stock: {}", result.error_msg);
-            send_response(dealer, req_id, "remove_hot_stock_resp", {
-                {"success", false},
-                {"msg", result.error_msg}
-            });
         }
     }
 
@@ -657,15 +658,20 @@ private:
     // ==========================================
 
     // 解析策略参数：支持字符串、数值或对象格式
+    // breakout_price 以元为单位传入，需转换为内部格式（乘以 10000）
     std::string parse_strategy_params(const json& params) {
         if (params.is_string()) {
             return params.get<std::string>();
         } else if (params.is_number()) {
+            // 数值直接作为内部格式
             return std::to_string(params.get<int64_t>());
         } else if (params.is_object() && !params.empty() && params.contains("breakout_price")) {
             auto& bp = params["breakout_price"];
             if (bp.is_number()) {
-                return std::to_string(bp.get<int64_t>());
+                // breakout_price 以元为单位，转换为内部格式（乘以 10000）
+                double price_yuan = bp.get<double>();
+                uint32_t price_int = static_cast<uint32_t>(price_yuan * 10000);
+                return std::to_string(price_int);
             } else if (bp.is_string()) {
                 return bp.get<std::string>();
             }

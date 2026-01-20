@@ -1,0 +1,60 @@
+● mmap 数据下载脚本使用方法                                                                        
+                                                                                                   
+  脚本位置: script/download_mmap_data.py                                                           
+                                                                                                   
+  用法:                                                                                            
+  python script/download_mmap_data.py <股票代码> [日期]                                            
+                                                                                                   
+  示例:                                                                                            
+  # 下载今天的数据                                                                                 
+  python script/download_mmap_data.py 600759.SH                                                    
+                                                                                                   
+  # 下载指定日期的数据                                                                             
+  python script/download_mmap_data.py 600759.SH 20260120                                           
+                                                                                                   
+  # 代码不带后缀也可以（自动识别交易所）                                                           
+  python script/download_mmap_data.py 600759 20260120                                              
+                                                                                                   
+  输出:                                                                                            
+  - test_data/MD_ORDER_StockType_<symbol>.csv - 委托数据                                           
+  - test_data/MD_TRANSACTION_StockType_<symbol>.csv - 成交数据                                     
+  - test_data/MD_TICK_StockType_<symbol>.csv - 行情快照                                            
+                                                                                                   
+  注意:                                                                                            
+  - 服务器数据目录配置在脚本内 REMOTE_DATA_BASE 变量                                               
+  - 目前只有上海数据（深圳数据需要另外配置）                                                       
+                                                       
+
+
+
+python script/download_mmap_data.py 688766.SH && python script/run_strategy_backtest.py 688766.SH HenggouStrategy --no-download 2>&1
+
+简化后的用法：                                                                         
+                                                                                                 
+  # 一步完成（自动下载+回测）                                                                    
+  python script/run_strategy_backtest.py 688028 HenggouStrategy                                  
+                                                                                                 
+  # 如果数据已下载，跳过下载加速                                                                 
+  python script/run_strategy_backtest.py 688028 HenggouStrategy --no-download 
+
+
+
+  
+        // ============ 测试代码 - 测试完成后删除 ============
+        std::thread([this]() {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            LOG_M_INFO("[TEST] Triggering test place_order for {}", symbol);
+
+            TradeSignal signal;
+            signal.symbol = symbol;
+            signal.side = TradeSignal::Side::BUY;
+            signal.price = breakout_price_ > 0 ? breakout_price_ : 100000;  // 默认 10 元
+            signal.quantity = 100;
+            signal.trigger_time = 93000000;  // 09:30:00.000
+            signal.strategy_name = name;
+            signal.strategy_type_id = strategy_type_id;
+            place_order(signal);
+
+            LOG_M_INFO("[TEST] Test place_order completed for {}", symbol);
+        }).detach();
+        // ============ 测试代码结束 ============

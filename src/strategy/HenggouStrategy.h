@@ -3,6 +3,7 @@
 
 #include "strategy_base.h"
 #include "market_data_structs.h"
+#include "trade_signal.h"
 #include "logger.h"
 #include "breakout_detector.h"
 #include "utils/time_util.h"
@@ -127,13 +128,8 @@ public:
 
     virtual ~HenggouStrategy() = default;
 
-    void on_start() override {
-        LOG_M_INFO("HenggouStrategy started for {}", symbol);
-    }
-
-    void on_stop() override {
-        LOG_M_INFO("HenggouStrategy stopped for {}", symbol);
-    }
+    void on_start() override {}
+    void on_stop() override {}
 
 private:
     void OnMarketOpen(HGState& state, const MDStockStruct& stock, const std::string& symbol) {
@@ -441,6 +437,17 @@ private:
             LOG_M_INFO("n (Avg Volume): {:.0f}, delta_n (Buy Trades): {}", stats.avg_volume, stats.total_buy_qty);
         }
         LOG_M_INFO("========================================");
+
+        // 发送买入信号
+        TradeSignal signal;
+        signal.symbol = symbol;
+        signal.side = TradeSignal::Side::BUY;
+        signal.price = order_price;
+        signal.quantity = 100;
+        signal.trigger_time = mdtime;
+        signal.strategy_name = this->name;
+        signal.strategy_type_id = strategy_type_id;
+        place_order(signal);
     }
 };
 

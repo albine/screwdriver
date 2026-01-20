@@ -49,23 +49,29 @@
 void register_all_strategies() {
     auto& factory = StrategyFactory::instance();
 
-    // BreakoutPriceVolumeStrategy: 配置格式 "股票代码,BreakoutPriceVolumeStrategy"
-    // 突破价格通过 ControlMessage 的 param 在 enable 时传入
-    // 策略默认禁用，需要通过 ZMQ 命令 enable 时带入 target_price
+    // BreakoutPriceVolumeStrategy: 配置格式 "股票代码,BreakoutPriceVolumeStrategy,突破价格"
+    // 突破价格从 params 获取（整数格式，如 98500 表示 9.85 元）
     factory.register_strategy("BreakoutPriceVolumeStrategy",
-        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<BreakoutPriceVolumeStrategy>(symbol + "_Breakout", symbol);
+        [](const std::string& symbol, const std::string& params) -> std::unique_ptr<Strategy> {
+            uint32_t breakout_price = 0;
+            if (!params.empty()) {
+                breakout_price = static_cast<uint32_t>(std::stoul(params));
+            }
+            auto strat = std::make_unique<BreakoutPriceVolumeStrategy>(symbol + "_Breakout", symbol, breakout_price);
             strat->strategy_type_id = StrategyIds::BREAKOUT_PRICE_VOLUME;
-            // 构造函数中已默认禁用
             return strat;
         });
 
-    // BreakoutPriceVolumeStrategy_v2: 使用 OrderBook 快照获取挂单量（不依赖 FastOrderBook）
+    // BreakoutPriceVolumeStrategy_v2: 配置格式 "股票代码,BreakoutPriceVolumeStrategy_v2,突破价格"
+    // 使用 OrderBook 快照获取挂单量（不依赖 FastOrderBook）
     factory.register_strategy("BreakoutPriceVolumeStrategy_v2",
-        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
-            auto strat = std::make_unique<BreakoutPriceVolumeStrategy_v2>(symbol + "_Breakout_v2", symbol);
+        [](const std::string& symbol, const std::string& params) -> std::unique_ptr<Strategy> {
+            uint32_t breakout_price = 0;
+            if (!params.empty()) {
+                breakout_price = static_cast<uint32_t>(std::stoul(params));
+            }
+            auto strat = std::make_unique<BreakoutPriceVolumeStrategy_v2>(symbol + "_Breakout_v2", symbol, breakout_price);
             strat->strategy_type_id = StrategyIds::BREAKOUT_PRICE_VOLUME_V2;
-            // 构造函数中已默认禁用
             return strat;
         });
 

@@ -11,6 +11,7 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <thread>
 #include <atomic>
 
 #define LOG_MODULE MOD_STRATEGY
@@ -46,13 +47,21 @@ private:
     std::atomic<uint64_t> transaction_count_{0};
 
 public:
-    // 构造函数：无需传入突破价格，策略默认禁用
-    // 突破价格通过 ControlMessage 的 param 在 enable 时传入
+    // 构造函数：传入突破价格，策略默认启用
     explicit BreakoutPriceVolumeStrategy(const std::string& strategy_name,
-                                         const std::string& sym = "") {
+                                         const std::string& sym,
+                                         uint32_t breakout_price) {
         this->name = strategy_name;
-        this->symbol = sym;  // 使用基类的 symbol 成员
-        this->enabled_ = false;  // 默认禁用，等待 enable 消息带入 target_price
+        this->symbol = sym;
+        this->breakout_price_ = breakout_price;
+        this->enabled_ = true;
+
+        // 初始化检测器
+        detector_.set_target_price(breakout_price_);
+        detector_.set_callback([this](uint32_t price, int32_t mdtime) {
+            on_breakout_triggered(price, mdtime);
+        });
+        detector_.set_enabled(true);
     }
 
     virtual ~BreakoutPriceVolumeStrategy() = default;
@@ -61,11 +70,16 @@ public:
     // 生命周期回调
     // ==========================================
     void on_start() override {
-        // 空实现，日志宏 LOG_M_* 已内置 logger
+        LOG_M_INFO("BreakoutPriceVolumeStrategy started: {} | symbol={} | breakout_price={} ({}元) | enabled={}",
+                   name, symbol, breakout_price_, price_util::price_to_yuan(breakout_price_),
+                   is_enabled() ? "true" : "false");
+
     }
 
     void on_stop() override {
-        // 空实现，日志已移至引擎层汇总
+        LOG_M_INFO("BreakoutPriceVolumeStrategy stopped: {} | ticks={} | orders={} | txns={} | triggered={}",
+                   name, tick_count_.load(), order_count_.load(), transaction_count_.load(),
+                   detector_.is_triggered() ? "yes" : "no");
     }
 
     // 覆盖控制消息处理：enable 时从 param 获取 target_price

@@ -113,6 +113,7 @@ private:
     std::vector<std::thread> workers_;
     std::atomic<bool> running_{true};
     std::atomic<bool> stopped_{false};
+    std::atomic<StrategyContext*> current_ctx_{nullptr};  // 当前上下文（用于动态添加的策略）
 
     // 策略所有权管理：key = unique_id (uint32_t)
     std::unordered_map<uint32_t, std::unique_ptr<Strategy>> owned_strategies_;
@@ -216,8 +217,12 @@ public:
         // 注册裸指针到分片（按 symbol 路由）
         registry_[shard_id][symbol].push_back(raw_ptr);
 
-        // 释放锁后调用 on_start()
+        // 释放锁后设置上下文并调用 on_start()
         lock.unlock();
+        StrategyContext* ctx = current_ctx_.load(std::memory_order_acquire);
+        if (ctx) {
+            raw_ptr->set_context(ctx);
+        }
         raw_ptr->on_start();
 
         return true;
@@ -299,6 +304,7 @@ public:
 
     // 为所有策略设置上下文
     void set_context_for_all_strategies(StrategyContext* ctx) {
+        current_ctx_.store(ctx, std::memory_order_release);  // 保存引用，用于动态添加的策略
         std::shared_lock<std::shared_mutex> lock(registry_mutex_);
         for (auto& kv : owned_strategies_) {
             kv.second->set_context(ctx);

@@ -80,13 +80,14 @@ private:
     std::atomic<uint64_t> price_found_count_{0};    // 找到突破价格的次数
 
 public:
-    // 构造函数：无需传入突破价格，策略默认禁用
-    // 突破价格通过 ControlMessage 的 param 在 enable 时传入
+    // 构造函数：传入突破价格，策略默认启用
     explicit BreakoutPriceVolumeStrategy_v2(const std::string& strategy_name,
-                                            const std::string& sym = "") {
+                                            const std::string& sym,
+                                            uint32_t breakout_price) {
         this->name = strategy_name;
-        this->symbol = sym;  // 使用基类的 symbol 成员
-        this->enabled_ = false;  // 默认禁用，等待 enable 消息带入 target_price
+        this->symbol = sym;
+        this->breakout_price_ = breakout_price;
+        this->enabled_ = true;
         state_ = MonitoringState::MONITORING;
     }
 
@@ -96,11 +97,15 @@ public:
     // 生命周期回调
     // ==========================================
     void on_start() override {
-        // 空实现，日志宏 LOG_M_* 已内置 logger
+        LOG_M_INFO("BreakoutPriceVolumeStrategy_v2 started: {} | symbol={} | breakout_price={} ({}元) | enabled={}",
+                   name, symbol, breakout_price_, price_util::price_to_yuan(breakout_price_),
+                   is_enabled() ? "true" : "false");
     }
 
     void on_stop() override {
-        // 空实现，日志已移至引擎层汇总
+        LOG_M_INFO("BreakoutPriceVolumeStrategy_v2 stopped: {} | ticks={} | orders={} | txns={} | snapshots={} | triggered={}",
+                   name, tick_count_.load(), order_count_.load(), transaction_count_.load(),
+                   snapshot_count_.load(), signal_triggered_ ? "yes" : "no");
     }
 
     // 覆盖控制消息处理：enable 时从 param 获取 target_price
@@ -305,6 +310,7 @@ private:
             signal.quantity = 100;  // 默认下单数量，可根据需求调整
             signal.trigger_time = latest.mdtime;
             signal.strategy_name = this->name;
+            signal.strategy_type_id = strategy_type_id;
             place_order(signal);
         }
     }
