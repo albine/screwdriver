@@ -7,6 +7,7 @@
 #include <deque>
 #include <functional>
 #include <cstdint>
+#include <optional>
 
 /**
  * BreakoutDetector - 盘口动力学突破检测器
@@ -96,8 +97,12 @@ public:
     bool on_order(const MDOrderStruct& order, const FastOrderBook& book) {
         if (!enabled_ || triggered_) return false;
 
-        uint64_t current_volume = get_volume_at_target(book);
-        add_to_window(order.mdtime, current_volume, 0);
+        auto current_volume = get_volume_at_target(book);
+        if (!current_volume.has_value()) {
+            // 目标价太高，无法监控，跳过本次数据
+            return false;
+        }
+        add_to_window(order.mdtime, current_volume.value(), 0);
         return check_trigger(order.mdtime);
     }
 
@@ -106,12 +111,16 @@ public:
     bool on_transaction(const MDTransactionStruct& txn, const FastOrderBook& book) {
         if (!enabled_ || triggered_) return false;
 
-        uint64_t current_volume = get_volume_at_target(book);
+        auto current_volume = get_volume_at_target(book);
+        if (!current_volume.has_value()) {
+            // 目标价太高，无法监控，跳过本次数据
+            return false;
+        }
 
         // 只统计成交价等于目标价的主买成交
         uint64_t buy_trade_qty = get_buy_trade_qty(txn, book);
 
-        add_to_window(txn.mdtime, current_volume, buy_trade_qty);
+        add_to_window(txn.mdtime, current_volume.value(), buy_trade_qty);
         return check_trigger(txn.mdtime);
     }
 
@@ -156,10 +165,10 @@ private:
     static constexpr int WINDOW_MS = 200;  // 滚动窗口大小（毫秒）
 
     // 获取目标价位的挂单量（智能处理档位稀疏）
-    // 返回0表示已被突破
-    uint64_t get_volume_at_target(const FastOrderBook& book) const {
+    // 返回 0 表示已被突破，返回 nullopt 表示目标价太高无法监控
+    std::optional<uint64_t> get_volume_at_target(const FastOrderBook& book) const {
         auto best_ask = book.get_best_ask();
-        if (!best_ask.has_value()) return 0;
+        if (!best_ask.has_value()) return 0;  // 卖盘空，视为突破
 
         // 目标价已小于卖一价，说明已突破
         if (target_price_ < best_ask.value()) {
@@ -170,8 +179,16 @@ private:
         uint64_t vol = book.get_volume_at_price(target_price_);
         if (vol > 0) return vol;
 
-        // 档位稀疏：目标价无挂单，转而监控 best_ask
-        return book.get_volume_at_price(best_ask.value());
+        // 目标价无挂单，找比目标价高的最近有挂单的档位
+        auto ask_levels = book.get_ask_levels(10);
+        for (const auto& [price, volume] : ask_levels) {
+            if (price > target_price_ && volume > 0) {
+                return volume;  // 监控这个更高的档位
+            }
+        }
+
+        // 找不到比目标价高的档位（目标价太高），无法监控
+        return std::nullopt;
     }
 
     // 判断成交是否为有效主买（成交价必须等于目标价）
