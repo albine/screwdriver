@@ -12,3 +12,5 @@ test_data/
 test_data_cleaned/
 compile_commands.json
 .cache
+trading-engine-20260121_083835.tar.gz
+trading-engine-20260121_090740.tar.gz

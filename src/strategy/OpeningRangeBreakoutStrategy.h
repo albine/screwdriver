@@ -203,27 +203,17 @@ public:
         int64_t consolidation_duration = stock.mdtime - stock_state.highest_timestamp_mdtime;
 
         if (consolidation_duration >= THIRTY_SECONDS_MS) {
-            LOG_M_INFO("{} 距上一个新高已超过30秒，不再刷新新高 (highest={:.4f})",
-                        symbol, stock_state.highest_price);
+            LOG_M_DEBUG("{} 距上一个新高已超过30秒，不再刷新新高 (highest={:.4f})",
+                            symbol, stock_state.highest_price);
         } else {
             if (high_price > stock_state.highest_price) {
-                LOG_M_INFO("{} 新高: {:.4f} -> {:.4f}, consolidation重置",
+                LOG_M_DEBUG("{} 新高: {:.4f} -> {:.4f}, consolidation重置",
                             symbol, stock_state.highest_price, high_price);
                 stock_state.highest_price = high_price;
                 stock_state.highest_timestamp_mdtime = stock.mdtime;
             }
         }
 
-        // 调试：每隔一段时间输出状态
-        static int64_t last_log_time = 0;
-        if (stock.mdtime - last_log_time >= THIRTY_SECONDS_MS) {  // 每30秒输出一次
-            last_log_time = stock.mdtime;
-            int64_t consol_sec = consolidation_duration / 1000;  // MDTime: 1 second = 1000 units
-            LOG_M_INFO("{} 状态: time={}, highest={:.4f}, consol={}s, armed={}",
-                       symbol, time_util::format_mdtime(stock.mdtime),
-                       stock_state.highest_price, consol_sec,
-                       stock_state.detector_armed ? "Y" : "N");
-        }
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
@@ -296,7 +286,7 @@ private:
             stock_state.detector_armed = true;
             stock_state.armed_scenario = BreakoutScenario::GAP_DOWN_RECOVERY;
 
-            LOG_M_INFO("{} 绿开翻红检测器已设置: target_price={} ({}元)",
+            LOG_M_DEBUG("{} 绿开翻红检测器已设置: target_price={} ({}元)",
                        symbol, target_price, price_util::price_to_yuan(target_price));
         }
     }
@@ -321,7 +311,7 @@ private:
         stock_state.armed_scenario = BreakoutScenario::GAP_UP_NEW_HIGH;
 
         int64_t consolidation_seconds = consolidation_duration / 1000;  // MDTime: 1 second = 1000 units
-        LOG_M_INFO("{} 高开新高检测器已设置: target_price={} ({}元), consolidation={}s",
+        LOG_M_DEBUG("{} 高开新高检测器已设置: target_price={} ({}元), consolidation={}s",
                    symbol, target_price, price_util::price_to_yuan(target_price),
                    consolidation_seconds);
     }
