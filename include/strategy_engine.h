@@ -15,6 +15,7 @@
 #include <array>
 #include <shared_mutex>
 #include <type_traits>
+#include <chrono>
 #include "concurrentqueue.h"
 #include "market_data_structs.h"
 #include "strategy_base.h"
@@ -76,6 +77,15 @@ struct ControlMessage {
 // 市场数据消息类型
 // ==========================================
 using MarketMessage = std::variant<MDStockStruct, MDOrderStruct, MDTransactionStruct, MDOrderbookStruct, ControlMessage>;
+
+// ==========================================
+// 行情中断监控 - 状态结构
+// ==========================================
+struct SymbolDataStatus {
+    std::chrono::steady_clock::time_point last_local_recv_time;
+    bool interrupted = false;
+    bool initialized = false;  // 避免刚启动时误报
+};
 
 // ==========================================
 // Symbol Hash 函数
@@ -489,6 +499,67 @@ private:
         return symbol_utils::get_exchange_shard_id(symbol.c_str(), config_);
     }
 
+    // 行情中断检查函数
+    void check_data_interruption(
+        std::unordered_map<std::string, SymbolDataStatus>& status_map,
+        int shard_id,
+        std::chrono::steady_clock::time_point& last_check_time
+    ) {
+        auto now = std::chrono::steady_clock::now();
+
+        // 限制检查频率：每秒最多一次
+        if (now - last_check_time < std::chrono::seconds(1)) {
+            return;
+        }
+        last_check_time = now;
+
+        // 判断是否在交易时段（使用系统时间）
+        auto now_sys = std::chrono::system_clock::now();
+        auto now_time_t = std::chrono::system_clock::to_time_t(now_sys);
+        std::tm tm = *std::localtime(&now_time_t);
+        int current_hhmm = tm.tm_hour * 100 + tm.tm_min;
+
+        bool in_trading_hours =
+            (current_hhmm >= 930 && current_hhmm <= 1130) ||
+            (current_hhmm >= 1300 && current_hhmm <= 1500);
+
+        if (!in_trading_hours) return;
+
+        // 统计中断数量（用于检测全市场断连）
+        int interrupted_count = 0;
+        int total_count = 0;
+
+        for (auto& [symbol, status] : status_map) {
+            if (!status.initialized) continue;
+            total_count++;
+
+            if (status.interrupted) {
+                interrupted_count++;
+                continue;
+            }
+
+            auto gap_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - status.last_local_recv_time
+            ).count();
+
+            // 阈值：5 秒（订阅的都是关注的股票）
+            int64_t threshold_ms = 5000;
+
+            if (gap_ms > threshold_ms) {
+                status.interrupted = true;
+                interrupted_count++;
+                LOG_M_WARNING("行情中断: symbol={}, gap={}ms, shard={}",
+                             symbol, gap_ms, shard_id);
+            }
+        }
+
+        // 检测全市场断连
+        if (total_count > 0 && interrupted_count > total_count * 8 / 10) {
+            LOG_M_ERROR("严重故障: shard {} 全部行情中断 ({}/{})",
+                       shard_id, interrupted_count, total_count);
+        }
+    }
+
     // Worker 线程循环
     void worker_loop(int shard_id) {
         auto* q = queues_[shard_id].get();
@@ -498,6 +569,11 @@ private:
 
         // 本地订单簿管理
         std::unordered_map<std::string, std::unique_ptr<FastOrderBook>> books;
+
+        // 行情中断监控状态
+        std::unordered_map<std::string, SymbolDataStatus> symbol_status;
+        int process_counter = 0;
+        auto last_check_time = std::chrono::steady_clock::now();
 
         moodycamel::ConsumerToken c_token(*q);
         MarketMessage msg;
@@ -523,6 +599,17 @@ private:
                     using T = std::decay_t<decltype(data)>;
 
                     if constexpr (std::is_same_v<T, MDStockStruct>) {
+                        // 行情中断监控：更新接收时间
+                        auto& status = symbol_status[sym_str];
+                        status.last_local_recv_time = std::chrono::steady_clock::now();
+
+                        // 检查是否从中断恢复
+                        if (status.interrupted) {
+                            LOG_M_WARNING("行情恢复: symbol={}, shard={}", sym_str, shard_id);
+                            status.interrupted = false;
+                        }
+                        status.initialized = true;
+
                         // 如果还没有 OrderBook，使用 MDStockStruct 的 minpx 和 maxpx 创建
                         auto book_it = books.find(sym_str);
                         if (MD_UNLIKELY(book_it == books.end())) {
@@ -582,7 +669,15 @@ private:
                     }
                 }, msg);
 
+                // 忙碌时的顺便检查（防饿死：高峰期队列永远不空时也能检查）
+                if (++process_counter >= 10000) {
+                    check_data_interruption(symbol_status, shard_id, last_check_time);
+                    process_counter = 0;
+                }
+
             } else {
+                // 空闲时检查
+                check_data_interruption(symbol_status, shard_id, last_check_time);
                 std::this_thread::yield();
             }
         }
