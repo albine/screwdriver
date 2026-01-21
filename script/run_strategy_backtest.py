@@ -321,16 +321,8 @@ def main():
 
     # 1. 下载数据（如果需要）
     if not args.no_download:
-        # 检查是否为上海股票（深圳暂不支持 mmap 下载）
-        if symbol.endswith('.SZ'):
-            if check_data_exists(symbol):
-                print(f"\n[1/3] 使用本地已有数据 (深圳股票暂不支持 mmap 下载)")
-            else:
-                print(f"\n错误: 深圳股票 {symbol} 本地数据不存在，且暂不支持 mmap 下载")
-                sys.exit(1)
-        else:
-            if not download_data(symbol, args.date):
-                sys.exit(1)
+        if not download_data(symbol, args.date):
+            sys.exit(1)
     else:
         if not check_data_exists(symbol):
             print(f"错误: 本地数据不存在: {symbol}")
