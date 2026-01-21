@@ -2,8 +2,49 @@
 #define SYMBOL_UTILS_H
 
 #include <string>
+#include <cstdint>
 
 namespace symbol_utils {
+
+// ==========================================
+// 交易所分片配置
+// ==========================================
+struct ExchangeShardConfig {
+    int sh_shard_count = 24;  // 上海分片数 [0..23]
+    int sz_shard_count = 29;  // 深圳分片数 [24..52]
+
+    constexpr int total_shards() const { return sh_shard_count + sz_shard_count; }
+};
+
+static constexpr ExchangeShardConfig DEFAULT_EXCHANGE_CONFIG = {24, 29};
+
+// ==========================================
+// 按交易所分片函数
+// ==========================================
+// 索引布局: [0..sh_shard_count-1] = 上海 (SH), [sh_shard_count..total-1] = 深圳 (SZ)
+// 上海: 6开头
+// 深圳: 0/3开头
+inline int get_exchange_shard_id(const char* symbol, const ExchangeShardConfig& config) {
+    if (!symbol || !symbol[0]) {
+        return 0;  // fallback
+    }
+
+    // 计算 hash（与原 stock_id_fast 相同算法）
+    uint64_t hash = 0;
+    for (const char* p = symbol; *p && (p - symbol) < 40; ++p) {
+        hash = hash * 31 + static_cast<unsigned char>(*p);
+    }
+
+    // 判断交易所（根据股票代码首字符）
+    char first = symbol[0];
+    if (first == '6') {
+        // 上海: 分配到 [0, sh_shard_count)
+        return static_cast<int>(hash % config.sh_shard_count);
+    } else {
+        // 深圳 (0/3 开头): 分配到 [sh_shard_count, total_shards)
+        return config.sh_shard_count + static_cast<int>(hash % config.sz_shard_count);
+    }
+}
 
 // 自动补全股票代码后缀
 // 规则：6开头 -> .SH（上海），其他 -> .SZ（深圳）

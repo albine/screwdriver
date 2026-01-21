@@ -19,6 +19,7 @@
 #include "market_data_structs.h"
 #include "strategy_base.h"
 #include "strategy_ids.h"
+#include "utils/symbol_utils.h"
 #include "logger.h"
 
 #define LOG_MODULE MOD_ENGINE
@@ -92,7 +93,8 @@ inline int stock_id_fast(const char* symbol, int shard_count) {
 // ==========================================
 class StrategyEngine {
 public:
-    static const int SHARD_COUNT = 4;
+    // 编译期常量，用于 thread_local 数组大小（足够容纳 53 分片）
+    static constexpr int MAX_SHARD_COUNT = 64;
 
     // 调试计数器
     mutable std::atomic<uint64_t> enqueue_order_count_{0};
@@ -109,6 +111,7 @@ public:
     }
 
 private:
+    symbol_utils::ExchangeShardConfig config_;  // 交易所分片配置
     std::vector<std::unique_ptr<moodycamel::ConcurrentQueue<MarketMessage>>> queues_;
     std::vector<std::thread> workers_;
     std::atomic<bool> running_{true};
@@ -129,17 +132,26 @@ private:
     // 共享的 thread_local token 数组（修复消息乱序bug）
     // 关键：所有 on_market_* 方法必须共享同一个 token 数组，
     // 否则同一线程的不同 token 会导致消息乱序！
-    std::array<std::unique_ptr<moodycamel::ProducerToken>, SHARD_COUNT>& get_producer_tokens() {
-        static thread_local std::array<std::unique_ptr<moodycamel::ProducerToken>, SHARD_COUNT> tokens;
+    // 使用 MAX_SHARD_COUNT 作为编译期常量，保持 std::array 结构不变
+    std::array<std::unique_ptr<moodycamel::ProducerToken>, MAX_SHARD_COUNT>& get_producer_tokens() {
+        static thread_local std::array<std::unique_ptr<moodycamel::ProducerToken>, MAX_SHARD_COUNT> tokens;
         return tokens;
     }
 
 public:
-    StrategyEngine() : registry_(SHARD_COUNT) {
-        for (int i = 0; i < SHARD_COUNT; ++i) {
+    // 构造函数：支持自定义分片配置
+    explicit StrategyEngine(const symbol_utils::ExchangeShardConfig& config = symbol_utils::DEFAULT_EXCHANGE_CONFIG)
+        : config_(config), registry_(config.total_shards()) {
+        for (int i = 0; i < config_.total_shards(); ++i) {
             queues_.push_back(std::make_unique<moodycamel::ConcurrentQueue<MarketMessage>>(65536));
         }
     }
+
+    // 获取分片配置
+    const symbol_utils::ExchangeShardConfig& shard_config() const { return config_; }
+
+    // 获取分片数（保持向后兼容）
+    int shard_count() const { return config_.total_shards(); }
 
     ~StrategyEngine() {
         stop();
@@ -238,7 +250,7 @@ public:
     // 检查某个 symbol 是否有任意策略
     bool has_any_strategy(const std::string& symbol) const {
         std::shared_lock<std::shared_mutex> lock(registry_mutex_);
-        int shard_id = stock_id_fast(symbol.c_str(), SHARD_COUNT);
+        int shard_id = symbol_utils::get_exchange_shard_id(symbol.c_str(), config_);
         auto it = registry_[shard_id].find(symbol);
         return it != registry_[shard_id].end() && !it->second.empty();
     }
@@ -354,7 +366,7 @@ public:
         std::map<uint8_t, int> strategy_counts;  // key: strategy_type_id
         int total = 0;
 
-        for (int i = 0; i < SHARD_COUNT; ++i) {
+        for (int i = 0; i < config_.total_shards(); ++i) {
             for (auto& kv : registry_[i]) {
                 for (auto* strat : kv.second) {
                     strat->on_start();
@@ -371,7 +383,9 @@ public:
         }
 
         // 启动 worker 线程
-        for (int i = 0; i < SHARD_COUNT; ++i) {
+        LOG_M_INFO("Starting {} worker threads (SH: {}, SZ: {})",
+                   config_.total_shards(), config_.sh_shard_count, config_.sz_shard_count);
+        for (int i = 0; i < config_.total_shards(); ++i) {
             workers_.emplace_back([this, i]() {
                 this->worker_loop(i);
             });
@@ -392,7 +406,7 @@ public:
         }
 
         // 调用所有策略的 on_stop()
-        for (int i = 0; i < SHARD_COUNT; ++i) {
+        for (int i = 0; i < config_.total_shards(); ++i) {
             for (auto& kv : registry_[i]) {
                 for (auto* strat : kv.second) {
                     strat->on_stop();
@@ -467,12 +481,12 @@ public:
     }
 
 private:
-    int get_shard_id(const char* symbol) {
-        return stock_id_fast(symbol, SHARD_COUNT);
+    int get_shard_id(const char* symbol) const {
+        return symbol_utils::get_exchange_shard_id(symbol, config_);
     }
 
-    int get_shard_id(const std::string& symbol) {
-        return stock_id_fast(symbol.c_str(), SHARD_COUNT);
+    int get_shard_id(const std::string& symbol) const {
+        return symbol_utils::get_exchange_shard_id(symbol.c_str(), config_);
     }
 
     // Worker 线程循环
@@ -480,7 +494,7 @@ private:
         auto* q = queues_[shard_id].get();
 
         // 线程局部对象池
-        ObjectPool<OrderNode> local_pool(200000);
+        ObjectPool<OrderNode> local_pool(500000);  // 增大容量以支持 53 线程
 
         // 本地订单簿管理
         std::unordered_map<std::string, std::unique_ptr<FastOrderBook>> books;

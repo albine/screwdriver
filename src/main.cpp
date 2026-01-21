@@ -184,7 +184,7 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
     engine.start();
 
     // 创建回测适配器
-    BacktestAdapter adapter(&engine, StrategyEngine::SHARD_COUNT);
+    BacktestAdapter adapter(&engine, engine.shard_count());
 
     // 为每个股票加载数据
     for (const auto& symbol : valid_symbols) {
