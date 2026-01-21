@@ -83,6 +83,7 @@ using MarketMessage = std::variant<MDStockStruct, MDOrderStruct, MDTransactionSt
 // ==========================================
 struct SymbolDataStatus {
     std::chrono::steady_clock::time_point last_local_recv_time;
+    int32_t last_mdtime = 0;   // 上一次接收到的行情时间 (HHMMSSmmm)
     bool interrupted = false;
     bool initialized = false;  // 避免刚启动时误报
 };
@@ -548,8 +549,17 @@ private:
             if (gap_ms > threshold_ms) {
                 status.interrupted = true;
                 interrupted_count++;
-                LOG_M_WARNING("行情中断: symbol={}, gap={}ms, shard={}",
-                             symbol, gap_ms, shard_id);
+                // 计算 last_local_recv_time 的可读时间
+                auto last_recv_sys = std::chrono::system_clock::now() -
+                    std::chrono::duration_cast<std::chrono::system_clock::duration>(now - status.last_local_recv_time);
+                auto last_recv_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    last_recv_sys.time_since_epoch()).count() % 86400000;
+                int lh = static_cast<int>(last_recv_ms / 3600000);
+                int lm = static_cast<int>((last_recv_ms % 3600000) / 60000);
+                int ls = static_cast<int>((last_recv_ms % 60000) / 1000);
+                int lms = static_cast<int>(last_recv_ms % 1000);
+                LOG_M_WARNING("行情中断: symbol={}, gap={}ms, shard={}, 上次mdtime={}, 上次local_time={:02d}:{:02d}:{:02d}.{:03d}",
+                             symbol, gap_ms, shard_id, status.last_mdtime, lh, lm, ls, lms);
             }
         }
 
@@ -601,13 +611,25 @@ private:
                     if constexpr (std::is_same_v<T, MDStockStruct>) {
                         // 行情中断监控：更新接收时间
                         auto& status = symbol_status[sym_str];
-                        status.last_local_recv_time = std::chrono::steady_clock::now();
+                        auto now_local = std::chrono::steady_clock::now();
 
                         // 检查是否从中断恢复
                         if (status.interrupted) {
-                            LOG_M_WARNING("行情恢复: symbol={}, shard={}", sym_str, shard_id);
+                            // 计算当前 local_time 的可读时间
+                            auto now_sys = std::chrono::system_clock::now();
+                            auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                now_sys.time_since_epoch()).count() % 86400000;
+                            int nh = static_cast<int>(now_ms / 3600000);
+                            int nm = static_cast<int>((now_ms % 3600000) / 60000);
+                            int ns = static_cast<int>((now_ms % 60000) / 1000);
+                            int nms = static_cast<int>(now_ms % 1000);
+                            LOG_M_WARNING("行情恢复: symbol={}, shard={}, 本次mdtime={}, 本次local_time={:02d}:{:02d}:{:02d}.{:03d}",
+                                         sym_str, shard_id, data.mdtime, nh, nm, ns, nms);
                             status.interrupted = false;
                         }
+
+                        status.last_local_recv_time = now_local;
+                        status.last_mdtime = data.mdtime;
                         status.initialized = true;
 
                         // 如果还没有 OrderBook，使用 MDStockStruct 的 minpx 和 maxpx 创建
