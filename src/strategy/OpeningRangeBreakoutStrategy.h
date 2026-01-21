@@ -226,6 +226,15 @@ public:
         auto& state = it->second;
         if (state.buy_signal_triggered || !state.detector_armed) return;
 
+        // Check 10-minute time limit in Phase 3
+        int64_t time_since_open = get_time_since_open_ms(order.mdtime);
+        if (time_since_open > TEN_MINUTES_MS) {
+            state.detector_armed = false;
+            state.breakout_detector.set_enabled(false);
+            LOG_M_INFO("{} 超时(开盘后{}ms > 10分钟)，策略取消", symbol, time_since_open);
+            return;
+        }
+
         // 委托给检测器处理
         if (state.breakout_detector.on_order(order, book)) {
             onBreakoutTriggered(state, symbol, order.mdtime);
@@ -241,6 +250,15 @@ public:
 
         auto& state = it->second;
         if (state.buy_signal_triggered || !state.detector_armed) return;
+
+        // Check 10-minute time limit in Phase 3
+        int64_t time_since_open = get_time_since_open_ms(txn.mdtime);
+        if (time_since_open > TEN_MINUTES_MS) {
+            state.detector_armed = false;
+            state.breakout_detector.set_enabled(false);
+            LOG_M_INFO("{} 超时(开盘后{}ms > 10分钟)，策略取消", symbol, time_since_open);
+            return;
+        }
 
         // 委托给检测器处理
         if (state.breakout_detector.on_transaction(txn, book)) {

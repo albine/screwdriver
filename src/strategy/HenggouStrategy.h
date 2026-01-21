@@ -281,7 +281,18 @@ public:
         if (it == stock_states_.end()) return;
 
         auto& state = it->second;
-        if (state.buy_signal_triggered || !state.detector_armed) return;
+        if (state.buy_signal_triggered || !state.detector_armed || state.expired) return;
+
+        // Check expiration in Phase 3 (consolidation > 3 minutes from highest price time)
+        int64_t time_since_highest = time_util::calculate_time_diff_ms(
+            state.highest_timestamp_mdtime, order.mdtime);
+        if (time_since_highest > CONSOLIDATION_UPPER_LIMIT_MS) {
+            state.expired = true;
+            state.detector_armed = false;
+            state.breakout_detector.set_enabled(false);
+            LOG_M_INFO("{} Phase3横沟超时({}秒 > 180秒)，策略取消", symbol, time_since_highest / 1000);
+            return;
+        }
 
         // Delegate to breakout detector
         if (state.breakout_detector.on_order(order, book)) {
@@ -297,7 +308,18 @@ public:
         if (it == stock_states_.end()) return;
 
         auto& state = it->second;
-        if (state.buy_signal_triggered || !state.detector_armed) return;
+        if (state.buy_signal_triggered || !state.detector_armed || state.expired) return;
+
+        // Check expiration in Phase 3 (consolidation > 3 minutes from highest price time)
+        int64_t time_since_highest = time_util::calculate_time_diff_ms(
+            state.highest_timestamp_mdtime, txn.mdtime);
+        if (time_since_highest > CONSOLIDATION_UPPER_LIMIT_MS) {
+            state.expired = true;
+            state.detector_armed = false;
+            state.breakout_detector.set_enabled(false);
+            LOG_M_INFO("{} Phase3横沟超时({}秒 > 180秒)，策略取消", symbol, time_since_highest / 1000);
+            return;
+        }
 
         // Delegate to breakout detector
         if (state.breakout_detector.on_transaction(txn, book)) {
