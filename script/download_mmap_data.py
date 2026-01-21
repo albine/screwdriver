@@ -63,17 +63,16 @@ def export_orders(filepath, symbol, output_path):
                     continue
 
                 mddate, mdtime = struct.unpack('<ii', data[40:48])
-                # datatimestamp at 48-56
-                # securityidsource at 56 (or nearby)
+                # securityidsource at 48-52, securitytype at 52-56
                 orderindex = struct.unpack('<q', data[56:64])[0]
                 ordertype = struct.unpack('<i', data[64:68])[0]
                 # padding at 68-72
                 orderprice = struct.unpack('<q', data[72:80])[0]
                 orderqty = struct.unpack('<q', data[80:88])[0]
                 orderbsflag = struct.unpack('<i', data[88:92])[0]
-                # orderno at 96-104
+                channelno = struct.unpack('<i', data[92:96])[0]
                 orderno = struct.unpack('<q', data[96:104])[0]
-                channelno = struct.unpack('<i', data[104:108])[0]
+                # tradedqty at 104-112
                 applseqnum = struct.unpack('<q', data[112:120])[0]
 
                 # 确定交易所
