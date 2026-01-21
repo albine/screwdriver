@@ -109,6 +109,9 @@ inline quill::Logger* init(const LogConfig& config = LogConfig{}) {
     backend_options.log_level_descriptions[6] = "WARN";  // WARNING -> WARN
     backend_options.log_level_descriptions[7] = "ERR!";  // ERROR -> ERR!
 
+    // 允许 UTF-8 字符输出（默认只允许 ASCII 0x20-0x7E）
+    backend_options.check_printable_char = {};
+
     // 启动后台线程
     quill::Backend::start(backend_options);
 
