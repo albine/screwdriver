@@ -2,6 +2,8 @@
 # https://clangd.llvm.org/config
 
 CompileFlags:
+  # 指定 compile_commands.json 所在目录
+  CompilationDatabase: build
   # 移除 clangd 不支持的编译器标志
   Remove:
     - -Wno-gnu-zero-variadic-macro-arguments

@@ -4,13 +4,15 @@
 从服务器下载 mmap 市场数据
 
 用法:
-    python script/download_mmap_data.py <symbol> [date]
+    python script/download_mmap_data.py <symbol> [date] [--end-time HHMMSS]
 
 示例:
-    python script/download_mmap_data.py 600759.SH          # 今天
+    python script/download_mmap_data.py 600759.SH          # 今天全部数据
     python script/download_mmap_data.py 600759.SH 20260120 # 指定日期
+    python script/download_mmap_data.py 600759.SH --end-time 094500  # 只下载到9:45
 """
 
+import argparse
 import os
 import sys
 import subprocess
@@ -43,7 +45,7 @@ def read_header(mm):
     magic, version, struct_size, record_count, write_offset = struct.unpack('<IHHQQ', data[:24])
     return {'record_count': record_count, 'struct_size': struct_size}
 
-def export_orders(filepath, symbol, output_path):
+def export_orders(filepath, symbol, output_path, end_time=None):
     """导出 order 数据为 protobuf text 格式"""
     count = 0
     target = symbol.encode('utf-8') if isinstance(symbol, str) else symbol
@@ -63,6 +65,9 @@ def export_orders(filepath, symbol, output_path):
                     continue
 
                 mddate, mdtime = struct.unpack('<ii', data[40:48])
+                # 时间过滤
+                if end_time and mdtime >= end_time:
+                    continue
                 # securityidsource at 48-52, securitytype at 52-56
                 orderindex = struct.unpack('<q', data[56:64])[0]
                 ordertype = struct.unpack('<i', data[64:68])[0]
@@ -98,7 +103,7 @@ def export_orders(filepath, symbol, output_path):
         mm.close()
     return count
 
-def export_transactions(filepath, symbol, output_path):
+def export_transactions(filepath, symbol, output_path, end_time=None):
     """导出 transaction 数据为 protobuf text 格式"""
     count = 0
     target = symbol.encode('utf-8') if isinstance(symbol, str) else symbol
@@ -118,6 +123,9 @@ def export_transactions(filepath, symbol, output_path):
                     continue
 
                 mddate, mdtime = struct.unpack('<ii', data[40:48])
+                # 时间过滤
+                if end_time and mdtime >= end_time:
+                    continue
                 tradeindex = struct.unpack('<q', data[56:64])[0]
                 tradebuyno = struct.unpack('<q', data[64:72])[0]
                 tradesellno = struct.unpack('<q', data[72:80])[0]
@@ -157,7 +165,7 @@ def export_transactions(filepath, symbol, output_path):
         mm.close()
     return count
 
-def export_ticks(filepath, symbol, output_path):
+def export_ticks(filepath, symbol, output_path, end_time=None):
     """导出 tick 数据为 protobuf text 格式"""
     count = 0
     target = symbol.encode('utf-8') if isinstance(symbol, str) else symbol
@@ -177,6 +185,9 @@ def export_ticks(filepath, symbol, output_path):
                     continue
 
                 mddate, mdtime = struct.unpack('<ii', data[40:48])
+                # 时间过滤
+                if end_time and mdtime >= end_time:
+                    continue
                 # tradingphasecode at 56 (Python 2/3 compatible)
                 phase_byte = data[56:57]
                 tradingphasecode = phase_byte if isinstance(phase_byte, str) else chr(phase_byte[0]) if phase_byte[0] != 0 else '0'
@@ -241,12 +252,13 @@ def export_ticks(filepath, symbol, output_path):
 
 if __name__ == '__main__':
     if len(sys.argv) < 4:
-        print("Usage: python export_mmap.py <data_dir> <symbol> <output_dir>")
+        print("Usage: python export_mmap.py <data_dir> <symbol> <output_dir> [end_time]")
         sys.exit(1)
 
     data_dir = sys.argv[1]
     symbol = sys.argv[2]
     output_dir = sys.argv[3]
+    end_time = int(sys.argv[4]) * 1000 if len(sys.argv) > 4 else None  # HHMMSS -> HHMMSSmmm
 
     # 获取不带后缀的代码用于文件匹配
     symbol_base = symbol.split('.')[0]
@@ -255,21 +267,21 @@ if __name__ == '__main__':
     orders_file = os.path.join(data_dir, 'orders.bin')
     if os.path.exists(orders_file):
         output_path = os.path.join(output_dir, 'MD_ORDER_StockType_{}.csv'.format(symbol))
-        count = export_orders(orders_file, symbol_base, output_path)
+        count = export_orders(orders_file, symbol_base, output_path, end_time)
         print("Exported {} order records to {}".format(count, output_path))
 
     # 导出 transactions
     txn_file = os.path.join(data_dir, 'transactions.bin')
     if os.path.exists(txn_file):
         output_path = os.path.join(output_dir, 'MD_TRANSACTION_StockType_{}.csv'.format(symbol))
-        count = export_transactions(txn_file, symbol_base, output_path)
+        count = export_transactions(txn_file, symbol_base, output_path, end_time)
         print("Exported {} transaction records to {}".format(count, output_path))
 
     # 导出 ticks
     ticks_file = os.path.join(data_dir, 'ticks.bin')
     if os.path.exists(ticks_file):
         output_path = os.path.join(output_dir, 'MD_TICK_StockType_{}.csv'.format(symbol))
-        count = export_ticks(ticks_file, symbol_base, output_path)
+        count = export_ticks(ticks_file, symbol_base, output_path, end_time)
         print("Exported {} tick records to {}".format(count, output_path))
 '''
 
@@ -294,12 +306,16 @@ def run_cmd(cmd, check=True):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(__doc__)
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='从服务器下载 mmap 市场数据')
+    parser.add_argument('symbol', help='股票代码 (如 600759.SH 或 600759)')
+    parser.add_argument('date', nargs='?', default=None, help='日期 (YYYYMMDD格式，默认今天)')
+    parser.add_argument('--end-time', dest='end_time', help='截止时间 HHMMSS (如 094500 表示只下载到9:45)')
 
-    symbol = sys.argv[1]
-    date_str = sys.argv[2] if len(sys.argv) > 2 else None
+    args = parser.parse_args()
+
+    symbol = args.symbol
+    date_str = args.date
+    end_time = args.end_time
 
     # 确保 symbol 有后缀
     if '.' not in symbol:
@@ -314,6 +330,8 @@ def main():
     print(f"下载 {symbol} 的市场数据")
     print(f"  服务器: {SSH_HOST}")
     print(f"  数据目录: {remote_data_dir}")
+    if end_time:
+        print(f"  截止时间: {end_time}")
     print()
 
     # 1. 检查远程数据目录是否存在
@@ -336,7 +354,11 @@ def main():
     # 3. 在服务器上运行导出脚本
     print(f"3. 在服务器上导出 {symbol} 数据...")
     remote_output_dir = f"/tmp/mmap_export_{symbol.replace('.', '_')}"
-    run_cmd(f'ssh {SSH_HOST} "mkdir -p {remote_output_dir} && python /tmp/export_mmap.py {remote_data_dir} {symbol} {remote_output_dir}"')
+    export_cmd = f'ssh {SSH_HOST} "mkdir -p {remote_output_dir} && python /tmp/export_mmap.py {remote_data_dir} {symbol} {remote_output_dir}'
+    if end_time:
+        export_cmd += f' {end_time}'
+    export_cmd += '"'
+    run_cmd(export_cmd)
 
     # 4. 下载导出的文件
     print("4. 下载数据文件...")

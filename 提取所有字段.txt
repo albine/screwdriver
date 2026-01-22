@@ -1,0 +1,21 @@
+● 脚本完成。现在可以正确提取所有字段：                                                                                                       
+                                                                                                                                             
+  - timestamp: 日志时间戳                                                                                                                    
+  - symbol: 股票代码（从 [ORDR] 行补充）                                                                                                     
+  - time: 信号时间                                                                                                                           
+  - price: 价格（元）                                                                                                                        
+  - reason: 信号原因（默认 "手动添加突破"）                                                                                                  
+                                                                                                                                             
+  用法示例：                                                                                                                                 
+                                                                                                                                             
+  # 从服务器下载并解析                                                                                                                       
+  python script/download_and_parse_signals.py 20260122                                                                                       
+                                                                                                                                             
+  # 使用本地文件                                                                                                                             
+  python script/download_and_parse_signals.py --local log_biz_20260122.txt                                                                   
+                                                                                                                                             
+  # 指定输出文件                                                                                                                             
+  python script/download_and_parse_signals.py 20260122 -o my_signals.csv                                                                     
+                                                                                                                                             
+  # 指定其他服务器                                                                                                                           
+  python script/download_and_parse_signals.py 20260122 --host other-server  

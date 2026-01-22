@@ -187,8 +187,8 @@ def parse_backtest_output(output: str) -> dict:
         if 'Phase1完成' in line or 'Phase2完成' in line or 'Phase1' in line or 'Phase2' in line:
             result['phases'].append(line)
 
-        # 解析信号
-        if '[SIGNAL]' in line:
+        # 解析信号 (兼容两种格式: [SIGNAL] 和 [STRA])
+        if '[SIGNAL]' in line or ('[STRA]' in line and 'BUY' in line):
             result['signal'] = line
 
         # 解析错误
@@ -206,13 +206,21 @@ def format_signal(signal_line: str) -> str:
     # 提取关键信息
     parts = {}
 
-    # [SIGNAL] BUY | 600403.SH | Time=09:33:14.460 | Price=70884(7.09元) | ...
-    match = re.search(r'\[SIGNAL\]\s+(\w+)\s+\|\s+(\S+)\s+\|', signal_line)
+    # 新格式: [STRA] 600158.SH | BUY | MARKET_TIME=09:30:00.050 | Price=98750(9.88元) | ...
+    match = re.search(r'\[STRA\]\s+(\S+)\s+\|\s+(\w+)\s+\|', signal_line)
     if match:
-        parts['action'] = match.group(1)
-        parts['symbol'] = match.group(2)
+        parts['symbol'] = match.group(1)
+        parts['action'] = match.group(2)
 
-    match = re.search(r'Time=([^\s|]+)', signal_line)
+    # 旧格式: [SIGNAL] BUY | 600403.SH | Time=09:33:14.460 | Price=70884(7.09元) | ...
+    if not parts:
+        match = re.search(r'\[SIGNAL\]\s+(\w+)\s+\|\s+(\S+)\s+\|', signal_line)
+        if match:
+            parts['action'] = match.group(1)
+            parts['symbol'] = match.group(2)
+
+    # 提取时间 (兼容 Time= 和 MARKET_TIME=)
+    match = re.search(r'(?:Time|MARKET_TIME)=([^\s|]+)', signal_line)
     if match:
         parts['time'] = match.group(1)
 
@@ -320,14 +328,16 @@ def main():
     print(f"=" * 50)
 
     # 1. 下载数据（如果需要）
-    if not args.no_download:
-        if not download_data(symbol, args.date):
-            sys.exit(1)
-    else:
+    if args.no_download:
         if not check_data_exists(symbol):
             print(f"错误: 本地数据不存在: {symbol}")
             sys.exit(1)
         print(f"\n[1/3] 跳过下载，使用本地数据")
+    elif check_data_exists(symbol):
+        print(f"\n[1/3] 本地已有数据，跳过下载")
+    else:
+        if not download_data(symbol, args.date):
+            sys.exit(1)
 
     # 2. 更新配置
     if not update_config(symbol, strategy):
