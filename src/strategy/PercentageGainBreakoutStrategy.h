@@ -345,7 +345,9 @@ private:
 
     // Phase 2: Check consolidation period (27 seconds since last high)
     void checkConsolidation(const MDStockStruct& stock, PGBState& state, const std::string& symbol) {
-        int64_t consolidation_duration = stock.mdtime - state.highest_timestamp_mdtime;
+        // 使用 time_util 正确计算时间差（MDTime 不能直接做减法）
+        int64_t consolidation_duration = time_util::calculate_time_diff_ms(
+            state.highest_timestamp_mdtime, stock.mdtime);
 
         if (consolidation_duration >= CONSOLIDATION_HOLD_TIME_MS) {
             state.consolidation_period_met = true;
