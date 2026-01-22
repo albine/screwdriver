@@ -290,7 +290,6 @@ public:
             state.expired = true;
             state.detector_armed = false;
             state.breakout_detector.set_enabled(false);
-            LOG_M_INFO("{} Phase3横沟超时({}秒 > 180秒)，策略取消", symbol, time_since_highest / 1000);
             return;
         }
 
@@ -317,7 +316,6 @@ public:
             state.expired = true;
             state.detector_armed = false;
             state.breakout_detector.set_enabled(false);
-            LOG_M_INFO("{} Phase3横沟超时({}秒 > 180秒)，策略取消", symbol, time_since_highest / 1000);
             return;
         }
 

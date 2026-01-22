@@ -231,7 +231,6 @@ public:
         if (time_since_open > TEN_MINUTES_MS) {
             state.detector_armed = false;
             state.breakout_detector.set_enabled(false);
-            LOG_M_INFO("{} 超时(开盘后{}ms > 10分钟)，策略取消", symbol, time_since_open);
             return;
         }
 
@@ -256,7 +255,6 @@ public:
         if (time_since_open > TEN_MINUTES_MS) {
             state.detector_armed = false;
             state.breakout_detector.set_enabled(false);
-            LOG_M_INFO("{} 超时(开盘后{}ms > 10分钟)，策略取消", symbol, time_since_open);
             return;
         }
 
