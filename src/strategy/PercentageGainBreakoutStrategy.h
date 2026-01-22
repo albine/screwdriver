@@ -69,7 +69,7 @@ private:
     // MDTime format: HHMMSSmmm
     // 1 second = 1000, 1 minute = 100000 (NOT 60000!)
     static constexpr int64_t CONSOLIDATION_HOLD_TIME_MS = 27000;  // 27 seconds
-    static constexpr int64_t TEN_MINUTES_MS = 1000000;            // 10 minutes
+    static constexpr int64_t TEN_MINUTES_MS = 1000000 / 2;            // 5 minutes
 
     // Thresholds in basis points
     static constexpr int THRESHOLD_60_00_INITIAL = 300;   // 3%
