@@ -125,8 +125,15 @@ void run_backtest_mode(quill::Logger* logger, const std::string& config_file = "
 
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Loaded {} backtest configurations from {}", configs.size(), config_file);
 
+    // 加载引擎配置
+    auto engine_cfg = parse_engine_config("config/engine.conf");
+
     // 创建策略引擎
     StrategyEngine engine;
+    engine.set_interrupt_thresholds(
+        engine_cfg.interrupt_threshold_strategy_ms,
+        engine_cfg.interrupt_threshold_other_ms
+    );
 
     // 有效股票列表（用于后续加载数据）
     std::vector<std::string> valid_symbols;
@@ -247,6 +254,10 @@ void run_live_mode(quill::Logger* logger,
 
     // 创建策略引擎
     StrategyEngine engine;
+    engine.set_interrupt_thresholds(
+        engine_cfg.interrupt_threshold_strategy_ms,
+        engine_cfg.interrupt_threshold_other_ms
+    );
     auto& factory = StrategyFactory::instance();
 
     // 有效股票列表（去重）

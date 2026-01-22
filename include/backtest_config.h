@@ -121,6 +121,10 @@ struct EngineConfig {
     // 持久化配置
     bool disable_persist = false;
     std::string persist_data_dir = "data/raw";
+
+    // 行情中断检测配置（单位：毫秒）
+    int64_t interrupt_threshold_strategy_ms = 5000;    // 策略关注股票的中断阈值（默认5秒）
+    int64_t interrupt_threshold_other_ms = 20000;      // 非策略股票的中断阈值（默认20秒）
 };
 
 // ==========================================
@@ -186,6 +190,10 @@ inline EngineConfig parse_engine_config(const std::string& filepath) {
             config.disable_persist = (value == "true" || value == "1");
         } else if (key == "persist_data_dir") {
             config.persist_data_dir = value;
+        } else if (key == "interrupt_threshold_strategy_ms") {
+            config.interrupt_threshold_strategy_ms = std::stoll(value);
+        } else if (key == "interrupt_threshold_other_ms") {
+            config.interrupt_threshold_other_ms = std::stoll(value);
         }
     }
 

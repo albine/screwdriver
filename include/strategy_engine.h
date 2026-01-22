@@ -86,6 +86,7 @@ struct SymbolDataStatus {
     int32_t last_mdtime = 0;   // 上一次接收到的行情时间 (HHMMSSmmm)
     bool interrupted = false;
     bool initialized = false;  // 避免刚启动时误报
+    bool has_strategy = false; // 是否有策略关注此股票
 };
 
 // ==========================================
@@ -140,6 +141,10 @@ private:
     // 读写锁保护 registry_（支持运行时动态添加/删除策略）
     mutable std::shared_mutex registry_mutex_;
 
+    // 行情中断检测阈值（毫秒）
+    int64_t interrupt_threshold_strategy_ms_ = 5000;   // 策略关注股票
+    int64_t interrupt_threshold_other_ms_ = 20000;     // 非策略股票
+
     // 共享的 thread_local token 数组（修复消息乱序bug）
     // 关键：所有 on_market_* 方法必须共享同一个 token 数组，
     // 否则同一线程的不同 token 会导致消息乱序！
@@ -163,6 +168,12 @@ public:
 
     // 获取分片数（保持向后兼容）
     int shard_count() const { return config_.total_shards(); }
+
+    // 设置行情中断检测阈值（单位：毫秒）
+    void set_interrupt_thresholds(int64_t strategy_ms, int64_t other_ms) {
+        interrupt_threshold_strategy_ms_ = strategy_ms;
+        interrupt_threshold_other_ms_ = other_ms;
+    }
 
     ~StrategyEngine() {
         stop();
@@ -543,8 +554,10 @@ private:
                 now - status.last_local_recv_time
             ).count();
 
-            // 阈值：5 秒（订阅的都是关注的股票）
-            int64_t threshold_ms = 5000;
+            // 根据是否有策略关注选择不同阈值
+            int64_t threshold_ms = status.has_strategy
+                ? interrupt_threshold_strategy_ms_
+                : interrupt_threshold_other_ms_;
 
             if (gap_ms > threshold_ms) {
                 status.interrupted = true;
@@ -631,6 +644,7 @@ private:
                         status.last_local_recv_time = now_local;
                         status.last_mdtime = data.mdtime;
                         status.initialized = true;
+                        status.has_strategy = has_strats;
 
                         // 如果还没有 OrderBook，使用 MDStockStruct 的 minpx 和 maxpx 创建
                         auto book_it = books.find(sym_str);
