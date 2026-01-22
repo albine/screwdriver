@@ -54,16 +54,9 @@ private:
     }
 
     static int64_t get_time_since_open_ms(int32_t mdtime) {
-        int64_t time_ms = mdtime;
-        int64_t morning_open = 93000000;  // 09:30:00.000
-
-        if (time_ms >= morning_open && time_ms < 113000000) {
-            return time_ms - morning_open;
-        } else if (time_ms >= 130000000) {
-            // Afternoon: add morning duration + afternoon elapsed
-            return (113000000 - morning_open) + (time_ms - 130000000);
-        }
-        return 0;
+        // 使用 time_util 正确计算时间差（MDTime 不能直接做减法）
+        constexpr int32_t morning_open = 93000000;  // 09:30:00.000
+        return time_util::calculate_time_diff_ms(morning_open, mdtime);
     }
 
     static int calculate_percentage_bp(double price, double base_price) {
@@ -200,7 +193,9 @@ public:
         }
 
         // Update highest price if within 30 seconds of previous high
-        int64_t consolidation_duration = stock.mdtime - stock_state.highest_timestamp_mdtime;
+        // 使用 time_util 正确计算时间差（MDTime 不能直接做减法）
+        int64_t consolidation_duration = time_util::calculate_time_diff_ms(
+            stock_state.highest_timestamp_mdtime, stock.mdtime);
 
         if (consolidation_duration >= THIRTY_SECONDS_MS) {
             LOG_M_DEBUG("{} 距上一个新高已超过30秒，不再刷新新高 (highest={:.4f})",
@@ -315,7 +310,9 @@ private:
         if (stock_state.detector_armed) return;
 
         // Must be at least 30 seconds after highest price
-        int64_t consolidation_duration = stock.mdtime - stock_state.highest_timestamp_mdtime;
+        // 使用 time_util 正确计算时间差（MDTime 不能直接做减法）
+        int64_t consolidation_duration = time_util::calculate_time_diff_ms(
+            stock_state.highest_timestamp_mdtime, stock.mdtime);
         if (consolidation_duration < THIRTY_SECONDS_MS) return;
 
         // 30秒整理期满足，锁定当前 highest_price 作为目标价

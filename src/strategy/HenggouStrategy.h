@@ -51,16 +51,9 @@ private:
     }
 
     static int64_t get_time_since_open_ms(int32_t mdtime) {
-        int64_t time_ms = mdtime;
-        int64_t morning_open = 93000000;  // 09:30:00.000
-
-        if (time_ms >= morning_open && time_ms < 113000000) {
-            return time_ms - morning_open;
-        } else if (time_ms >= 130000000) {
-            // Afternoon: add morning duration + afternoon elapsed
-            return (113000000 - morning_open) + (time_ms - 130000000);
-        }
-        return 0;
+        // 使用 time_util 正确计算时间差（MDTime 不能直接做减法）
+        constexpr int32_t morning_open = 93000000;  // 09:30:00.000
+        return time_util::calculate_time_diff_ms(morning_open, mdtime);
     }
 
     static int calculate_percentage_bp(double price, double base_price) {
