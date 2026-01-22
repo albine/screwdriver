@@ -2,7 +2,7 @@
 #define TEST_ORDERBOOK_STRATEGY_H
 
 #include "strategy_base.h"
-#include "market_data_structs.h"
+#include "market_data_structs_aligned.h"
 #include "logger.h"
 #include "utils/time_util.h"
 #include "utils/symbol_utils.h"

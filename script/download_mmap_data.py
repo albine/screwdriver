@@ -19,7 +19,7 @@ from datetime import datetime
 
 # SSH 配置
 SSH_HOST = "market-m"
-REMOTE_DATA_BASE = "/home/jiace/project/trading-engine.backup.20260121_111252/data/raw"
+REMOTE_DATA_BASE = "/home/jiace/project/trading-engine/data/raw"
 LOCAL_TEST_DATA = "test_data"
 
 # 远程导出脚本（会在服务器上临时创建）
@@ -75,8 +75,8 @@ def export_orders(filepath, symbol, output_path):
                 # tradedqty at 104-112
                 applseqnum = struct.unpack('<q', data[112:120])[0]
 
-                # 确定交易所
-                sym_str = sym.decode('utf-8') if isinstance(sym, bytes) else sym
+                # 确定交易所 (使用 errors='ignore' 处理非 UTF-8 字节)
+                sym_str = sym.decode('utf-8', errors='ignore') if isinstance(sym, bytes) else sym
                 if sym_str.startswith('6'):
                     exchange = 'XSHG'
                 else:
@@ -129,7 +129,7 @@ def export_transactions(filepath, symbol, output_path):
                 applseqnum = struct.unpack('<q', data[112:120])[0]
                 channelno = struct.unpack('<i', data[120:124])[0]
 
-                sym_str = sym.decode('utf-8') if isinstance(sym, bytes) else sym
+                sym_str = sym.decode('utf-8', errors='ignore') if isinstance(sym, bytes) else sym
                 if sym_str.startswith('6'):
                     exchange = 'XSHG'
                 else:
@@ -197,7 +197,7 @@ def export_ticks(filepath, symbol, output_path):
                 sell_prices = struct.unpack('<10q', data[432:512])
                 sell_qtys = struct.unpack('<10q', data[512:592])
 
-                sym_str = sym.decode('utf-8') if isinstance(sym, bytes) else sym
+                sym_str = sym.decode('utf-8', errors='ignore') if isinstance(sym, bytes) else sym
                 if sym_str.startswith('6'):
                     exchange = 'XSHG'
                 else:

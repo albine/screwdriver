@@ -17,7 +17,7 @@
 #include <type_traits>
 #include <chrono>
 #include "concurrentqueue.h"
-#include "market_data_structs.h"
+#include "market_data_structs_aligned.h"
 #include "strategy_base.h"
 #include "strategy_ids.h"
 #include "utils/symbol_utils.h"

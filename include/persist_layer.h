@@ -3,7 +3,7 @@
 
 #include "concurrentqueue.h"
 #include "mmap_writer.h"
-#include "market_data_structs.h"
+#include "market_data_structs_aligned.h"
 
 #include <thread>
 #include <atomic>
@@ -37,11 +37,11 @@
 //
 class PersistLayer {
 public:
-    // Magic 定义 (文件类型标识)
-    static constexpr uint32_t MAGIC_ORDER       = 0x4D444F52;  // "MDOR"
-    static constexpr uint32_t MAGIC_TRANSACTION = 0x4D445458;  // "MDTX"
-    static constexpr uint32_t MAGIC_TICK        = 0x4D44544B;  // "MDTK"
-    static constexpr uint32_t MAGIC_SNAPSHOT    = 0x4D444F42;  // "MDOB"
+    // Magic 定义 - V2 格式 (使用对齐结构体和 local_recv_timestamp)
+    static constexpr uint32_t MAGIC_ORDER       = MAGIC_ORDER_V2;       // 0x4F524432 "ORD2"
+    static constexpr uint32_t MAGIC_TRANSACTION = MAGIC_TRANSACTION_V2; // 0x54584E32 "TXN2"
+    static constexpr uint32_t MAGIC_TICK        = MAGIC_TICK_V2;        // 0x54494B32 "TIK2"
+    static constexpr uint32_t MAGIC_SNAPSHOT    = MAGIC_ORDERBOOK_V2;   // 0x4F424B32 "OBK2"
 
     // 预分配容量 (含 20% buffer)
     // 根据数据量估算:

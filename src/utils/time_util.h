@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
+#include <chrono>
 
 // ==========================================
 // 时间辅助工具类
@@ -65,6 +66,18 @@ inline std::string format_mdtime(int32_t mdtime) {
     char buf[16];
     std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d.%03d", h, m, s, ms);
     return std::string(buf);
+}
+
+// ==========================================
+// 高精度时间戳
+// ==========================================
+
+// 获取当前时间的纳秒时间戳（自 Unix 纪元以来）
+// 用于记录本地接收时间，计算网络延迟
+inline int64_t now_ns() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
 }
 
 } // namespace time_util

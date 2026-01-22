@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <optional>
 #include <string>
-#include "market_data_structs.h"
+#include "market_data_structs_aligned.h"
 #include "ObjectPool.h"
 #include "logger.h"
 

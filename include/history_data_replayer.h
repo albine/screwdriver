@@ -10,7 +10,7 @@
 #include <algorithm>
 #include <thread>
 #include <cstring>
-#include "market_data_structs.h"
+#include "market_data_structs_aligned.h"
 #include "market_data_enums.h"
 
 enum class MarketEventType { TICK, ORDER, TRANSACTION };

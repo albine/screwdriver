@@ -3,9 +3,10 @@
 
 #include "../fastfish/src/InsightHandle.h"
 #include "strategy_engine.h"
-#include "market_data_structs.h"
+#include "market_data_structs_aligned.h"
 #include "ADOrderbookSnapshot.pb.h"
 #include "logger.h"
+#include "../src/utils/time_util.h"
 
 #include <cstring>
 #include <algorithm>
@@ -332,8 +333,11 @@ private:
 
     // 优化建议：传入引用 &out，复用内存，避免栈上对象的反复构造和销毁
     void convert_to_order_fast(const com::htsc::mdc::insight::model::MDOrder& pb_order, MDOrderStruct& out) {
+        // 【关键优化0】记录本地接收时间（第一时间获取，用于延迟分析）
+        out.local_recv_timestamp = time_util::now_ns();
+
         // 【关键优化1】移除 memset/初始化
-        // 严禁写 MDOrderStruct out = {}; 
+        // 严禁写 MDOrderStruct out = {};
         // 我们假设 pb_order 会覆盖所有关键字段。如果结构体有 padding，脏数据不影响逻辑。
 
         // 【关键优化2】极速字符串拷贝
@@ -362,6 +366,9 @@ private:
     }
 
     void convert_to_transaction_fast(const com::htsc::mdc::insight::model::MDTransaction& pb_txn, MDTransactionStruct& out) {
+        // 【关键优化0】记录本地接收时间（第一时间获取，用于延迟分析）
+        out.local_recv_timestamp = time_util::now_ns();
+
         // 【关键优化1】不进行 memset 清零
 
         // 【关键优化2】极速字符串拷贝
@@ -392,6 +399,9 @@ private:
     // 转换函数
     // ==========================================
     void convert_to_stock_fast(const com::htsc::mdc::insight::model::MDStock& pb_stock, MDStockStruct& stock) {
+        // 0. 记录本地接收时间（第一时间获取，用于延迟分析）
+        stock.local_recv_timestamp = time_util::now_ns();
+
         // 1. 字符串处理 (优化 strncpy)
         const std::string& sec_id = pb_stock.htscsecurityid();
         size_t id_len = std::min(sec_id.size(), sizeof(stock.htscsecurityid) - 1);
@@ -468,6 +478,8 @@ private:
     void convert_to_orderbook_snapshot_fast(
         const com::htsc::mdc::insight::model::ADOrderbookSnapshot& pb_snap,
         MDOrderbookStruct& out) {
+        // 0. 记录本地接收时间（第一时间获取，用于延迟分析）
+        out.local_recv_timestamp = time_util::now_ns();
 
         // 字符串拷贝
         const std::string& sec_id = pb_snap.htscsecurityid();

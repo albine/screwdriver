@@ -65,7 +65,7 @@ def generate_strategy_header(class_name: str, description: str = "") -> str:
 #define {guard_name}
 
 #include "strategy_base.h"
-#include "market_data_structs.h"
+#include "market_data_structs_aligned.h"
 #include "logger.h"
 #include "utils/time_util.h"
 #include "utils/symbol_utils.h"

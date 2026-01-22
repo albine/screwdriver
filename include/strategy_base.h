@@ -2,7 +2,7 @@
 #define STRATEGY_BASE_H
 
 #include <string>
-#include "market_data_structs.h"
+#include "market_data_structs_aligned.h"
 #include "../src/FastOrderBook.h"
 
 // 前向声明

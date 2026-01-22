@@ -2,7 +2,7 @@
 #define HENGGOU_STRATEGY_H
 
 #include "strategy_base.h"
-#include "market_data_structs.h"
+#include "market_data_structs_aligned.h"
 #include "trade_signal.h"
 #include "logger.h"
 #include "breakout_detector.h"

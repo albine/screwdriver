@@ -2,7 +2,7 @@
 #define BREAKOUT_DETECTOR_H
 
 #include "FastOrderBook.h"
-#include "market_data_structs.h"
+#include "market_data_structs_aligned.h"
 #include "utils/time_util.h"
 #include <deque>
 #include <functional>
