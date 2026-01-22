@@ -234,7 +234,7 @@ static void signal_handler(int signum) {
 // 实盘模式
 // ==========================================
 void run_live_mode(quill::Logger* logger,
-                   const std::string& strategy_config_file = "config/strategy_live.conf",
+                   const std::string& /*strategy_config_file*/ = "config/strategy_live.conf",
                    const std::string& engine_config_file = "config/engine.conf") {
     LOG_MODULE_INFO(logger, MOD_ENGINE, "=== Live Trading Mode ===");
 
@@ -245,53 +245,103 @@ void run_live_mode(quill::Logger* logger,
     // 注册所有策略
     register_all_strategies();
 
-    // 解析策略配置文件
-    auto configs = parse_strategy_config(strategy_config_file);
-    if (configs.empty()) {
-        LOG_MODULE_ERROR(logger, MOD_ENGINE, "No valid configurations found in {}", strategy_config_file);
-        LOG_MODULE_INFO(logger, MOD_ENGINE, "Config format: stock_code,strategy_name (e.g., 600759,BreakoutPriceVolumeStrategy)");
-        return;
-    }
-
-    LOG_MODULE_INFO(logger, MOD_ENGINE, "Loaded {} configurations from {}", configs.size(), strategy_config_file);
-
-    // 统计每种策略的配置数量
-    std::map<std::string, int> strategy_counts;
-    for (const auto& cfg : configs) {
-        strategy_counts[cfg.strategy_name]++;
-    }
-    for (const auto& [name, count] : strategy_counts) {
-        LOG_MODULE_INFO(logger, MOD_ENGINE, "  - {}: {} symbols", name, count);
-    }
-
     // 创建策略引擎
     StrategyEngine engine;
-
     auto& factory = StrategyFactory::instance();
 
-    // 为每个配置创建策略
+    // 有效股票列表（去重）
     std::vector<std::string> valid_symbols;
-    for (const auto& cfg : configs) {
-        // 检查策略是否存在
-        if (!factory.has_strategy(cfg.strategy_name)) {
-            LOG_MODULE_WARNING(logger, MOD_ENGINE, "Unknown strategy: {}, skipping {}", cfg.strategy_name, cfg.symbol);
-            auto available = factory.get_registered_strategies();
-            std::string avail_str;
-            for (const auto& s : available) avail_str += s + " ";
-            LOG_MODULE_INFO(logger, MOD_ENGINE, "Available strategies: {}", avail_str);
-            continue;
+    // 记录每个 dealer 对应的 symbols
+    std::vector<std::string> dealer1_symbols;
+    std::vector<std::string> dealer2_symbols;
+
+    // ========================================
+    // 加载 DEALER1 的策略配置
+    // ========================================
+    auto configs1 = parse_strategy_config(engine_cfg.strategy_config_file);
+    if (configs1.empty()) {
+        LOG_MODULE_WARNING(logger, MOD_ENGINE, "No configurations found in {} (DEALER1)", engine_cfg.strategy_config_file);
+    } else {
+        LOG_MODULE_INFO(logger, MOD_ENGINE, "Loaded {} configurations from {} (DEALER1)", configs1.size(), engine_cfg.strategy_config_file);
+
+        // 统计每种策略的配置数量
+        std::map<std::string, int> strategy_counts;
+        for (const auto& cfg : configs1) {
+            strategy_counts[cfg.strategy_name]++;
+        }
+        for (const auto& [name, count] : strategy_counts) {
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "  DEALER1 - {}: {} symbols", name, count);
         }
 
-        // 创建策略实例并转移所有权给 engine
-        try {
-            auto strategy = factory.create(cfg.strategy_name, cfg.symbol, cfg.params);
-            engine.register_strategy(cfg.symbol, std::move(strategy));
-            // 只添加一次（去重）
-            if (std::find(valid_symbols.begin(), valid_symbols.end(), cfg.symbol) == valid_symbols.end()) {
-                valid_symbols.push_back(cfg.symbol);
+        // 为每个配置创建策略
+        for (const auto& cfg : configs1) {
+            if (!factory.has_strategy(cfg.strategy_name)) {
+                LOG_MODULE_WARNING(logger, MOD_ENGINE, "Unknown strategy: {}, skipping {}", cfg.strategy_name, cfg.symbol);
+                auto available = factory.get_registered_strategies();
+                std::string avail_str;
+                for (const auto& s : available) avail_str += s + " ";
+                LOG_MODULE_INFO(logger, MOD_ENGINE, "Available strategies: {}", avail_str);
+                continue;
             }
-        } catch (const std::exception& e) {
-            LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create strategy for {}: {}", cfg.symbol, e.what());
+
+            try {
+                auto strategy = factory.create(cfg.strategy_name, cfg.symbol, cfg.params);
+                engine.register_strategy(cfg.symbol, std::move(strategy));
+                // 记录为 DEALER1 的 symbol
+                dealer1_symbols.push_back(cfg.symbol);
+                // 只添加一次（去重）
+                if (std::find(valid_symbols.begin(), valid_symbols.end(), cfg.symbol) == valid_symbols.end()) {
+                    valid_symbols.push_back(cfg.symbol);
+                }
+            } catch (const std::exception& e) {
+                LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create strategy for {}: {}", cfg.symbol, e.what());
+            }
+        }
+    }
+
+    // ========================================
+    // 加载 DEALER2 的策略配置（可选）
+    // ========================================
+    if (!engine_cfg.strategy_config_file2.empty()) {
+        auto configs2 = parse_strategy_config(engine_cfg.strategy_config_file2);
+        if (configs2.empty()) {
+            LOG_MODULE_WARNING(logger, MOD_ENGINE, "No configurations found in {} (DEALER2)", engine_cfg.strategy_config_file2);
+        } else {
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "Loaded {} configurations from {} (DEALER2)", configs2.size(), engine_cfg.strategy_config_file2);
+
+            // 统计每种策略的配置数量
+            std::map<std::string, int> strategy_counts;
+            for (const auto& cfg : configs2) {
+                strategy_counts[cfg.strategy_name]++;
+            }
+            for (const auto& [name, count] : strategy_counts) {
+                LOG_MODULE_INFO(logger, MOD_ENGINE, "  DEALER2 - {}: {} symbols", name, count);
+            }
+
+            // 为每个配置创建策略
+            for (const auto& cfg : configs2) {
+                if (!factory.has_strategy(cfg.strategy_name)) {
+                    LOG_MODULE_WARNING(logger, MOD_ENGINE, "Unknown strategy: {}, skipping {}", cfg.strategy_name, cfg.symbol);
+                    auto available = factory.get_registered_strategies();
+                    std::string avail_str;
+                    for (const auto& s : available) avail_str += s + " ";
+                    LOG_MODULE_INFO(logger, MOD_ENGINE, "Available strategies: {}", avail_str);
+                    continue;
+                }
+
+                try {
+                    auto strategy = factory.create(cfg.strategy_name, cfg.symbol, cfg.params);
+                    engine.register_strategy(cfg.symbol, std::move(strategy));
+                    // 记录为 DEALER2 的 symbol
+                    dealer2_symbols.push_back(cfg.symbol);
+                    // 只添加一次（去重）
+                    if (std::find(valid_symbols.begin(), valid_symbols.end(), cfg.symbol) == valid_symbols.end()) {
+                        valid_symbols.push_back(cfg.symbol);
+                    }
+                } catch (const std::exception& e) {
+                    LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to create strategy for {}: {}", cfg.symbol, e.what());
+                }
+            }
         }
     }
 
@@ -343,6 +393,16 @@ void run_live_mode(quill::Logger* logger,
             // 创建实盘上下文并设置给所有策略
             live_ctx = std::make_unique<LiveContext>(g_zmq_client.get());
             engine.set_context_for_all_strategies(live_ctx.get());
+
+            // 设置 symbol → dealer 映射（用于下单路由）
+            for (const auto& sym : dealer1_symbols) {
+                g_zmq_client->set_symbol_dealer(sym, 1);
+            }
+            for (const auto& sym : dealer2_symbols) {
+                g_zmq_client->set_symbol_dealer(sym, 2);
+            }
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "Set dealer mapping: {} symbols -> DEALER1, {} symbols -> DEALER2",
+                           dealer1_symbols.size(), dealer2_symbols.size());
         } else {
             LOG_MODULE_WARNING(logger, MOD_ENGINE, "Failed to start ZMQ client, continuing without it");
         }

@@ -120,6 +120,12 @@ public:
 
     bool is_running() const { return running_; }
 
+    // 设置 symbol 对应的 dealer 映射（用于配置文件加载的策略）
+    void set_symbol_dealer(const std::string& symbol, int dealer_index) {
+        std::unique_lock lock(symbol_dealer_mutex_);
+        symbol_dealer_map_[symbol] = dealer_index;
+    }
+
     // 发送下单消息到 ROUTER（股票代码去掉后缀）
     // 根据 symbol 查找对应的 dealer 发送（确保使用 add_hot_stock_ht 时的同一通道）
     void send_place_order(const std::string& symbol, double price, const std::string& strategy_name) {

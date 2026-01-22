@@ -114,6 +114,10 @@ struct EngineConfig {
     std::string zmq_endpoint2 = "tcp://localhost:13381";  // DEALER2 连接的 ROUTER 地址
     bool disable_zmq = false;
 
+    // 策略配置文件
+    std::string strategy_config_file = "config/strategy_live.conf";    // DEALER1 的策略配置文件
+    std::string strategy_config_file2;                                  // DEALER2 的策略配置文件（可选）
+
     // 持久化配置
     bool disable_persist = false;
     std::string persist_data_dir = "data/raw";
@@ -174,6 +178,10 @@ inline EngineConfig parse_engine_config(const std::string& filepath) {
             config.zmq_endpoint2 = value;
         } else if (key == "disable_zmq") {
             config.disable_zmq = (value == "true" || value == "1");
+        } else if (key == "strategy_config_file") {
+            config.strategy_config_file = value;
+        } else if (key == "strategy_config_file2") {
+            config.strategy_config_file2 = value;
         } else if (key == "disable_persist") {
             config.disable_persist = (value == "true" || value == "1");
         } else if (key == "persist_data_dir") {
