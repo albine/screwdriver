@@ -295,7 +295,7 @@ public:
 
         // Delegate to breakout detector
         if (state.breakout_detector.on_order(order, book)) {
-            onBreakoutTriggered(state, symbol, order.mdtime);
+            onBreakoutTriggered(state, symbol, order.mdtime, order.local_recv_timestamp);
         }
     }
 
@@ -319,7 +319,7 @@ public:
 
         // Delegate to breakout detector
         if (state.breakout_detector.on_transaction(txn, book)) {
-            onBreakoutTriggered(state, symbol, txn.mdtime);
+            onBreakoutTriggered(state, symbol, txn.mdtime, txn.local_recv_timestamp);
         }
     }
 
@@ -379,7 +379,7 @@ private:
     }
 
     // Breakout triggered callback
-    void onBreakoutTriggered(PGBState& state, const std::string& symbol, int32_t mdtime) {
+    void onBreakoutTriggered(PGBState& state, const std::string& symbol, int32_t mdtime, int64_t local_recv_timestamp) {
         state.buy_signal_triggered = true;
 
         uint32_t target_price = state.breakout_detector.get_target_price();
@@ -396,18 +396,20 @@ private:
 
         if (stats.current_volume == 0) {
             // Direct breakout (target_price < best_ask)
-            LOG_BIZ("SIGNAL",
-                    "BUY | {} | Time={} | Price={} | Open={:.4f} | "
+            LOG_BIZ(BIZ_STRA,
+                    "{} | BUY | MARKET_TIME={} | LOCAL_TIME={} | Price={} | Open={:.4f} | "
                     "PrevClose={:.4f} | Reason={} (直接突破)",
                     symbol, time_util::format_mdtime(mdtime),
+                    time_util::format_ns_time(local_recv_timestamp),
                     price_util::format_price_display(order_price),
                     state.open_price, state.prev_close, scenario_str);
         } else {
             // Order book dynamics triggered
-            LOG_BIZ("SIGNAL",
-                    "BUY | {} | Time={} | Price={} | Open={:.4f} | "
+            LOG_BIZ(BIZ_STRA,
+                    "{} | BUY | MARKET_TIME={} | LOCAL_TIME={} | Price={} | Open={:.4f} | "
                     "PrevClose={:.4f} | n={:.0f} | delta_n={} | Reason={} (动力学触发)",
                     symbol, time_util::format_mdtime(mdtime),
+                    time_util::format_ns_time(local_recv_timestamp),
                     price_util::format_price_display(order_price),
                     state.open_price, state.prev_close,
                     stats.avg_volume, stats.total_buy_qty, scenario_str);

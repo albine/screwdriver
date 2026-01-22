@@ -231,7 +231,7 @@ public:
 
         // 委托给检测器处理
         if (state.breakout_detector.on_order(order, book)) {
-            onBreakoutTriggered(state, symbol, order.mdtime);
+            onBreakoutTriggered(state, symbol, order.mdtime, order.local_recv_timestamp);
         }
     }
 
@@ -255,7 +255,7 @@ public:
 
         // 委托给检测器处理
         if (state.breakout_detector.on_transaction(txn, book)) {
-            onBreakoutTriggered(state, symbol, txn.mdtime);
+            onBreakoutTriggered(state, symbol, txn.mdtime, txn.local_recv_timestamp);
         }
     }
 
@@ -332,7 +332,8 @@ private:
     // 突破触发回调
     void onBreakoutTriggered(ORBState& stock_state,
                              const std::string& symbol,
-                             int32_t mdtime) {
+                             int32_t mdtime,
+                             int64_t local_recv_timestamp) {
         stock_state.buy_signal_triggered = true;
 
         uint32_t target_price = stock_state.breakout_detector.get_target_price();
@@ -349,18 +350,20 @@ private:
 
         if (stats.current_volume == 0) {
             // 直接突破（target_price < best_ask）
-            LOG_BIZ("SIGNAL",
-                    "BUY | {} | Time={} | Price={} | Open={:.4f} | "
+            LOG_BIZ(BIZ_STRA,
+                    "{} | BUY | MARKET_TIME={} | LOCAL_TIME={} | Price={} | Open={:.4f} | "
                     "PrevClose={:.4f} | Reason={} (直接突破)",
                     symbol, time_util::format_mdtime(mdtime),
+                    time_util::format_ns_time(local_recv_timestamp),
                     price_util::format_price_display(order_price),
                     stock_state.open_price, stock_state.prev_close, reason);
         } else {
             // 盘口动力学触发
-            LOG_BIZ("SIGNAL",
-                    "BUY | {} | Time={} | Price={} | Open={:.4f} | "
+            LOG_BIZ(BIZ_STRA,
+                    "{} | BUY | MARKET_TIME={} | LOCAL_TIME={} | Price={} | Open={:.4f} | "
                     "PrevClose={:.4f} | n={:.0f} | delta_n={} | Reason={} (动力学触发)",
                     symbol, time_util::format_mdtime(mdtime),
+                    time_util::format_ns_time(local_recv_timestamp),
                     price_util::format_price_display(order_price),
                     stock_state.open_price, stock_state.prev_close,
                     stats.avg_volume, stats.total_buy_qty, reason);

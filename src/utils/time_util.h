@@ -80,6 +80,27 @@ inline int64_t now_ns() {
     ).count();
 }
 
+// 格式化纳秒时间戳为当日时间字符串
+// 例如: 1737509451535123456 -> "09:30:51.535"
+// 注意: 只提取当天的时间部分 (HH:MM:SS.mmm)
+inline std::string format_ns_time(int64_t ns_timestamp) {
+    if (ns_timestamp == 0) {
+        return "N/A";
+    }
+    // 转换为秒和毫秒
+    int64_t total_ms = ns_timestamp / 1000000;
+    int64_t ms_of_day = total_ms % (24 * 3600 * 1000);  // 当天的毫秒数
+
+    int32_t h = static_cast<int32_t>(ms_of_day / 3600000);
+    int32_t m = static_cast<int32_t>((ms_of_day / 60000) % 60);
+    int32_t s = static_cast<int32_t>((ms_of_day / 1000) % 60);
+    int32_t ms = static_cast<int32_t>(ms_of_day % 1000);
+
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d.%03d", h, m, s, ms);
+    return std::string(buf);
+}
+
 } // namespace time_util
 
 #endif // TIME_UTIL_H

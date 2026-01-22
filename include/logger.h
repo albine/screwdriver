@@ -55,6 +55,7 @@ namespace logger {
 #define BIZ_RJCT "RJCT"  // 拒绝
 #define BIZ_POSN "POSN"  // 持仓变化
 #define BIZ_ACCT "ACCT"  // 账户/资金
+#define BIZ_STRA "STRA"  // 策略触发
 
 // 业务日志宏（自动使用业务日志器）
 #define LOG_BIZ(type, fmt, ...) \

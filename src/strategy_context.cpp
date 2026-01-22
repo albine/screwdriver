@@ -4,9 +4,9 @@
 void LiveContext::place_order(const TradeSignal& signal) {
     // 记录到业务日志
     LOG_BIZ(BIZ_ORDR,
-            "[LIVE] {} | {} | {} @ {} | qty={} | trigger_time={}",
-            signal.strategy_name,
+            "{} | {} | {} @ {} | qty={} | trigger_time={}",
             signal.symbol,
+            signal.strategy_name,
             signal.side_str(),
             symbol_utils::int_to_price(signal.price),
             signal.quantity,
