@@ -150,7 +150,7 @@ private:
         // Initialize cap threshold
         initializeThresholds(state, symbol);
 
-        LOG_M_INFO("{} 开盘: prev_close={:.4f}, open={:.4f}",
+        LOG_M_DEBUG("{} 开盘: prev_close={:.4f}, open={:.4f}",
                    symbol, state.prev_close, state.open_price);
     }
 
