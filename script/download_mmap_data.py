@@ -21,7 +21,7 @@ from datetime import datetime
 
 # SSH 配置
 SSH_HOST = "market-m"
-REMOTE_DATA_BASE = "/home/jiace/project/trading-engine/data/raw"
+REMOTE_DATA_BASE = "/home/jiace/project/trading-engine.backup.20260123_111520/data/raw"
 LOCAL_TEST_DATA = "test_data"
 
 # 远程导出脚本（会在服务器上临时创建）

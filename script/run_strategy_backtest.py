@@ -75,7 +75,7 @@ def download_data(symbol: str, date: str = None) -> bool:
     """下载市场数据"""
     print(f"\n[1/3] 下载 {symbol} 的市场数据...")
 
-    download_script = PROJECT_ROOT / "script" / "download_mmap_data.py"
+    download_script = PROJECT_ROOT / "script" / "download_mmap_data_v2.py"
     if not download_script.exists():
         print(f"错误: 下载脚本不存在: {download_script}")
         return False

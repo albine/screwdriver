@@ -26,7 +26,7 @@ from datetime import datetime
 
 # SSH 配置
 SSH_HOST = "market-m"
-REMOTE_DATA_BASE = "/home/jiace/project/trading-engine/data/raw"
+REMOTE_DATA_BASE = "/home/jiace/project/trading-engine.backup.20260123_111520/data/raw"
 LOCAL_TEST_DATA = "test_data"
 
 # ============================================================================
@@ -84,6 +84,16 @@ def detect_version(magic):
     return 0
 
 
+def get_phase_code(phase_byte):
+    """兼容 Python 2/3 获取交易阶段代码"""
+    b = phase_byte[0]
+    # Python 3: b 是 int; Python 2: b 是 str
+    if isinstance(b, int):
+        return chr(b) if b != 0 else '0'
+    else:
+        return b if b != '\x00' else '0'
+
+
 def export_orders(filepath, symbol, output_path):
     """导出 order 数据为 protobuf text 格式"""
     count = 0
@@ -122,11 +132,11 @@ def export_orders(filepath, symbol, output_path):
                     ordertype = struct.unpack('<i', data[72:76])[0]
                     orderbsflag = struct.unpack('<i', data[76:80])[0]
                     channelno = struct.unpack('<i', data[80:84])[0]
-                    sym = data[88:128].rstrip(b'\x00')
+                    sym = data[88:128].split(b'\x00')[0]
                 else:
                     # V1: symbol 在 offset 0
                     local_recv_ts = 0
-                    sym = data[:40].rstrip(b'\x00')
+                    sym = data[:40].split(b'\x00')[0]
                     mddate, mdtime = struct.unpack('<ii', data[40:48])
                     orderindex = struct.unpack('<q', data[56:64])[0]
                     ordertype = struct.unpack('<i', data[64:68])[0]
@@ -202,11 +212,11 @@ def export_transactions(filepath, symbol, output_path):
                     tradetype = struct.unpack('<i', data[80:84])[0]
                     tradebsflag = struct.unpack('<i', data[84:88])[0]
                     channelno = struct.unpack('<i', data[88:92])[0]
-                    sym = data[96:136].rstrip(b'\x00')
+                    sym = data[96:136].split(b'\x00')[0]
                 else:
                     # V1: symbol 在 offset 0
                     local_recv_ts = 0
-                    sym = data[:40].rstrip(b'\x00')
+                    sym = data[:40].split(b'\x00')[0]
                     mddate, mdtime = struct.unpack('<ii', data[40:48])
                     tradeindex = struct.unpack('<q', data[56:64])[0]
                     tradebuyno = struct.unpack('<q', data[64:72])[0]
@@ -289,9 +299,9 @@ def export_ticks(filepath, symbol, output_path):
                     mddate = struct.unpack('<i', data[2120:2124])[0]
                     mdtime = struct.unpack('<i', data[2124:2128])[0]
                     channelno = struct.unpack('<i', data[2144:2148])[0]
-                    sym = data[2168:2208].rstrip(b'\x00')
+                    sym = data[2168:2208].split(b'\x00')[0]
                     phase_byte = data[2208:2209]
-                    tradingphasecode = chr(phase_byte[0]) if phase_byte[0] != 0 else '0'
+                    tradingphasecode = get_phase_code(phase_byte)
 
                     # 价格队列 (V2 offset: 200)
                     buy_prices = struct.unpack('<10q', data[200:280])
@@ -301,10 +311,10 @@ def export_ticks(filepath, symbol, output_path):
                 else:
                     # V1: symbol 在 offset 0
                     local_recv_ts = 0
-                    sym = data[:40].rstrip(b'\x00')
+                    sym = data[:40].split(b'\x00')[0]
                     mddate, mdtime = struct.unpack('<ii', data[40:48])
                     phase_byte = data[56:57]
-                    tradingphasecode = chr(phase_byte[0]) if phase_byte[0] != 0 else '0'
+                    tradingphasecode = get_phase_code(phase_byte)
                     maxpx, minpx, preclosepx = struct.unpack('<qqq', data[72:96])
                     lastpx = struct.unpack('<q', data[120:128])[0]
                     openpx = struct.unpack('<q', data[128:136])[0]

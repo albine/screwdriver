@@ -62,9 +62,11 @@ def get_latest_version() -> str:
         parts = line.split('\t')
         if parts:
             version = parts[0].strip()
-            # 过滤有效版本号格式
-            if version and version[0].isdigit():
-                versions.append(version)
+            # 过滤有效版本号格式（格式：v25.12.4.35-stable）
+            if version and version.startswith('v') and '-stable' in version:
+                # 提取纯版本号：去掉 v 前缀和 -stable 后缀
+                clean_version = version[1:].replace('-stable', '')
+                versions.append(clean_version)
 
     if not versions:
         raise RuntimeError("无法获取版本列表")
@@ -212,13 +214,13 @@ def create_custom_config() -> None:
     <http_port>8123</http_port>
     <tcp_port>9000</tcp_port>
 
-    <!-- 压缩配置：使用 ZSTD 最强压缩 -->
+    <!-- 压缩配置：ZSTD 压缩 -->
     <compression>
         <case>
-            <min_part_size>0</min_part_size>
-            <min_part_size_ratio>0</min_part_size_ratio>
+            <min_part_size>1024</min_part_size>
+            <min_part_size_ratio>0.01</min_part_size_ratio>
             <method>zstd</method>
-            <level>22</level>
+            <level>12</level>
         </case>
     </compression>
 
@@ -231,8 +233,6 @@ def create_custom_config() -> None:
         <count>10</count>
     </logger>
 
-    <!-- 内存限制 -->
-    <max_memory_usage>10000000000</max_memory_usage>
 </clickhouse>
 """
 
