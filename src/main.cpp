@@ -436,6 +436,7 @@ void run_live_mode(quill::Logger* logger,
 
         // Writer 线程绑核 (绑定到最后一个 CPU)
         int last_cpu = static_cast<int>(std::thread::hardware_concurrency()) - 1;
+        // int last_cpu = 0;
 
         if (!persist->init(date, data_dir, last_cpu)) {
             LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to initialize PersistLayer");
@@ -523,7 +524,7 @@ void run_live_mode(quill::Logger* logger,
     detail_shg->add_marketdatatypes(MD_TICK);
     detail_shg->add_marketdatatypes(MD_ORDER);
     detail_shg->add_marketdatatypes(MD_TRANSACTION);
-    detail_shg->add_marketdatatypes(AD_ORDERBOOK_SNAPSHOT);  // OrderBook快照（备份）
+    // detail_shg->add_marketdatatypes(AD_ORDERBOOK_SNAPSHOT);  // OrderBook快照（备份）
 
     // 订阅深圳股票的TICK、ORDER、TRANSACTION数据
     SubscribeBySourceTypeDetail* detail_she = source_type->add_subscribebysourcetypedetail();
@@ -534,7 +535,7 @@ void run_live_mode(quill::Logger* logger,
     detail_she->add_marketdatatypes(MD_TICK);
     detail_she->add_marketdatatypes(MD_ORDER);
     detail_she->add_marketdatatypes(MD_TRANSACTION);
-    detail_she->add_marketdatatypes(AD_ORDERBOOK_SNAPSHOT);  // OrderBook快照（备份）
+    // detail_she->add_marketdatatypes(AD_ORDERBOOK_SNAPSHOT);  // OrderBook快照（备份）
 
     LOG_MODULE_INFO(logger, MOD_ENGINE, "Subscribing to market data (StockType, XSHG+XSHE)...");
     ret = udp_client->SubscribeBySourceType(interface_ip, source_type.get());
@@ -584,6 +585,7 @@ int main(int argc, char* argv[]) {
 
     // 初始化 FastFish SDK 环境 (ACE 框架)
     com::htsc::mdc::gateway::init_env();
+    com::htsc::mdc::gateway::open_file_log();
 
     // 根据命令行参数选择模式
     std::string mode = "backtest"; // 默认回测模式
@@ -608,6 +610,10 @@ int main(int argc, char* argv[]) {
     biz_config.log_file = (mode == "backtest") ? "backtest_biz.log" : "live_biz.log";
     biz_config.console_output = true;
     hft::logger::init_biz(biz_config);
+
+    // 输出 FastFish SDK 版本
+    const char* dll_version = com::htsc::mdc::gateway::get_dll_version();
+    LOG_MODULE_INFO(logger, MOD_ENGINE, "FastFish SDK version: {}", dll_version ? dll_version : "unknown");
 
     // 根据模式运行
     if (mode == "backtest") {
