@@ -596,12 +596,14 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Starting in " << mode << " mode..." << std::endl;
 
-    // 统一初始化日志系统（根据模式设置日志文件名）
+    // 统一初始化日志系统（根据模式设置日志文件名和日志等级）
     hft::logger::LogConfig log_config;
     log_config.log_dir = "logs";
     log_config.log_file = (mode == "backtest") ? "backtest.log" : "live_trading.log";
     log_config.console_output = true;
     log_config.use_rdtsc = true;
+    // 回测模式使用 DEBUG 级别，生产模式使用 INFO 级别
+    log_config.log_level = (mode == "backtest") ? quill::LogLevel::Debug : quill::LogLevel::Info;
     auto* logger = hft::logger::init(log_config);
 
     // 初始化业务日志器（交易信号等业务日志单独输出）

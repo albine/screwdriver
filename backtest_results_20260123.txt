@@ -1,0 +1,38 @@
+回测结果报告
+生成时间: 2026-01-25 23:58:47
+回测日期: 20260123
+任务总数: 26
+====================================================================================================
+
+汇总: 成功=7, 无信号=19, 错误=0
+
+序号   代码           策略                   场景           状态         原始时间           回测时间           原始价格       回测价格       时间差       
+------------------------------------------------------------------------------------------------------------------------
+1    605060.SH    OpeningRangeBreako   弱转强绿开翻红      SUCCESS    09:30:01.670   09:30:00.040   40.58      40.5782    +1630ms   
+2    688595.SH    OpeningRangeBreako   弱转强绿开翻红      SUCCESS    09:30:05.900   09:30:05.900   42.49      42.4902    +0ms      
+3    603988.SH    OpeningRangeBreako   弱转强绿开翻红      SUCCESS    09:30:08.880   09:30:08.880   33.43      33.4287    +0ms      
+4    688516.SH    OpeningRangeBreako   弱转强高开新高      SUCCESS    09:33:58.760   09:33:58.760   87.03      87.0348    +0ms      
+5    688516.SH    HenggouStrategy      横沟突破         SUCCESS    09:33:58.760   09:33:58.760   87.03      87.0348    +0ms      
+6    600869.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:34:00.270   -              11.42      -          -         
+7    600388.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:34:05.470   -              17.24      -          -         
+8    600552.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:34:05.810   -              14.69      -          -         
+9    600191.SH    PercentageGainBrea   追4/6         SUCCESS    09:34:13.590   09:34:13.590   13.80      13.8006    +0ms      
+10   601616.SH    HenggouStrategy      横沟突破         NO_SIGNAL  09:34:19.340   -              6.08       -          -         
+11   688556.SH    PercentageGainBrea   追新高          NO_SIGNAL  09:34:22.700   -              16.52      -          -         
+12   603626.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:34:23.150   -              25.49      -          -         
+13   600531.SH    PercentageGainBrea   追新高          NO_SIGNAL  09:34:31.100   -              16.58      -          -         
+14   600331.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:34:41.400   -              14.57      -          -         
+15   688627.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:34:54.040   -              268.86     -          -         
+16   688627.SH    HenggouStrategy      横沟突破         NO_SIGNAL  09:34:54.040   -              268.86     -          -         
+17   600207.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:34:59.970   -              5.20       -          -         
+18   688033.SH    HenggouStrategy      横沟突破         SUCCESS    09:35:07.580   09:35:07.580   9.29       9.2852     +0ms      
+19   603878.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:35:11.670   -              8.63       -          -         
+20   600829.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:36:16.130   -              12.00      -          -         
+21   688390.SH    OpeningRangeBreako   弱转强绿开翻红      NO_SIGNAL  09:36:53.510   -              91.15      -          -         
+22   600965.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:37:00.850   -              6.62       -          -         
+23   603061.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:37:03.730   -              281.90     -          -         
+24   688556.SH    HenggouStrategy      横沟突破         NO_SIGNAL  09:37:10.060   -              16.84      -          -         
+25   600452.SH    PercentageGainBrea   追4/6         NO_SIGNAL  09:37:36.980   -              11.24      -          -         
+26   600829.SH    HenggouStrategy      横沟突破         NO_SIGNAL  09:37:57.770   -              12.33      -          -         
+
+====================================================================================================

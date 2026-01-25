@@ -1,0 +1,40 @@
+待回测任务列表 (共 26 个)
+================================================================================
+
+序号   代码           策略                                  场景                  
+--------------------------------------------------------------------------------
+1    605060.SH    OpeningRangeBreakoutStrategy        弱转强绿开翻红             
+2    688595.SH    OpeningRangeBreakoutStrategy        弱转强绿开翻红             
+3    603988.SH    OpeningRangeBreakoutStrategy        弱转强绿开翻红             
+4    688516.SH    OpeningRangeBreakoutStrategy        弱转强高开新高             
+5    688516.SH    HenggouStrategy                     横沟突破                
+6    600869.SH    PercentageGainBreakoutStrategy      追4/6                
+7    600388.SH    PercentageGainBreakoutStrategy      追4/6                
+8    600552.SH    PercentageGainBreakoutStrategy      追4/6                
+9    600191.SH    PercentageGainBreakoutStrategy      追4/6                
+10   601616.SH    HenggouStrategy                     横沟突破                
+11   688556.SH    PercentageGainBreakoutStrategy      追新高                 
+12   603626.SH    PercentageGainBreakoutStrategy      追4/6                
+13   600531.SH    PercentageGainBreakoutStrategy      追新高                 
+14   600331.SH    PercentageGainBreakoutStrategy      追4/6                
+15   688627.SH    PercentageGainBreakoutStrategy      追4/6                
+16   688627.SH    HenggouStrategy                     横沟突破                
+17   600207.SH    PercentageGainBreakoutStrategy      追4/6                
+18   688033.SH    HenggouStrategy                     横沟突破                
+19   603878.SH    PercentageGainBreakoutStrategy      追4/6                
+20   600829.SH    PercentageGainBreakoutStrategy      追4/6                
+21   688390.SH    OpeningRangeBreakoutStrategy        弱转强绿开翻红             
+22   600965.SH    PercentageGainBreakoutStrategy      追4/6                
+23   603061.SH    PercentageGainBreakoutStrategy      追4/6                
+24   688556.SH    HenggouStrategy                     横沟突破                
+25   600452.SH    PercentageGainBreakoutStrategy      追4/6                
+26   600829.SH    HenggouStrategy                     横沟突破                
+
+================================================================================
+
+策略映射关系:
+  弱转强绿开翻红 -> OpeningRangeBreakoutStrategy
+  弱转强高开新高 -> OpeningRangeBreakoutStrategy
+  横沟突破 -> HenggouStrategy
+  追4/6 -> PercentageGainBreakoutStrategy
+  追新高 -> PercentageGainBreakoutStrategy

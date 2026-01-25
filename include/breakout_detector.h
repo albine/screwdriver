@@ -4,10 +4,13 @@
 #include "FastOrderBook.h"
 #include "market_data_structs_aligned.h"
 #include "utils/time_util.h"
+#include "logger.h"
 #include <deque>
 #include <functional>
 #include <cstdint>
 #include <optional>
+
+#define LOG_MODULE "BreakoutDetector"
 
 /**
  * BreakoutDetector - 盘口动力学突破检测器
@@ -100,10 +103,29 @@ public:
         auto current_volume = get_volume_at_target(book);
         if (!current_volume.has_value()) {
             // 目标价太高，无法监控，跳过本次数据
+            auto best_ask = book.get_best_ask();
+            LOG_M_DEBUG("[ORDER SKIP] symbol={} mdtime={} target={} best_ask={} reason=目标价太高无法监控",
+                       order.htscsecurityid, time_util::format_mdtime(order.mdtime),
+                       target_price_, best_ask.value_or(0));
             return false;
         }
         add_to_window(order.mdtime, current_volume.value(), 0);
-        return check_trigger(order.mdtime);
+
+        // 打印当前状态
+        auto best_ask = book.get_best_ask();
+        auto stats = get_stats();
+        LOG_M_DEBUG("[ORDER] symbol={} mdtime={} target={} best_ask={} n={:.0f} delta_n={} vol={} | orderindex={} price={} qty={} bs={}",
+                   order.htscsecurityid, time_util::format_mdtime(order.mdtime),
+                   target_price_, best_ask.value_or(0), stats.avg_volume, stats.total_buy_qty, stats.current_volume,
+                   order.orderindex, order.orderprice, order.orderqty, order.orderbsflag);
+
+        bool result = check_trigger(order.mdtime);
+        if (result) {
+            LOG_M_DEBUG("[ORDER TRIGGER] symbol={} mdtime={} orderindex={} orderprice={} orderqty={} bsflag={}",
+                       order.htscsecurityid, time_util::format_mdtime(order.mdtime),
+                       order.orderindex, order.orderprice, order.orderqty, order.orderbsflag);
+        }
+        return result;
     }
 
     // 处理成交事件
@@ -114,6 +136,10 @@ public:
         auto current_volume = get_volume_at_target(book);
         if (!current_volume.has_value()) {
             // 目标价太高，无法监控，跳过本次数据
+            auto best_ask = book.get_best_ask();
+            LOG_M_DEBUG("[TXN SKIP] symbol={} mdtime={} target={} best_ask={} reason=目标价太高无法监控",
+                       txn.htscsecurityid, time_util::format_mdtime(txn.mdtime),
+                       target_price_, best_ask.value_or(0));
             return false;
         }
 
@@ -121,7 +147,22 @@ public:
         uint64_t buy_trade_qty = get_buy_trade_qty(txn, book);
 
         add_to_window(txn.mdtime, current_volume.value(), buy_trade_qty);
-        return check_trigger(txn.mdtime);
+
+        // 打印当前状态
+        auto best_ask = book.get_best_ask();
+        auto stats = get_stats();
+        LOG_M_DEBUG("[TXN] symbol={} mdtime={} target={} best_ask={} n={:.0f} delta_n={} vol={} | tradeindex={} price={} qty={} bs={} buy_qty={}",
+                   txn.htscsecurityid, time_util::format_mdtime(txn.mdtime),
+                   target_price_, best_ask.value_or(0), stats.avg_volume, stats.total_buy_qty, stats.current_volume,
+                   txn.tradeindex, txn.tradeprice, txn.tradeqty, txn.tradebsflag, buy_trade_qty);
+
+        bool result = check_trigger(txn.mdtime);
+        if (result) {
+            LOG_M_DEBUG("[TXN TRIGGER] symbol={} mdtime={} tradeindex={} tradeprice={} tradeqty={} bsflag={}",
+                       txn.htscsecurityid, time_util::format_mdtime(txn.mdtime),
+                       txn.tradeindex, txn.tradeprice, txn.tradeqty, txn.tradebsflag);
+        }
+        return result;
     }
 
     // 获取当前统计信息（用于调试/日志）
@@ -225,6 +266,8 @@ private:
 
         // 条件1：目标价已小于卖一价（已被突破）
         if (latest.volume == 0) {
+            LOG_M_DEBUG("[TRIGGER] 直接突破: target_price={} < best_ask, mdtime={}",
+                       target_price_, time_util::format_mdtime(mdtime));
             trigger(mdtime);
             return true;
         }
@@ -247,6 +290,8 @@ private:
 
         // 条件2：delta_n >= n
         if (delta_n >= static_cast<uint64_t>(n)) {
+            LOG_M_DEBUG("[TRIGGER] 动力学突破: target_price={} n={:.0f} delta_n={} window_size={} mdtime={}",
+                       target_price_, n, delta_n, window_.size(), time_util::format_mdtime(mdtime));
             trigger(mdtime);
             return true;
         }
@@ -262,4 +307,5 @@ private:
     }
 };
 
+#undef LOG_MODULE
 #endif // BREAKOUT_DETECTOR_H

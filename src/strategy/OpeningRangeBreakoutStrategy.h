@@ -53,6 +53,12 @@ private:
                (time_hhmm >= 1300 && time_hhmm < 1500);   // Afternoon session
     }
 
+    // 集合竞价结束后（09:25 之后）
+    static bool is_after_auction_end(int32_t mdtime) {
+        int time_hhmm = mdtime / 100000;
+        return time_hhmm >= 925;
+    }
+
     static int64_t get_time_since_open_ms(int32_t mdtime) {
         // 使用 time_util 正确计算时间差（MDTime 不能直接做减法）
         constexpr int32_t morning_open = 93000000;  // 09:30:00.000
@@ -97,6 +103,8 @@ private:
         BreakoutDetector breakout_detector;
         bool detector_armed = false;  // 检测器是否已设置目标价
         BreakoutScenario armed_scenario = BreakoutScenario::NONE;
+        bool scenario_determined = false;  // 场景是否已判断（只判断一次）
+        bool highest_initialized = false;  // highest_price 是否在开盘后初始化
 
         // 价格缓存（用于突破回调）
         double prev_close = 0.0;
@@ -116,91 +124,128 @@ public:
     virtual ~OpeningRangeBreakoutStrategy() = default;
 
 private:
-    void OnMarketOpen(ORBState& state, const MDStockStruct& stock, const std::string& symbol) {
-        state.highest_price = to_price(stock.highpx);
-        state.highest_timestamp_mdtime = stock.mdtime;
+    // 新交易日第一个 tick 时调用，初始化状态
+    void OnFirstTick(ORBState& state, const MDStockStruct& stock, const std::string& symbol) {
         state.buy_signal_triggered = false;
         state.current_date = stock.mddate;
         state.detector_armed = false;
         state.armed_scenario = BreakoutScenario::NONE;
+        state.scenario_determined = false;
+        state.highest_initialized = false;
         state.breakout_detector.reset();
         state.breakout_detector.set_enabled(false);
 
         // 缓存价格
         state.prev_close = to_price(stock.preclosepx);
-        state.open_price = to_price(stock.openpx);
-        state.limit_up_price = static_cast<uint32_t>(stock.maxpx);
+
+        // 更新涨停价
+        if (stock.maxpx > 0) {
+            state.limit_up_price = static_cast<uint32_t>(stock.maxpx);
+        }
 
         initializeThresholds(state, symbol);
 
-        LOG_M_INFO("Market open for {}: highest_price={:.4f}, date={}",
-                   symbol, state.highest_price, state.current_date);
+        LOG_M_INFO("OnFirstTick {}: prev_close={:.4f}, limit_up={}, date={}, mdtime={}",
+                   symbol, state.prev_close,
+                   price_util::price_to_yuan(state.limit_up_price),
+                   state.current_date, time_util::format_mdtime(stock.mdtime));
+    }
+
+    // 集合竞价结束后（09:25）调用一次，判断场景并设置检测器
+    void OnOpeningCallEnd(ORBState& state, const MDStockStruct& stock, const std::string& symbol) {
+        state.scenario_determined = true;
+
+        // 集合竞价结束后才能获取正确的开盘价
+        state.open_price = to_price(stock.openpx);
+
+        double prev_close = state.prev_close;
+        double open_price = state.open_price;
+
+        if (open_price < prev_close) {
+            // 绿开翻红场景：立即设置检测器
+            state.armed_scenario = BreakoutScenario::GAP_DOWN_RECOVERY;
+
+            uint32_t target_price = to_price_int(prev_close);
+            state.breakout_detector.set_target_price(target_price);
+            state.breakout_detector.set_enabled(true);
+            state.detector_armed = true;
+
+            double sell_price_01 = to_price(stock.sellpricequeue[0]);
+            LOG_M_INFO("{} 绿开翻红检测器已设置 (集合竞价结束): target={} ({}元), sell1={:.4f}, open={:.4f}, prev_close={:.4f}, mdtime={}",
+                       symbol, target_price, price_util::price_to_yuan(target_price),
+                       sell_price_01, open_price, prev_close, time_util::format_mdtime(stock.mdtime));
+        } else {
+            // 高开新高场景：标记场景，检测器需要等 30 秒整理期
+            state.armed_scenario = BreakoutScenario::GAP_UP_NEW_HIGH;
+
+            LOG_M_INFO("{} 高开新高场景: open={:.4f} >= prev_close={:.4f}, 等待30秒整理期, mdtime={}",
+                       symbol, open_price, prev_close, time_util::format_mdtime(stock.mdtime));
+        }
     }
 
 public:
     void on_tick(const MDStockStruct& stock) override {
         if (!is_enabled()) return;
 
-        // Extract symbol once
         std::string symbol = get_symbol(stock);
-
-        // Check if market is open
-        if (!is_market_open(stock.mdtime)) {
-            return;
-        }
-
         auto& stock_state = stock_states_[symbol];
 
-        // Detect new trading day and initialize
+        // ===== 检测新交易日并初始化（最先执行）=====
         if (stock_state.current_date != stock.mddate) {
-            OnMarketOpen(stock_state, stock, symbol);
+            OnFirstTick(stock_state, stock, symbol);
         }
 
-        // Skip if signal already triggered
+        // 信号已触发，跳过
         if (stock_state.buy_signal_triggered) {
             return;
         }
 
-        // Update limit up price
-        if (stock.maxpx > 0) {
-            stock_state.limit_up_price = static_cast<uint32_t>(stock.maxpx);
+        // ===== 集合竞价结束后（09:25）：场景判断 =====
+        if (is_after_auction_end(stock.mdtime) && !stock_state.scenario_determined) {
+            OnOpeningCallEnd(stock_state, stock, symbol);
         }
 
-        // Only process within first 10 minutes of trading
+        // ===== 以下逻辑只在开盘后（09:30）执行 =====
+        if (!is_market_open(stock.mdtime)) {
+            return;
+        }
+
+        // 09:30 后第一帧：初始化 highest_price（用于高开新高场景）
+        if (!stock_state.highest_initialized) {
+            stock_state.highest_initialized = true;
+            stock_state.highest_price = to_price(stock.highpx);
+            stock_state.highest_timestamp_mdtime = stock.mdtime;
+            LOG_M_INFO("{} 开盘后初始化 highest_price={:.4f}, mdtime={}",
+                       symbol, stock_state.highest_price, time_util::format_mdtime(stock.mdtime));
+        }
+
+        // 开盘后 10 分钟内
         int64_t time_since_open = get_time_since_open_ms(stock.mdtime);
         if (time_since_open > TEN_MINUTES_MS) {
-            return;  // Window closed
+            return;
         }
 
-        // Convert prices
         double high_price = to_price(stock.highpx);
-        double prev_close = to_price(stock.preclosepx);
-        double open_price = to_price(stock.openpx);
 
-        // Calculate percentage gain from high to prev_close
-        int highest_gain_bp = calculate_percentage_bp(high_price, prev_close);
+        // 涨幅超过阈值，取消策略
+        int highest_gain_bp = calculate_percentage_bp(high_price, stock_state.prev_close);
         if (highest_gain_bp >= stock_state.cap_threshold_bp) {
-            LOG_M_DEBUG("{} 最高涨幅超过阈值 {}bp (threshold={}bp). [弱转强新高] 取消.",
+            LOG_M_DEBUG("{} 最高涨幅超过阈值 {}bp (threshold={}bp). 取消.",
                         symbol, highest_gain_bp, stock_state.cap_threshold_bp);
             return;
         }
 
-        // Process based on gap scenario - arm the detector if conditions are met
-        if (open_price < prev_close) {
-            armGapDownDetector(stock, stock_state, symbol);
-        } else if (open_price >= prev_close) {
+        // 高开新高场景：等待 30 秒整理期后设置检测器
+        if (stock_state.armed_scenario == BreakoutScenario::GAP_UP_NEW_HIGH &&
+            !stock_state.detector_armed) {
             armGapUpDetector(stock, stock_state, symbol);
         }
 
-        // Update highest price if within 30 seconds of previous high
-        // 使用 time_util 正确计算时间差（MDTime 不能直接做减法）
+        // 更新最高价（用于高开新高场景）
         int64_t consolidation_duration = time_util::calculate_time_diff_ms(
             stock_state.highest_timestamp_mdtime, stock.mdtime);
 
-        if (consolidation_duration >= THIRTY_SECONDS_MS) {
-            LOG_M_DEBUG("{} 距上一个新高已超过30秒，不再刷新新高 (highest={:.4f})",
-                            symbol, stock_state.highest_price);
-        } else {
+        if (consolidation_duration < THIRTY_SECONDS_MS) {
             if (high_price > stock_state.highest_price) {
                 LOG_M_DEBUG("{} 新高: {:.4f} -> {:.4f}, consolidation重置",
                             symbol, stock_state.highest_price, high_price);
@@ -208,7 +253,6 @@ public:
                 stock_state.highest_timestamp_mdtime = stock.mdtime;
             }
         }
-
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
@@ -274,31 +318,6 @@ private:
             stock_state.cap_threshold_bp = THRESHOLD_30_68_CAP;
         } else {
             stock_state.cap_threshold_bp = THRESHOLD_60_00_CAP;
-        }
-    }
-
-    // 绿开翻红场景：设置检测器监控 prev_close
-    void armGapDownDetector(const MDStockStruct& stock,
-                            ORBState& stock_state,
-                            const std::string& symbol) {
-        // 如果检测器已设置，不重复设置
-        if (stock_state.detector_armed) return;
-
-        double sell_price_01 = to_price(stock.sellpricequeue[0]);
-        double prev_close = to_price(stock.preclosepx);
-
-        // 当卖一价接近前收盘价时，设置检测器
-        // 提前设置，让检测器有时间积累数据
-        if (sell_price_01 >= prev_close * 0.995) {
-            uint32_t target_price = to_price_int(prev_close);
-
-            stock_state.breakout_detector.set_target_price(target_price);
-            stock_state.breakout_detector.set_enabled(true);
-            stock_state.detector_armed = true;
-            stock_state.armed_scenario = BreakoutScenario::GAP_DOWN_RECOVERY;
-
-            LOG_M_DEBUG("{} 绿开翻红检测器已设置: target_price={} ({}元)",
-                       symbol, target_price, price_util::price_to_yuan(target_price));
         }
     }
 

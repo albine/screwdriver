@@ -331,8 +331,9 @@ private:
 
         if (current_gain_bp >= state.initial_threshold_bp) {
             state.initial_threshold_met = true;
-            LOG_M_INFO("{} Phase1完成: 涨幅{:.2f}%达到阈值{:.2f}%",
-                       symbol, current_gain_bp / 100.0, state.initial_threshold_bp / 100.0);
+            LOG_M_INFO("{} Phase1完成: 涨幅{:.2f}%达到阈值{:.2f}%, mdtime={}",
+                       symbol, current_gain_bp / 100.0, state.initial_threshold_bp / 100.0,
+                       time_util::format_mdtime(stock.mdtime));
         }
     }
 
@@ -356,10 +357,11 @@ private:
             state.detector_armed = true;
 
             int64_t consolidation_seconds = consolidation_duration / 1000;
-            LOG_M_INFO("{} Phase2完成: 顿点{}秒, 目标价={} ({}元), highest={:.4f}, breakout_threshold={:.4f}",
+            LOG_M_INFO("{} Phase2完成: 顿点{}秒, 目标价={} ({}元), highest={:.4f}, highest_time={}, mdtime={}",
                        symbol, consolidation_seconds,
                        target_price, price_util::price_to_yuan(target_price),
-                       state.highest_price, breakout_threshold_price);
+                       state.highest_price, time_util::format_mdtime(state.highest_timestamp_mdtime),
+                       time_util::format_mdtime(stock.mdtime));
         }
     }
 
@@ -374,7 +376,7 @@ private:
         if (high_price > state.highest_price) {
             state.highest_price = high_price;
             state.highest_timestamp_mdtime = stock.mdtime;
-            LOG_M_DEBUG("{} 新高: {:.4f}", symbol, high_price);
+            LOG_M_DEBUG("{} 新高: {:.4f}, mdtime={}", symbol, high_price, time_util::format_mdtime(stock.mdtime));
         }
     }
 

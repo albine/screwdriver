@@ -83,6 +83,7 @@ struct LogConfig {
     size_t max_backup_files = 10;           // 最多保留10个备份
     bool console_output = true;             // 是否输出到控制台
     bool use_rdtsc = true;                  // 使用RDTSC时间戳
+    quill::LogLevel log_level = quill::LogLevel::Info;  // 日志等级（回测用Debug，生产用Info）
 };
 
 /**
@@ -152,7 +153,11 @@ inline quill::Logger* init(const LogConfig& config = LogConfig{}) {
         quill::PatternFormatterOptions{pattern, time_format}
     );
 
-    LOG_INFO(logger, "Logger initialized, rdtsc={}", config.use_rdtsc);
+    // 设置日志等级
+    logger->set_log_level(config.log_level);
+
+    LOG_INFO(logger, "Logger initialized, rdtsc={}, debug_enabled={}", config.use_rdtsc,
+             config.log_level == quill::LogLevel::Debug);
     return logger;
 }
 

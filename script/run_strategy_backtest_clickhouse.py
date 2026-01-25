@@ -77,10 +77,13 @@ def run_clickhouse_query(query: str, output_file: str = None) -> tuple[bool, str
         print("错误: 请设置 CLICKHOUSE_PASSWORD 环境变量")
         return False, ""
 
-    # 转义查询中的特殊字符
-    escaped_query = query.replace('"', '\\"')
+    # 使用 base64 编码传递查询，避免 shell 转义问题
+    import base64
+    query_b64 = base64.b64encode(query.encode()).decode()
 
-    cmd = f'ssh {CLICKHOUSE_HOST} \'clickhouse-client --password "$CLICKHOUSE_PASSWORD" -q "{escaped_query}"\''
+    # 在远程服务器解码并执行
+    remote_cmd = f'echo {query_b64} | base64 -d | clickhouse-client --password "$CLICKHOUSE_PASSWORD"'
+    cmd = f'ssh {CLICKHOUSE_HOST} \'{remote_cmd}\''
 
     if output_file:
         cmd += f' > {output_file}'
