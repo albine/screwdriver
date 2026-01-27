@@ -14,6 +14,12 @@ PROJECT_NAME="trading-engine"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 PACKAGE_NAME="${PROJECT_NAME}-${TIMESTAMP}.tar.gz"
 
+# Strategy config sync settings
+CONFIG_REPO_URL="https://github.com/albine/helloworld"
+CONFIG_REPO_BRANCH="pub_20260121"
+CONFIG_REPO_DIR="${SCRIPT_DIR}/.config_repo"
+TODAY_DATE=$(date +%Y%m%d)
+
 # Default values (参考 fastfish/sync.sh)
 SSH_CONF="$HOME/.ssh/config"
 REMOTE_HOST="market-m"
@@ -23,8 +29,7 @@ PACK_ONLY=false
 # Source directories
 BUILD_DIR="${SCRIPT_DIR}/build"
 LIBS_DIR="${SCRIPT_DIR}/fastfish/libs"
-CONFIG_DIR="${SCRIPT_DIR}/fastfish/config/prod"
-STRATEGY_CONFIG_DIR="${SCRIPT_DIR}/config"  # 策略配置文件目录
+CONFIG_DIR="${SCRIPT_DIR}/config"
 CERT_DIR="${SCRIPT_DIR}/fastfish/cert"
 
 # Required shared libraries
@@ -70,10 +75,12 @@ Options:
     -h, --host HOST       Remote server alias in ~/.ssh/config (default: market-m)
     -d, --dest PATH       Remote deployment path (default: /home/jiace/project/trading-engine)
     -p, --pack-only       Only create package, don't upload
+    -n, --dryrun          Dry run mode: sync config and create package, but don't upload
     --help                Show this help message
 
 Examples:
     $0 --pack-only                           # Only create package
+    $0 --dryrun                              # Sync config + create package, no upload
     $0                                       # Deploy to market-m (default)
     $0 --host other-server                   # Deploy to other server
 
@@ -96,6 +103,128 @@ log_error() {
     exit 1
 }
 
+# Sync strategy config from remote repository
+sync_strategy_config() {
+    log_info "Syncing strategy config from remote repository..."
+
+    # Clean up any existing repo
+    if [[ -d "${CONFIG_REPO_DIR}" ]]; then
+        rm -rf "${CONFIG_REPO_DIR}"
+    fi
+
+    # Shallow clone with limited depth (enough to find today's commit)
+    log_info "Cloning config repository (shallow)..."
+    git clone --branch "${CONFIG_REPO_BRANCH}" --single-branch --depth 50 "${CONFIG_REPO_URL}" "${CONFIG_REPO_DIR}" --quiet
+
+    # Find commit with today's date in message format "{yyyymmdd}配置文件"
+    cd "${CONFIG_REPO_DIR}"
+    COMMIT_MSG_PATTERN="${TODAY_DATE}配置文件"
+    TARGET_COMMIT=$(git log --oneline --grep="${COMMIT_MSG_PATTERN}" --format="%H" | head -1)
+
+    if [[ -z "${TARGET_COMMIT}" ]]; then
+        cd "${SCRIPT_DIR}"
+        rm -rf "${CONFIG_REPO_DIR}"
+        log_error "No commit found with message pattern '${COMMIT_MSG_PATTERN}'"
+    fi
+    log_info "Found config commit: ${TARGET_COMMIT} (${COMMIT_MSG_PATTERN})"
+
+    # Checkout the target commit
+    git checkout "${TARGET_COMMIT}" --quiet
+
+    # Define file mappings
+    declare -A CONFIG_MAPPINGS=(
+        ["data/config/linux/99998/strategy_config.csv"]="${CONFIG_DIR}/strategy_live.conf"
+        ["data/config/linux/99999/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer2.conf"
+    )
+
+    # Process each config file
+    for src_file in "${!CONFIG_MAPPINGS[@]}"; do
+        dst_file="${CONFIG_MAPPINGS[$src_file]}"
+
+        if [[ ! -f "${src_file}" ]]; then
+            cd "${SCRIPT_DIR}"
+            rm -rf "${CONFIG_REPO_DIR}"
+            log_error "Source file not found: ${src_file}"
+        fi
+
+        log_info "Converting ${src_file} -> ${dst_file}"
+        convert_strategy_config "${src_file}" "${dst_file}"
+        if ! verify_strategy_config "${src_file}" "${dst_file}"; then
+            cd "${SCRIPT_DIR}"
+            rm -rf "${CONFIG_REPO_DIR}"
+            log_error "Strategy config verification failed for ${dst_file}"
+        fi
+    done
+
+    cd "${SCRIPT_DIR}"
+
+    # Clean up cloned repository
+    log_info "Cleaning up temporary config repository..."
+    rm -rf "${CONFIG_REPO_DIR}"
+
+    log_info "Strategy config sync completed."
+}
+
+# Convert strategy_config.csv to strategy_live.conf format
+# Input format (CSV with header): symbol,strategy (multiple strategies separated by |)
+# Output format: symbol,strategy (one line per symbol-strategy pair)
+convert_strategy_config() {
+    local src_file="$1"
+    local dst_file="$2"
+
+    # Clear destination file
+    > "${dst_file}"
+
+    # Skip header line, process each data line
+    tail -n +2 "${src_file}" | while IFS=',' read -r symbol strategies; do
+        # Skip empty lines
+        [[ -z "${symbol}" ]] && continue
+
+        # Remove any carriage return (Windows line endings)
+        strategies=$(echo "${strategies}" | tr -d '\r')
+        symbol=$(echo "${symbol}" | tr -d '\r')
+
+        # Split strategies by | and write each pair
+        IFS='|' read -ra strategy_array <<< "${strategies}"
+        for strategy in "${strategy_array[@]}"; do
+            # Trim whitespace
+            strategy=$(echo "${strategy}" | xargs)
+            [[ -n "${strategy}" ]] && echo "${symbol},${strategy}" >> "${dst_file}"
+        done
+    done
+
+    log_info "Generated $(wc -l < "${dst_file}") entries in ${dst_file}"
+}
+
+# Verify generated config matches source CSV
+# Returns 0 if match, 1 if mismatch
+verify_strategy_config() {
+    local src_file="$1"
+    local dst_file="$2"
+
+    # Generate expected content from CSV (skip header, expand | to multiple lines, sort)
+    local expected=$(tail -n +2 "${src_file}" | tr -d '\r' | while IFS=',' read -r symbol strategies; do
+        [[ -z "${symbol}" ]] && continue
+        IFS='|' read -ra strategy_array <<< "${strategies}"
+        for strategy in "${strategy_array[@]}"; do
+            strategy=$(echo "${strategy}" | xargs)
+            [[ -n "${strategy}" ]] && echo "${symbol},${strategy}"
+        done
+    done | sort)
+
+    # Get actual content from generated file (sort)
+    local actual=$(sort "${dst_file}")
+
+    # Compare
+    if [[ "${expected}" == "${actual}" ]]; then
+        log_info "Verification passed: ${dst_file}"
+        return 0
+    else
+        log_warn "Verification failed: ${dst_file} does not match ${src_file}"
+        return 1
+    fi
+}
+
 check_prerequisites() {
     log_info "Checking prerequisites..."
 
@@ -116,16 +245,16 @@ check_prerequisites() {
         log_warn "Gateway config file not found at ${CONFIG_DIR}/htsc-insight-cpp-config.conf"
     fi
 
-    if [[ ! -f "${STRATEGY_CONFIG_DIR}/backtest.conf" ]]; then
-        log_warn "Strategy config file not found: ${STRATEGY_CONFIG_DIR}/backtest.conf"
+    if [[ ! -f "${CONFIG_DIR}/backtest.conf" ]]; then
+        log_warn "Strategy config file not found: ${CONFIG_DIR}/backtest.conf"
     fi
 
-    if [[ ! -f "${STRATEGY_CONFIG_DIR}/strategy_live.conf" ]]; then
-        log_warn "Strategy config file not found: ${STRATEGY_CONFIG_DIR}/strategy_live.conf"
+    if [[ ! -f "${CONFIG_DIR}/strategy_live.conf" ]]; then
+        log_warn "Strategy config file not found: ${CONFIG_DIR}/strategy_live.conf"
     fi
 
-    if [[ ! -f "${STRATEGY_CONFIG_DIR}/engine.conf" ]]; then
-        log_warn "Engine config file not found: ${STRATEGY_CONFIG_DIR}/engine.conf"
+    if [[ ! -f "${CONFIG_DIR}/engine.conf" ]]; then
+        log_warn "Engine config file not found: ${CONFIG_DIR}/engine.conf"
     fi
 
     # Check certificates
@@ -157,6 +286,33 @@ create_package() {
     cp "${BUILD_DIR}/engine" "${DEPLOY_ROOT}/bin/"
     chmod +x "${DEPLOY_ROOT}/bin/engine"
 
+    # Copy mmap_to_clickhouse tool (if exists)
+    if [[ -f "${BUILD_DIR}/mmap_to_clickhouse" ]]; then
+        log_info "Copying mmap_to_clickhouse tool..."
+        cp "${BUILD_DIR}/mmap_to_clickhouse" "${DEPLOY_ROOT}/bin/"
+        chmod +x "${DEPLOY_ROOT}/bin/mmap_to_clickhouse"
+    fi
+
+    # Copy verify_orderbook tool (if exists)
+    if [[ -f "${BUILD_DIR}/verify_orderbook" ]]; then
+        log_info "Copying verify_orderbook tool..."
+        cp "${BUILD_DIR}/verify_orderbook" "${DEPLOY_ROOT}/bin/"
+        chmod +x "${DEPLOY_ROOT}/bin/verify_orderbook"
+    fi
+
+    # Copy scripts (if exist)
+    mkdir -p "${DEPLOY_ROOT}/script"
+    if [[ -f "${SCRIPT_DIR}/script/import_mmap_fast.sh" ]]; then
+        log_info "Copying import script..."
+        cp "${SCRIPT_DIR}/script/import_mmap_fast.sh" "${DEPLOY_ROOT}/script/"
+        chmod +x "${DEPLOY_ROOT}/script/import_mmap_fast.sh"
+    fi
+    if [[ -f "${SCRIPT_DIR}/script/verify_orderbook_rebuild.sh" ]]; then
+        log_info "Copying verify_orderbook script..."
+        cp "${SCRIPT_DIR}/script/verify_orderbook_rebuild.sh" "${DEPLOY_ROOT}/script/"
+        chmod +x "${DEPLOY_ROOT}/script/verify_orderbook_rebuild.sh"
+    fi
+
     # Copy shared libraries
     log_info "Copying shared libraries..."
     for lib in "${REQUIRED_LIBS[@]}"; do
@@ -178,16 +334,16 @@ create_package() {
     fi
 
     # Copy strategy config files (backtest.conf, strategy_live.conf, engine.conf)
-    if [[ -d "${STRATEGY_CONFIG_DIR}" ]]; then
+    if [[ -d "${CONFIG_DIR}" ]]; then
         log_info "Copying strategy config files..."
-        if [[ -f "${STRATEGY_CONFIG_DIR}/backtest.conf" ]]; then
-            cp "${STRATEGY_CONFIG_DIR}/backtest.conf" "${DEPLOY_ROOT}/config/"
+        if [[ -f "${CONFIG_DIR}/backtest.conf" ]]; then
+            cp "${CONFIG_DIR}/backtest.conf" "${DEPLOY_ROOT}/config/"
         fi
-        if [[ -f "${STRATEGY_CONFIG_DIR}/strategy_live.conf" ]]; then
-            cp "${STRATEGY_CONFIG_DIR}/strategy_live.conf" "${DEPLOY_ROOT}/config/"
+        if [[ -f "${CONFIG_DIR}/strategy_live.conf" ]]; then
+            cp "${CONFIG_DIR}/strategy_live.conf" "${DEPLOY_ROOT}/config/"
         fi
-        if [[ -f "${STRATEGY_CONFIG_DIR}/engine.conf" ]]; then
-            cp "${STRATEGY_CONFIG_DIR}/engine.conf" "${DEPLOY_ROOT}/config/"
+        if [[ -f "${CONFIG_DIR}/engine.conf" ]]; then
+            cp "${CONFIG_DIR}/engine.conf" "${DEPLOY_ROOT}/config/"
         fi
     fi
 
@@ -348,6 +504,10 @@ while [[ $# -gt 0 ]]; do
             PACK_ONLY=true
             shift
             ;;
+        -n|--dryrun)
+            PACK_ONLY=true
+            shift
+            ;;
         --help)
             usage
             ;;
@@ -358,6 +518,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Run
+sync_strategy_config
 check_prerequisites
 create_package
 
