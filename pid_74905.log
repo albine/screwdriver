@@ -1,0 +1,440 @@
+
+Begin:
+2026-01-26 09:13:30.506265 pid[74905] DEBUG: input folder[market_data] not exists!
+
+2026-01-26 09:13:30.506473 pid[74905] DEBUG: mkdir base folder[market_data] successfully!
+
+2026-01-26 09:13:30.634657 pid[74905] DEBUG: udp receiver thread bind cpu id:[1] success
+2026-01-26 09:13:43.390469 pid[74905] DEBUG: === work pool start....
+2026-01-26 09:13:43.471271 pid[74905] DEBUG: Login 168.9.100.93 success!
+2026-01-26 09:13:43.471314 pid[74905] DEBUG: -----------------------------
+2026-01-26 09:13:43.471321 pid[74905] DEBUG: ------- OnLoginSuccess -------
+2026-01-26 09:13:43.471325 pid[74905] DEBUG: -----------------------------
+2026-01-26 09:13:43.472186 pid[74905] DEBUG: Subscribe channel size:10
+2026-01-26 09:13:43.484311 pid[74905] DEBUG: New subscription: aeron:udp?endpoint=238.3.0.15:8436|interface=172.25.198.52, correlationId:2
+2026-01-26 09:13:43.484547 pid[74905] DEBUG: Subscription XSHE-STOCKTYPE-MARKETTYPE-3, id:2 stream id:36 ,channel status ACTIVE
+2026-01-26 09:13:43.488502 pid[74905] DEBUG: New subscription: aeron:udp?endpoint=238.3.0.15:8430|interface=172.25.198.52, correlationId:3
+2026-01-26 09:13:43.488582 pid[74905] DEBUG: Subscription XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1, id:3 stream id:30 ,channel status ACTIVE
+2026-01-26 09:13:43.492602 pid[74905] DEBUG: New subscription: aeron:udp?endpoint=238.3.0.15:8431|interface=172.25.198.52, correlationId:4
+2026-01-26 09:13:43.492688 pid[74905] DEBUG: Subscription XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2, id:4 stream id:31 ,channel status ACTIVE
+2026-01-26 09:13:43.496703 pid[74905] DEBUG: New subscription: aeron:udp?endpoint=238.3.0.15:8432|interface=172.25.198.52, correlationId:5
+2026-01-26 09:13:43.496769 pid[74905] DEBUG: Subscription XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3, id:5 stream id:32 ,channel status ACTIVE
+2026-01-26 09:13:43.500810 pid[74905] DEBUG: New subscription: aeron:udp?endpoint=238.3.0.15:8433|interface=172.25.198.52, correlationId:6
+2026-01-26 09:13:43.500878 pid[74905] DEBUG: Subscription XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4, id:6 stream id:33 ,channel status ACTIVE
+2026-01-26 09:13:43.504919 pid[74905] DEBUG: New subscription: aeron:udp?endpoint=238.3.0.13:8414|interface=172.25.198.52, correlationId:7
+2026-01-26 09:13:43.504987 pid[74905] DEBUG: Subscription XSHG-STOCKTYPE-MARKETTYPE-3, id:7 stream id:14 ,channel status ACTIVE
+2026-01-26 09:13:43.509031 pid[74905] DEBUG: New subscription: aeron:udp?endpoint=238.3.0.13:8410|interface=172.25.198.52, correlationId:8
+2026-01-26 09:13:43.509110 pid[74905] DEBUG: Subscription XSHG-TRANSACTIONTYPE-AND-ORDERTYPE-3-1, id:8 stream id:10 ,channel status ACTIVE
+2026-01-26 09:13:43.513136 pid[74905] DEBUG: New subscription: aeron:udp?endpoint=238.3.0.13:8411|interface=172.25.198.52, correlationId:9
+2026-01-26 09:13:43.513195 pid[74905] DEBUG: Subscription XSHG-TRANSACTIONTYPE-AND-ORDERTYPE-3-2, id:9 stream id:11 ,channel status ACTIVE
+2026-01-26 09:13:43.517240 pid[74905] DEBUG: New subscription: aeron:udp?endpoint=238.3.0.13:8412|interface=172.25.198.52, correlationId:10
+2026-01-26 09:13:43.517302 pid[74905] DEBUG: Subscription XSHG-TRANSACTIONTYPE-AND-ORDERTYPE-3-3, id:10 stream id:12 ,channel status ACTIVE
+2026-01-26 09:13:43.529640 pid[74905] DEBUG: Available image correlationId = 11 sessionId = -427336802 at position = 36124320  from 100.68.65.11:52407, SubscriptionRegistrationId = 7
+2026-01-26 09:13:43.529694 pid[74905] DEBUG: New subscription: aeron:udp?endpoint=238.3.0.13:8413|interface=172.25.198.52, correlationId:12
+2026-01-26 09:13:43.529737 pid[74905] DEBUG: Subscription XSHG-TRANSACTIONTYPE-AND-ORDERTYPE-3-4, id:12 stream id:13 ,channel status ACTIVE
+2026-01-26 09:13:43.554835 pid[74905] DEBUG: Available image correlationId = 13 sessionId = -1702517948 at position = 34967328  from 100.68.65.23:38448, SubscriptionRegistrationId = 2
+2026-01-26 09:13:43.569776 pid[74905] DEBUG: Publication channel status:60,id=1
+2026-01-26 09:13:43.570486 pid[74905] DEBUG: udp poll thread bind cpu id:[2] success
+2026-01-26 09:13:43.582812 pid[74905] DEBUG: === heartbeat thread start....
+2026-01-26 09:13:43.582812 pid[74905] DEBUG: === heartbeat thread start....
+2026-01-26 09:13:43.582817 pid[74905] DEBUG: Available image correlationId = 16 sessionId = -427336801 at position = 6208  from 100.68.65.11:34255, SubscriptionRegistrationId = 8
+2026-01-26 09:13:43.582972 pid[74905] DEBUG: === poll data thread start....
+2026-01-26 09:13:43.595236 pid[74905] DEBUG: Available image correlationId = 17 sessionId = -427336800 at position = 6208  from 100.68.65.11:48137, SubscriptionRegistrationId = 9
+2026-01-26 09:13:43.607627 pid[74905] DEBUG: Available image correlationId = 18 sessionId = -427336799 at position = 6208  from 100.68.65.11:36468, SubscriptionRegistrationId = 10
+2026-01-26 09:13:43.620977 pid[74905] DEBUG: Available image correlationId = 19 sessionId = -427336798 at position = 6208  from 100.68.65.11:41169, SubscriptionRegistrationId = 12
+2026-01-26 09:13:43.625631 pid[74905] DEBUG: Available image correlationId = 20 sessionId = -1702517946 at position = 6848  from 100.68.65.23:48080, SubscriptionRegistrationId = 4
+2026-01-26 09:13:43.651251 pid[74905] DEBUG: Available image correlationId = 21 sessionId = -1702517947 at position = 6848  from 100.68.65.23:45816, SubscriptionRegistrationId = 3
+2026-01-26 09:13:43.667512 pid[74905] DEBUG: Available image correlationId = 22 sessionId = -1702517945 at position = 6848  from 100.68.65.23:40216, SubscriptionRegistrationId = 5
+2026-01-26 09:13:43.708097 pid[74905] DEBUG: Available image correlationId = 23 sessionId = -1702517944 at position = 6848  from 100.68.65.23:57065, SubscriptionRegistrationId = 6
+2026-01-26 09:13:53.172171 pid[74905] DEBUG: === data poll thread tps[96]
+2026-01-26 09:13:53.172364 pid[74905] DEBUG: === work poll thread no[14] tps[52], processed[528] total[528] queue size[1]
+2026-01-26 09:13:55.061283 pid[74905] DEBUG: === work poll thread no[36] tps[51], processed[514] total[514] queue size[1]
+2026-01-26 09:14:03.008491 pid[74905] DEBUG: === data poll thread tps[202]
+2026-01-26 09:14:03.008723 pid[74905] DEBUG: === work poll thread no[14] tps[143], processed[1439] total[1966] queue size[1]
+2026-01-26 09:14:06.162257 pid[74905] DEBUG: === work poll thread no[36] tps[50], processed[508] total[1021] queue size[1]
+2026-01-26 09:14:13.077623 pid[74905] DEBUG: === data poll thread tps[138]
+2026-01-26 09:14:13.109715 pid[74905] DEBUG: === work poll thread no[14] tps[86], processed[863] total[2828] queue size[1]
+2026-01-26 09:14:16.062512 pid[74905] DEBUG: === work poll thread no[36] tps[51], processed[514] total[1534] queue size[1]
+2026-01-26 09:14:23.173270 pid[74905] DEBUG: === data poll thread tps[106]
+2026-01-26 09:14:23.173847 pid[74905] DEBUG: === work poll thread no[14] tps[55], processed[551] total[3378] queue size[1]
+2026-01-26 09:14:27.161342 pid[74905] DEBUG: === work poll thread no[36] tps[51], processed[513] total[2046] queue size[1]
+2026-01-26 09:14:33.111604 pid[74905] DEBUG: === data poll thread tps[94]
+2026-01-26 09:14:33.111796 pid[74905] DEBUG: === work poll thread no[14] tps[51], processed[511] total[3888] queue size[1]
+2026-01-26 09:14:37.074731 pid[74905] DEBUG: === work poll thread no[36] tps[51], processed[514] total[2559] queue size[1]
+2026-01-26 09:14:39.370811 pid[74905] DEBUG: === work poll thread no[31] tps[0], processed[2] total[2] queue size[1]
+2026-01-26 09:14:39.370811 pid[74905] DEBUG: === work poll thread no[31] tps[0], processed[2] total[2] queue size[1]
+2026-01-26 09:14:39.370816 pid[74905] DEBUG: === work poll thread no[30] tps[0], processed[2] total[2] queue size[1]
+2026-01-26 09:14:39.370893 pid[74905] DEBUG: === work poll thread no[33] tps[0], processed[2] total[2] queue size[1]
+2026-01-26 09:14:39.370893 pid[74905] DEBUG: === work poll thread no[33] tps[0], processed[2] total[2] queue size[1]
+2026-01-26 09:14:39.370893 pid[74905] DEBUG: === work poll thread no[32] tps[0], processed[2] total[2] queue size[1]
+2026-01-26 09:14:39.652787 pid[74905] DEBUG: === work poll thread no[10] tps[2], processed[22] total[22] queue size[1]
+2026-01-26 09:14:39.652787 pid[74905] DEBUG: === work poll thread no[10] tps[2], processed[22] total[22] queue size[1]
+2026-01-26 09:14:39.652839 pid[74905] DEBUG: === work poll thread no[11] tps[5], processed[53] total[53] queue size[1]
+2026-01-26 09:14:39.652916 pid[74905] DEBUG: === work poll thread no[12] tps[5], processed[51] total[51] queue size[1]
+2026-01-26 09:14:39.652966 pid[74905] DEBUG: === work poll thread no[13] tps[2], processed[26] total[26] queue size[1]
+2026-01-26 09:14:43.066974 pid[74905] DEBUG: === data poll thread tps[110]
+2026-01-26 09:14:43.108908 pid[74905] DEBUG: === work poll thread no[14] tps[58], processed[581] total[4468] queue size[1]
+2026-01-26 09:14:48.166507 pid[74905] DEBUG: === work poll thread no[36] tps[51], processed[511] total[3069] queue size[1]
+2026-01-26 09:14:53.171093 pid[74905] DEBUG: === data poll thread tps[106]
+2026-01-26 09:14:53.171275 pid[74905] DEBUG: === work poll thread no[14] tps[55], processed[554] total[5021] queue size[1]
+2026-01-26 09:14:58.070706 pid[74905] DEBUG: === work poll thread no[36] tps[51], processed[514] total[3582] queue size[1]
+2026-01-26 09:15:00.050924 pid[74905] DEBUG: === work poll thread no[30] tps[0], processed[2] total[3] queue size[1]
+2026-01-26 09:15:00.051569 pid[74905] DEBUG: === work poll thread no[31] tps[0], processed[2] total[3] queue size[1]
+2026-01-26 09:15:00.052335 pid[74905] DEBUG: === work poll thread no[33] tps[0], processed[2] total[3] queue size[1]
+2026-01-26 09:15:00.053740 pid[74905] DEBUG: === work poll thread no[32] tps[0], processed[2] total[3] queue size[1]
+2026-01-26 09:15:00.158507 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[54] queue size[1]
+2026-01-26 09:15:03.000024 pid[74905] DEBUG: === data poll thread tps[5421]
+2026-01-26 09:15:03.013750 pid[74905] DEBUG: === work poll thread no[14] tps[153], processed[1536] total[6556] queue size[1]
+2026-01-26 09:15:09.167783 pid[74905] DEBUG: === work poll thread no[36] tps[299], processed[2992] total[6573] queue size[1]
+2026-01-26 09:15:09.653073 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[23] queue size[1]
+2026-01-26 09:15:09.653104 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[52] queue size[1]
+2026-01-26 09:15:09.653093 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[27] queue size[1]
+2026-01-26 09:15:10.000040 pid[74905] DEBUG: === work poll thread no[30] tps[24420], processed[244205] total[244207] queue size[1]
+2026-01-26 09:15:12.708403 pid[74905] WARNING: Unavailable image correlationId = 23 sessionId = -1702517944 at position = 8395456, SubscriptionRegistrationId = 6
+2026-01-26 09:15:12.708521 pid[74905] DEBUG: ------- PARSE message OnGeneralError:Unavailable image, SubscriptionRegistrationId = 6 sessionId = -1702517944
+2026-01-26 09:15:13.000024 pid[74905] DEBUG: === data poll thread tps[56394]
+2026-01-26 09:15:13.023682 pid[74905] DEBUG: === work poll thread no[14] tps[469], processed[4691] total[11246] queue size[1]
+2026-01-26 09:15:16.709444 pid[74905] WARNING: Unavailable image correlationId = 22 sessionId = -1702517945 at position = 15417024, SubscriptionRegistrationId = 5
+2026-01-26 09:15:16.709543 pid[74905] DEBUG: ------- PARSE message OnGeneralError:Unavailable image, SubscriptionRegistrationId = 5 sessionId = -1702517945
+2026-01-26 09:15:16.709566 pid[74905] WARNING: Unavailable image correlationId = 20 sessionId = -1702517946 at position = 14445376, SubscriptionRegistrationId = 4
+2026-01-26 09:15:16.709588 pid[74905] DEBUG: ------- PARSE message OnGeneralError:Unavailable image, SubscriptionRegistrationId = 4 sessionId = -1702517946
+2026-01-26 09:15:19.060930 pid[74905] DEBUG: === work poll thread no[36] tps[380], processed[3805] total[10377] queue size[1]
+2026-01-26 09:15:21.708225 pid[74905] WARNING: Unavailable image correlationId = 21 sessionId = -1702517947 at position = 39872832, SubscriptionRegistrationId = 3
+2026-01-26 09:15:21.708469 pid[74905] DEBUG: ------- PARSE message OnGeneralError:Unavailable image, SubscriptionRegistrationId = 3 sessionId = -1702517947
+2026-01-26 09:15:23.017198 pid[74905] DEBUG: === data poll thread tps[1128]
+2026-01-26 09:15:23.017322 pid[74905] DEBUG: === work poll thread no[14] tps[474], processed[4746] total[15991] queue size[1]
+2026-01-26 09:15:33.009348 pid[74905] DEBUG: === data poll thread tps[573]
+2026-01-26 09:15:33.009474 pid[74905] DEBUG: === work poll thread no[14] tps[472], processed[4723] total[20713] queue size[1]
+2026-01-26 09:15:36.161069 pid[74905] DEBUG: === work poll thread no[36] tps[161], processed[1613] total[11989] queue size[2]
+2026-01-26 09:15:39.653306 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[24] queue size[1]
+2026-01-26 09:15:39.653306 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[24] queue size[1]
+2026-01-26 09:15:39.653309 pid[74905] DEBUG: === work poll thread no[11] tps[68], processed[682] total[735] queue size[1]
+2026-01-26 09:15:39.653335 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[28] queue size[1]
+2026-01-26 09:15:39.653335 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[28] queue size[1]
+2026-01-26 09:15:39.653331 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[53] queue size[1]
+2026-01-26 09:15:43.003048 pid[74905] DEBUG: === data poll thread tps[485]
+2026-01-26 09:15:43.003170 pid[74905] DEBUG: === work poll thread no[14] tps[379], processed[3794] total[24506] queue size[1]
+2026-01-26 09:15:44.595365 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 41s no data available
+2026-01-26 09:15:46.060560 pid[74905] DEBUG: === work poll thread no[36] tps[175], processed[1751] total[13739] queue size[1]
+2026-01-26 09:15:53.012247 pid[74905] DEBUG: === data poll thread tps[428]
+2026-01-26 09:15:53.012378 pid[74905] DEBUG: === work poll thread no[14] tps[319], processed[3190] total[27695] queue size[2]
+2026-01-26 09:15:55.596445 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 42s no data available
+2026-01-26 09:15:55.596522 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 50s no data available
+2026-01-26 09:15:55.596533 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 50s no data available
+2026-01-26 09:15:55.596540 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 52s no data available
+2026-01-26 09:16:01.081021 pid[74905] DEBUG: === work poll thread no[36] tps[156], processed[1562] total[15300] queue size[2]
+2026-01-26 09:16:03.000707 pid[74905] DEBUG: === data poll thread tps[438]
+2026-01-26 09:16:03.000827 pid[74905] DEBUG: === work poll thread no[14] tps[322], processed[3221] total[30915] queue size[1]
+2026-01-26 09:16:06.597617 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 53s no data available
+2026-01-26 09:16:06.597722 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 61s no data available
+2026-01-26 09:16:06.597732 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 61s no data available
+2026-01-26 09:16:06.597739 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 63s no data available
+2026-01-26 09:16:09.653770 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[25] queue size[1]
+2026-01-26 09:16:09.653902 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[54] queue size[1]
+2026-01-26 09:16:09.653970 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[29] queue size[1]
+2026-01-26 09:16:09.665250 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[736] queue size[1]
+2026-01-26 09:16:12.160383 pid[74905] DEBUG: === work poll thread no[36] tps[128], processed[1289] total[16588] queue size[1]
+2026-01-26 09:16:13.008890 pid[74905] DEBUG: === data poll thread tps[527]
+2026-01-26 09:16:13.009041 pid[74905] DEBUG: === work poll thread no[14] tps[327], processed[3270] total[34184] queue size[1]
+2026-01-26 09:16:17.598853 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 64s no data available
+2026-01-26 09:16:17.598938 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 72s no data available
+2026-01-26 09:16:17.598948 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 72s no data available
+2026-01-26 09:16:17.598955 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 74s no data available
+2026-01-26 09:16:22.067359 pid[74905] DEBUG: === work poll thread no[36] tps[215], processed[2159] total[18746] queue size[1]
+2026-01-26 09:16:23.011006 pid[74905] DEBUG: === data poll thread tps[525]
+2026-01-26 09:16:23.011178 pid[74905] DEBUG: === work poll thread no[14] tps[323], processed[3232] total[37415] queue size[1]
+2026-01-26 09:16:28.600005 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 75s no data available
+2026-01-26 09:16:28.600112 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 83s no data available
+2026-01-26 09:16:28.600124 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 83s no data available
+2026-01-26 09:16:28.600132 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 85s no data available
+2026-01-26 09:16:33.000013 pid[74905] DEBUG: === work poll thread no[14] tps[326], processed[3267] total[40681] queue size[1]
+2026-01-26 09:16:33.008802 pid[74905] DEBUG: === data poll thread tps[465]
+2026-01-26 09:16:33.168609 pid[74905] DEBUG: === work poll thread no[36] tps[197], processed[1972] total[20717] queue size[1]
+2026-01-26 09:16:39.600961 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 86s no data available
+2026-01-26 09:16:39.601059 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 94s no data available
+2026-01-26 09:16:39.601070 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 94s no data available
+2026-01-26 09:16:39.601077 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 96s no data available
+2026-01-26 09:16:39.654058 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[26] queue size[1]
+2026-01-26 09:16:39.654128 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[737] queue size[1]
+2026-01-26 09:16:39.654213 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[55] queue size[1]
+2026-01-26 09:16:39.654275 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[30] queue size[1]
+2026-01-26 09:16:43.009756 pid[74905] DEBUG: === data poll thread tps[485]
+2026-01-26 09:16:43.009918 pid[74905] DEBUG: === work poll thread no[14] tps[326], processed[3265] total[43945] queue size[1]
+2026-01-26 09:16:43.215506 pid[74905] DEBUG: === work poll thread no[36] tps[158], processed[1584] total[22300] queue size[1]
+2026-01-26 09:16:50.602139 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 97s no data available
+2026-01-26 09:16:50.602223 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 105s no data available
+2026-01-26 09:16:50.602233 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 105s no data available
+2026-01-26 09:16:50.602241 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 107s no data available
+2026-01-26 09:16:53.000073 pid[74905] DEBUG: === data poll thread tps[467]
+2026-01-26 09:16:53.000077 pid[74905] DEBUG: === work poll thread no[14] tps[328], processed[3289] total[47233] queue size[1]
+2026-01-26 09:16:54.172457 pid[74905] DEBUG: === work poll thread no[36] tps[138], processed[1385] total[23684] queue size[1]
+2026-01-26 09:17:01.603366 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 108s no data available
+2026-01-26 09:17:01.603469 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 116s no data available
+2026-01-26 09:17:01.603478 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 116s no data available
+2026-01-26 09:17:01.603486 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 118s no data available
+2026-01-26 09:17:03.029458 pid[74905] DEBUG: === data poll thread tps[467]
+2026-01-26 09:17:03.029627 pid[74905] DEBUG: === work poll thread no[14] tps[325], processed[3255] total[50487] queue size[1]
+2026-01-26 09:17:04.062815 pid[74905] DEBUG: === work poll thread no[36] tps[143], processed[1430] total[25113] queue size[1]
+2026-01-26 09:17:09.654446 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[27] queue size[1]
+2026-01-26 09:17:09.654548 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[738] queue size[1]
+2026-01-26 09:17:09.654619 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[56] queue size[1]
+2026-01-26 09:17:09.654692 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[31] queue size[1]
+2026-01-26 09:17:12.604587 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 119s no data available
+2026-01-26 09:17:12.604704 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 127s no data available
+2026-01-26 09:17:12.604715 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 127s no data available
+2026-01-26 09:17:12.604722 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 129s no data available
+2026-01-26 09:17:13.026336 pid[74905] DEBUG: === data poll thread tps[474]
+2026-01-26 09:17:13.026494 pid[74905] DEBUG: === work poll thread no[14] tps[330], processed[3303] total[53789] queue size[1]
+2026-01-26 09:17:15.160734 pid[74905] DEBUG: === work poll thread no[36] tps[144], processed[1441] total[26553] queue size[1]
+2026-01-26 09:17:23.003177 pid[74905] DEBUG: === data poll thread tps[478]
+2026-01-26 09:17:23.003361 pid[74905] DEBUG: === work poll thread no[14] tps[334], processed[3343] total[57131] queue size[1]
+2026-01-26 09:17:23.605862 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 130s no data available
+2026-01-26 09:17:23.605977 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 138s no data available
+2026-01-26 09:17:23.605987 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 138s no data available
+2026-01-26 09:17:23.605994 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 140s no data available
+2026-01-26 09:17:25.079227 pid[74905] DEBUG: === work poll thread no[36] tps[224], processed[2246] total[28798] queue size[1]
+2026-01-26 09:17:33.001939 pid[74905] DEBUG: === data poll thread tps[478]
+2026-01-26 09:17:33.002135 pid[74905] DEBUG: === work poll thread no[14] tps[336], processed[3366] total[60496] queue size[1]
+2026-01-26 09:17:34.607344 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 141s no data available
+2026-01-26 09:17:34.607442 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 149s no data available
+2026-01-26 09:17:34.607470 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 149s no data available
+2026-01-26 09:17:34.607478 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 151s no data available
+2026-01-26 09:17:36.168477 pid[74905] DEBUG: === work poll thread no[36] tps[200], processed[2008] total[30805] queue size[1]
+2026-01-26 09:17:39.654919 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[57] queue size[1]
+2026-01-26 09:17:39.654996 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[32] queue size[1]
+2026-01-26 09:17:39.655120 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[28] queue size[1]
+2026-01-26 09:17:39.655238 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[739] queue size[1]
+2026-01-26 09:17:43.010350 pid[74905] DEBUG: === data poll thread tps[564]
+2026-01-26 09:17:43.010498 pid[74905] DEBUG: === work poll thread no[14] tps[339], processed[3396] total[63891] queue size[1]
+2026-01-26 09:17:45.608592 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 152s no data available
+2026-01-26 09:17:45.608687 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 160s no data available
+2026-01-26 09:17:45.608697 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 160s no data available
+2026-01-26 09:17:45.608705 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 162s no data available
+2026-01-26 09:17:46.060694 pid[74905] DEBUG: === work poll thread no[36] tps[143], processed[1433] total[32237] queue size[1]
+2026-01-26 09:17:53.013940 pid[74905] DEBUG: === data poll thread tps[548]
+2026-01-26 09:17:53.014103 pid[74905] DEBUG: === work poll thread no[14] tps[341], processed[3418] total[67308] queue size[1]
+2026-01-26 09:17:56.609827 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 163s no data available
+2026-01-26 09:17:56.609923 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 171s no data available
+2026-01-26 09:17:56.609933 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 171s no data available
+2026-01-26 09:17:56.609940 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 173s no data available
+2026-01-26 09:17:57.171994 pid[74905] DEBUG: === work poll thread no[36] tps[148], processed[1480] total[33716] queue size[1]
+2026-01-26 09:18:03.011091 pid[74905] DEBUG: === data poll thread tps[486]
+2026-01-26 09:18:03.011261 pid[74905] DEBUG: === work poll thread no[14] tps[336], processed[3360] total[70667] queue size[1]
+2026-01-26 09:18:07.060472 pid[74905] DEBUG: === work poll thread no[36] tps[151], processed[1518] total[35233] queue size[1]
+2026-01-26 09:18:07.611072 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 174s no data available
+2026-01-26 09:18:07.611181 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 182s no data available
+2026-01-26 09:18:07.611191 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 182s no data available
+2026-01-26 09:18:07.611198 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 184s no data available
+2026-01-26 09:18:09.655065 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[29] queue size[1]
+2026-01-26 09:18:09.655149 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[740] queue size[1]
+2026-01-26 09:18:09.655149 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[740] queue size[1]
+2026-01-26 09:18:09.655208 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[58] queue size[1]
+2026-01-26 09:18:09.655276 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[33] queue size[1]
+2026-01-26 09:18:13.023269 pid[74905] DEBUG: === data poll thread tps[495]
+2026-01-26 09:18:13.023422 pid[74905] DEBUG: === work poll thread no[14] tps[345], processed[3453] total[74119] queue size[1]
+2026-01-26 09:18:18.167868 pid[74905] DEBUG: === work poll thread no[36] tps[151], processed[1511] total[36743] queue size[1]
+2026-01-26 09:18:18.612314 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 185s no data available
+2026-01-26 09:18:18.612412 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 193s no data available
+2026-01-26 09:18:18.612422 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 193s no data available
+2026-01-26 09:18:18.612430 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 195s no data available
+2026-01-26 09:18:23.004241 pid[74905] DEBUG: === data poll thread tps[513]
+2026-01-26 09:18:23.004414 pid[74905] DEBUG: === work poll thread no[14] tps[353], processed[3531] total[77649] queue size[1]
+2026-01-26 09:18:28.068211 pid[74905] DEBUG: === work poll thread no[36] tps[244], processed[2440] total[39182] queue size[1]
+2026-01-26 09:18:29.613559 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 196s no data available
+2026-01-26 09:18:29.613660 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 204s no data available
+2026-01-26 09:18:29.613671 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 204s no data available
+2026-01-26 09:18:29.613679 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 206s no data available
+2026-01-26 09:18:33.011357 pid[74905] DEBUG: === data poll thread tps[508]
+2026-01-26 09:18:33.011479 pid[74905] DEBUG: === work poll thread no[14] tps[356], processed[3562] total[81210] queue size[1]
+2026-01-26 09:18:39.168396 pid[74905] DEBUG: === work poll thread no[36] tps[216], processed[2161] total[41342] queue size[2]
+2026-01-26 09:18:39.655372 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[30] queue size[1]
+2026-01-26 09:18:39.655390 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[59] queue size[1]
+2026-01-26 09:18:39.655416 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[741] queue size[1]
+2026-01-26 09:18:39.655416 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[741] queue size[1]
+2026-01-26 09:18:39.655425 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[34] queue size[1]
+2026-01-26 09:18:40.614859 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 207s no data available
+2026-01-26 09:18:40.614972 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 215s no data available
+2026-01-26 09:18:40.614982 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 215s no data available
+2026-01-26 09:18:40.614990 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 217s no data available
+2026-01-26 09:18:43.004341 pid[74905] DEBUG: === data poll thread tps[512]
+2026-01-26 09:18:43.004445 pid[74905] DEBUG: === work poll thread no[14] tps[358], processed[3585] total[84794] queue size[1]
+2026-01-26 09:18:49.229814 pid[74905] DEBUG: === work poll thread no[36] tps[154], processed[1541] total[42882] queue size[1]
+2026-01-26 09:18:51.616130 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 218s no data available
+2026-01-26 09:18:51.616235 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 226s no data available
+2026-01-26 09:18:51.616245 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 226s no data available
+2026-01-26 09:18:51.616252 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 228s no data available
+2026-01-26 09:18:53.001678 pid[74905] DEBUG: === data poll thread tps[510]
+2026-01-26 09:18:53.001982 pid[74905] DEBUG: === work poll thread no[14] tps[355], processed[3559] total[88352] queue size[1]
+2026-01-26 09:19:00.310650 pid[74905] DEBUG: === work poll thread no[36] tps[148], processed[1482] total[44363] queue size[1]
+2026-01-26 09:19:02.617316 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 229s no data available
+2026-01-26 09:19:02.617397 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 237s no data available
+2026-01-26 09:19:02.617405 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 237s no data available
+2026-01-26 09:19:02.617411 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 239s no data available
+2026-01-26 09:19:03.000985 pid[74905] DEBUG: === data poll thread tps[504]
+2026-01-26 09:19:03.001084 pid[74905] DEBUG: === work poll thread no[14] tps[356], processed[3566] total[91917] queue size[1]
+2026-01-26 09:19:09.655901 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[31] queue size[1]
+2026-01-26 09:19:09.655924 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[35] queue size[1]
+2026-01-26 09:19:09.655917 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[60] queue size[1]
+2026-01-26 09:19:09.655929 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[742] queue size[1]
+2026-01-26 09:19:10.062917 pid[74905] DEBUG: === work poll thread no[36] tps[163], processed[1630] total[45992] queue size[1]
+2026-01-26 09:19:13.001257 pid[74905] DEBUG: === data poll thread tps[600]
+2026-01-26 09:19:13.001371 pid[74905] DEBUG: === work poll thread no[14] tps[348], processed[3480] total[95396] queue size[1]
+2026-01-26 09:19:13.618177 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 240s no data available
+2026-01-26 09:19:13.618293 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 248s no data available
+2026-01-26 09:19:13.618304 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 248s no data available
+2026-01-26 09:19:13.618311 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 250s no data available
+2026-01-26 09:19:21.180628 pid[74905] DEBUG: === work poll thread no[36] tps[161], processed[1610] total[47601] queue size[3]
+2026-01-26 09:19:23.000775 pid[74905] DEBUG: === data poll thread tps[578]
+2026-01-26 09:19:23.000878 pid[74905] DEBUG: === work poll thread no[14] tps[359], processed[3596] total[98991] queue size[1]
+2026-01-26 09:19:24.619157 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 251s no data available
+2026-01-26 09:19:24.619272 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 259s no data available
+2026-01-26 09:19:24.619283 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 259s no data available
+2026-01-26 09:19:24.619290 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 261s no data available
+2026-01-26 09:19:31.060322 pid[74905] DEBUG: === work poll thread no[36] tps[240], processed[2400] total[50000] queue size[2]
+2026-01-26 09:19:33.005866 pid[74905] DEBUG: === data poll thread tps[514]
+2026-01-26 09:19:33.005971 pid[74905] DEBUG: === work poll thread no[14] tps[361], processed[3618] total[102608] queue size[1]
+2026-01-26 09:19:35.620214 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 262s no data available
+2026-01-26 09:19:35.620334 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 270s no data available
+2026-01-26 09:19:35.620345 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 270s no data available
+2026-01-26 09:19:35.620352 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 272s no data available
+2026-01-26 09:19:39.656229 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[32] queue size[1]
+2026-01-26 09:19:39.656253 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[36] queue size[1]
+2026-01-26 09:19:39.656254 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[743] queue size[1]
+2026-01-26 09:19:39.656263 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[61] queue size[1]
+2026-01-26 09:19:42.166136 pid[74905] DEBUG: === work poll thread no[36] tps[217], processed[2172] total[52171] queue size[2]
+2026-01-26 09:19:43.002166 pid[74905] DEBUG: === data poll thread tps[518]
+2026-01-26 09:19:43.002270 pid[74905] DEBUG: === work poll thread no[14] tps[363], processed[3638] total[106245] queue size[2]
+2026-01-26 09:19:46.621438 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 273s no data available
+2026-01-26 09:19:46.621566 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 281s no data available
+2026-01-26 09:19:46.621576 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 281s no data available
+2026-01-26 09:19:46.621583 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 283s no data available
+2026-01-26 09:19:52.064907 pid[74905] DEBUG: === work poll thread no[36] tps[154], processed[1540] total[53710] queue size[1]
+2026-01-26 09:19:53.000065 pid[74905] DEBUG: === work poll thread no[14] tps[361], processed[3612] total[109856] queue size[1]
+2026-01-26 09:19:53.000065 pid[74905] DEBUG: === work poll thread no[14] tps[361], processed[3612] total[109856] queue size[1]
+2026-01-26 09:19:53.000068 pid[74905] DEBUG: === data poll thread tps[515]
+2026-01-26 09:19:57.622705 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 284s no data available
+2026-01-26 09:19:57.622822 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 292s no data available
+2026-01-26 09:19:57.622836 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 292s no data available
+2026-01-26 09:19:57.622844 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 294s no data available
+2026-01-26 09:20:03.048205 pid[74905] DEBUG: === data poll thread tps[648]
+2026-01-26 09:20:03.048359 pid[74905] DEBUG: === work poll thread no[14] tps[364], processed[3645] total[113500] queue size[1]
+2026-01-26 09:20:03.182205 pid[74905] DEBUG: === work poll thread no[36] tps[285], processed[2851] total[56560] queue size[1]
+2026-01-26 09:20:08.623967 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 295s no data available
+2026-01-26 09:20:08.624080 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 303s no data available
+2026-01-26 09:20:08.624106 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 303s no data available
+2026-01-26 09:20:08.624114 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 305s no data available
+2026-01-26 09:20:09.655712 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[33] queue size[1]
+2026-01-26 09:20:09.655811 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[744] queue size[1]
+2026-01-26 09:20:09.655811 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[744] queue size[1]
+2026-01-26 09:20:09.655907 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[37] queue size[1]
+2026-01-26 09:20:09.655912 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[62] queue size[1]
+2026-01-26 09:20:13.011357 pid[74905] DEBUG: === data poll thread tps[592]
+2026-01-26 09:20:13.011503 pid[74905] DEBUG: === work poll thread no[14] tps[378], processed[3788] total[117287] queue size[1]
+2026-01-26 09:20:13.068756 pid[74905] DEBUG: === work poll thread no[36] tps[213], processed[2135] total[58694] queue size[1]
+2026-01-26 09:20:19.625210 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 306s no data available
+2026-01-26 09:20:19.625327 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 314s no data available
+2026-01-26 09:20:19.625336 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 314s no data available
+2026-01-26 09:20:19.625341 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 316s no data available
+2026-01-26 09:20:23.001409 pid[74905] DEBUG: === data poll thread tps[543]
+2026-01-26 09:20:23.001588 pid[74905] DEBUG: === work poll thread no[14] tps[369], processed[3696] total[120982] queue size[1]
+2026-01-26 09:20:24.479344 pid[74905] DEBUG: === work poll thread no[36] tps[173], processed[1735] total[60428] queue size[1]
+2026-01-26 09:20:30.626587 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 317s no data available
+2026-01-26 09:20:30.626688 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 325s no data available
+2026-01-26 09:20:30.626697 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 325s no data available
+2026-01-26 09:20:30.626704 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 327s no data available
+2026-01-26 09:20:33.005892 pid[74905] DEBUG: === data poll thread tps[529]
+2026-01-26 09:20:33.006156 pid[74905] DEBUG: === work poll thread no[14] tps[360], processed[3607] total[124588] queue size[1]
+2026-01-26 09:20:34.064501 pid[74905] DEBUG: === work poll thread no[36] tps[168], processed[1689] total[62116] queue size[1]
+2026-01-26 09:20:39.650258 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[34] queue size[1]
+2026-01-26 09:20:39.650353 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[745] queue size[1]
+2026-01-26 09:20:39.650353 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[745] queue size[1]
+2026-01-26 09:20:39.650423 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[63] queue size[1]
+2026-01-26 09:20:39.650481 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[38] queue size[1]
+2026-01-26 09:20:41.627684 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 328s no data available
+2026-01-26 09:20:41.627795 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 336s no data available
+2026-01-26 09:20:41.627822 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 336s no data available
+2026-01-26 09:20:41.627830 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 338s no data available
+2026-01-26 09:20:43.003529 pid[74905] DEBUG: === data poll thread tps[529]
+2026-01-26 09:20:43.003699 pid[74905] DEBUG: === work poll thread no[14] tps[364], processed[3644] total[128231] queue size[1]
+2026-01-26 09:20:45.160179 pid[74905] DEBUG: === work poll thread no[36] tps[164], processed[1640] total[63755] queue size[1]
+2026-01-26 09:20:52.628845 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 339s no data available
+2026-01-26 09:20:52.628924 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 347s no data available
+2026-01-26 09:20:52.628933 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 347s no data available
+2026-01-26 09:20:52.628941 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 349s no data available
+2026-01-26 09:20:53.011961 pid[74905] DEBUG: === data poll thread tps[532]
+2026-01-26 09:20:53.012102 pid[74905] DEBUG: === work poll thread no[14] tps[368], processed[3686] total[131916] queue size[1]
+2026-01-26 09:20:55.059918 pid[74905] DEBUG: === work poll thread no[36] tps[257], processed[2576] total[66330] queue size[1]
+2026-01-26 09:21:03.018802 pid[74905] DEBUG: === data poll thread tps[537]
+2026-01-26 09:21:03.018922 pid[74905] DEBUG: === work poll thread no[14] tps[369], processed[3698] total[135613] queue size[1]
+2026-01-26 09:21:03.630184 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 350s no data available
+2026-01-26 09:21:03.630293 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 358s no data available
+2026-01-26 09:21:03.630302 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 358s no data available
+2026-01-26 09:21:03.630309 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 360s no data available
+2026-01-26 09:21:06.314077 pid[74905] DEBUG: === work poll thread no[36] tps[264], processed[2645] total[68974] queue size[1]
+2026-01-26 09:21:09.650496 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[35] queue size[1]
+2026-01-26 09:21:09.650515 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[39] queue size[1]
+2026-01-26 09:21:09.650536 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[746] queue size[1]
+2026-01-26 09:21:09.650536 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[746] queue size[1]
+2026-01-26 09:21:09.650528 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[64] queue size[1]
+2026-01-26 09:21:13.005445 pid[74905] DEBUG: === data poll thread tps[671]
+2026-01-26 09:21:13.005604 pid[74905] DEBUG: === work poll thread no[14] tps[375], processed[3751] total[139363] queue size[1]
+2026-01-26 09:21:14.631238 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 361s no data available
+2026-01-26 09:21:14.631349 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 369s no data available
+2026-01-26 09:21:14.631359 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 369s no data available
+2026-01-26 09:21:14.631366 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 371s no data available
+2026-01-26 09:21:16.060371 pid[74905] DEBUG: === work poll thread no[36] tps[186], processed[1866] total[70839] queue size[1]
+2026-01-26 09:21:23.001859 pid[74905] DEBUG: === data poll thread tps[635]
+2026-01-26 09:21:23.002031 pid[74905] DEBUG: === work poll thread no[14] tps[378], processed[3785] total[143147] queue size[1]
+2026-01-26 09:21:25.632282 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 372s no data available
+2026-01-26 09:21:25.632369 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 380s no data available
+2026-01-26 09:21:25.632380 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 380s no data available
+2026-01-26 09:21:25.632388 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 382s no data available
+2026-01-26 09:21:27.163441 pid[74905] DEBUG: === work poll thread no[36] tps[176], processed[1760] total[72598] queue size[1]
+2026-01-26 09:21:33.008922 pid[74905] DEBUG: === data poll thread tps[544]
+2026-01-26 09:21:33.009068 pid[74905] DEBUG: === work poll thread no[14] tps[363], processed[3635] total[146781] queue size[1]
+2026-01-26 09:21:36.633420 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 383s no data available
+2026-01-26 09:21:36.633529 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 391s no data available
+2026-01-26 09:21:36.633538 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 391s no data available
+2026-01-26 09:21:36.633546 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 393s no data available
+2026-01-26 09:21:37.086258 pid[74905] DEBUG: === work poll thread no[36] tps[181], processed[1813] total[74410] queue size[1]
+2026-01-26 09:21:39.649942 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[36] queue size[1]
+2026-01-26 09:21:39.649954 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[40] queue size[1]
+2026-01-26 09:21:39.649973 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[65] queue size[1]
+2026-01-26 09:21:39.649973 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[65] queue size[1]
+2026-01-26 09:21:39.649958 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[747] queue size[1]
+2026-01-26 09:21:43.012603 pid[74905] DEBUG: === data poll thread tps[548]
+2026-01-26 09:21:43.012773 pid[74905] DEBUG: === work poll thread no[14] tps[369], processed[3694] total[150474] queue size[1]
+2026-01-26 09:21:47.634553 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 394s no data available
+2026-01-26 09:21:47.634659 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 402s no data available
+2026-01-26 09:21:47.634670 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 402s no data available
+2026-01-26 09:21:47.634677 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 404s no data available
+2026-01-26 09:21:48.160019 pid[74905] DEBUG: === work poll thread no[36] tps[180], processed[1805] total[76214] queue size[1]
+2026-01-26 09:21:53.000164 pid[74905] DEBUG: === data poll thread tps[556]
+2026-01-26 09:21:53.000339 pid[74905] DEBUG: === work poll thread no[14] tps[375], processed[3756] total[154229] queue size[1]
+2026-01-26 09:21:58.061120 pid[74905] DEBUG: === work poll thread no[36] tps[279], processed[2790] total[79003] queue size[1]
+2026-01-26 09:21:58.635612 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 405s no data available
+2026-01-26 09:21:58.635728 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 413s no data available
+2026-01-26 09:21:58.635759 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 413s no data available
+2026-01-26 09:21:58.635768 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 415s no data available
+2026-01-26 09:22:03.003455 pid[74905] DEBUG: === data poll thread tps[554]
+2026-01-26 09:22:03.003625 pid[74905] DEBUG: === work poll thread no[14] tps[372], processed[3726] total[157954] queue size[1]
+2026-01-26 09:22:09.369595 pid[74905] DEBUG: === work poll thread no[36] tps[261], processed[2618] total[81620] queue size[1]
+2026-01-26 09:22:09.636765 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 416s no data available
+2026-01-26 09:22:09.636883 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 424s no data available
+2026-01-26 09:22:09.636894 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 424s no data available
+2026-01-26 09:22:09.636901 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 426s no data available
+2026-01-26 09:22:09.650380 pid[74905] DEBUG: === work poll thread no[10] tps[0], processed[2] total[37] queue size[1]
+2026-01-26 09:22:09.650391 pid[74905] DEBUG: === work poll thread no[12] tps[0], processed[2] total[66] queue size[1]
+2026-01-26 09:22:09.650403 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[748] queue size[1]
+2026-01-26 09:22:09.650403 pid[74905] DEBUG: === work poll thread no[11] tps[0], processed[2] total[748] queue size[1]
+2026-01-26 09:22:09.650389 pid[74905] DEBUG: === work poll thread no[13] tps[0], processed[2] total[41] queue size[1]
+2026-01-26 09:22:13.015196 pid[74905] DEBUG: === data poll thread tps[568]
+2026-01-26 09:22:13.015363 pid[74905] DEBUG: === work poll thread no[14] tps[385], processed[3856] total[161809] queue size[1]
+2026-01-26 09:22:19.066476 pid[74905] DEBUG: === work poll thread no[36] tps[189], processed[1896] total[83515] queue size[1]
+2026-01-26 09:22:20.637964 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-1 in 427s no data available
+2026-01-26 09:22:20.638061 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-2 in 435s no data available
+2026-01-26 09:22:20.638071 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-3 in 435s no data available
+2026-01-26 09:22:20.638079 pid[74905] DEBUG: ------- PARSE message OnGeneralError:XSHE-STOCKTYPE-TRANSACTIONTYPE-AND-ORDERTYPE-3-4 in 437s no data available
+2026-01-26 09:22:23.014493 pid[74905] DEBUG: === data poll thread tps[583]
+2026-01-26 09:22:23.014592 pid[74905] DEBUG: === work poll thread no[14] tps[393], processed[3933] total[165741] queue size[1]
+2026-01-26 09:22:30.176458 pid[74905] DEBUG: === work poll thread no[36] tps[187], processed[1874] total[85388] queue size[1]
