@@ -489,7 +489,7 @@ void run_live_mode(quill::Logger* logger,
     }
 
     // 设置工作线程池大小
-    udp_client->SetWorkPoolThreadCount(50);
+    udp_client->SetWorkPoolThreadCount(10);
 
     // 注册消息处理器
     udp_client->RegistHandle(&adapter);
