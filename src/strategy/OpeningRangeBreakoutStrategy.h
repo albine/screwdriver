@@ -145,7 +145,7 @@ private:
 
         initializeThresholds(state, symbol);
 
-        LOG_M_INFO("OnFirstTick {}: prev_close={:.4f}, limit_up={}, date={}, mdtime={}",
+        LOG_M_DEBUG("OnFirstTick {}: prev_close={:.4f}, limit_up={}, date={}, mdtime={}",
                    symbol, state.prev_close,
                    price_util::price_to_yuan(state.limit_up_price),
                    state.current_date, time_util::format_mdtime(stock.mdtime));
@@ -153,13 +153,21 @@ private:
 
     // 集合竞价结束后（09:25）调用一次，判断场景并设置检测器
     void OnOpeningCallEnd(ORBState& state, const MDStockStruct& stock, const std::string& symbol) {
-        state.scenario_determined = true;
-
         // 集合竞价结束后才能获取正确的开盘价
-        state.open_price = to_price(stock.openpx);
+        double open_price = to_price(stock.openpx);
+
+        // 【修复】如果 openpx 还是 0，等待下一个有效的 tick
+        // 某些股票在 09:25:01 时 openpx 可能尚未填充
+        if (open_price <= 0.0) {
+            LOG_M_DEBUG("{} openpx=0 at {}, 等待有效开盘价",
+                       symbol, time_util::format_mdtime(stock.mdtime));
+            return;  // 不设置 scenario_determined，下一帧重试
+        }
+
+        state.scenario_determined = true;
+        state.open_price = open_price;
 
         double prev_close = state.prev_close;
-        double open_price = state.open_price;
 
         if (open_price < prev_close) {
             // 绿开翻红场景：立即设置检测器
@@ -171,14 +179,14 @@ private:
             state.detector_armed = true;
 
             double sell_price_01 = to_price(stock.sellpricequeue[0]);
-            LOG_M_INFO("{} 绿开翻红检测器已设置 (集合竞价结束): target={} ({}元), sell1={:.4f}, open={:.4f}, prev_close={:.4f}, mdtime={}",
+            LOG_M_DEBUG("{} 绿开翻红检测器已设置 (集合竞价结束): target={} ({}元), sell1={:.4f}, open={:.4f}, prev_close={:.4f}, mdtime={}",
                        symbol, target_price, price_util::price_to_yuan(target_price),
                        sell_price_01, open_price, prev_close, time_util::format_mdtime(stock.mdtime));
         } else {
             // 高开新高场景：标记场景，检测器需要等 30 秒整理期
             state.armed_scenario = BreakoutScenario::GAP_UP_NEW_HIGH;
 
-            LOG_M_INFO("{} 高开新高场景: open={:.4f} >= prev_close={:.4f}, 等待30秒整理期, mdtime={}",
+            LOG_M_DEBUG("{} 高开新高场景: open={:.4f} >= prev_close={:.4f}, 等待30秒整理期, mdtime={}",
                        symbol, open_price, prev_close, time_util::format_mdtime(stock.mdtime));
         }
     }
@@ -215,7 +223,7 @@ public:
             stock_state.highest_initialized = true;
             stock_state.highest_price = to_price(stock.highpx);
             stock_state.highest_timestamp_mdtime = stock.mdtime;
-            LOG_M_INFO("{} 开盘后初始化 highest_price={:.4f}, mdtime={}",
+            LOG_M_DEBUG("{} 开盘后初始化 highest_price={:.4f}, mdtime={}",
                        symbol, stock_state.highest_price, time_util::format_mdtime(stock.mdtime));
         }
 
@@ -258,6 +266,9 @@ public:
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
         if (!is_enabled()) return;
 
+        // 只在开盘时间处理（09:30-11:30, 13:00-15:00）
+        if (!is_market_open(order.mdtime)) return;
+
         std::string symbol(order.htscsecurityid);
         auto it = stock_states_.find(symbol);
         if (it == stock_states_.end()) return;
@@ -281,6 +292,9 @@ public:
 
     void on_transaction(const MDTransactionStruct& txn, const FastOrderBook& book) override {
         if (!is_enabled()) return;
+
+        // 只在开盘时间处理（09:30-11:30, 13:00-15:00）
+        if (!is_market_open(txn.mdtime)) return;
 
         std::string symbol(txn.htscsecurityid);
         auto it = stock_states_.find(symbol);
@@ -388,15 +402,15 @@ private:
                     stats.avg_volume, stats.total_buy_qty, reason);
         }
 
-        LOG_M_INFO("========================================");
-        LOG_M_INFO("SIGNAL TRIGGERED at {} for {}", time_util::format_mdtime(mdtime), symbol);
-        LOG_M_INFO("Scenario: {}", reason);
-        LOG_M_INFO("Target Price: {} ({}元)", target_price, price_util::price_to_yuan(target_price));
-        LOG_M_INFO("Order Price: {} ({}元)", order_price, price_util::price_to_yuan(order_price));
+        LOG_M_DEBUG("========================================");
+        LOG_M_DEBUG("SIGNAL TRIGGERED at {} for {}", time_util::format_mdtime(mdtime), symbol);
+        LOG_M_DEBUG("Scenario: {}", reason);
+        LOG_M_DEBUG("Target Price: {} ({}元)", target_price, price_util::price_to_yuan(target_price));
+        LOG_M_DEBUG("Order Price: {} ({}元)", order_price, price_util::price_to_yuan(order_price));
         if (stats.current_volume > 0) {
-            LOG_M_INFO("n (Avg Volume): {:.0f}, delta_n (Buy Trades): {}", stats.avg_volume, stats.total_buy_qty);
+            LOG_M_DEBUG("n (Avg Volume): {:.0f}, delta_n (Buy Trades): {}", stats.avg_volume, stats.total_buy_qty);
         }
-        LOG_M_INFO("========================================");
+        LOG_M_DEBUG("========================================");
 
         // 发送买入信号
         TradeSignal signal;
