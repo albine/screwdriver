@@ -70,14 +70,14 @@ public:
     // 生命周期回调
     // ==========================================
     void on_start() override {
-        LOG_M_INFO("BreakoutPriceVolumeStrategy started: {} | symbol={} | breakout_price={} ({}元) | enabled={}",
+        LOG_M_DEBUG("BreakoutPriceVolumeStrategy started: {} | symbol={} | breakout_price={} ({}元) | enabled={}",
                    name, symbol, breakout_price_, price_util::price_to_yuan(breakout_price_),
                    is_enabled() ? "true" : "false");
 
     }
 
     void on_stop() override {
-        LOG_M_INFO("BreakoutPriceVolumeStrategy stopped: {} | ticks={} | orders={} | txns={} | triggered={}",
+        LOG_M_DEBUG("BreakoutPriceVolumeStrategy stopped: {} | ticks={} | orders={} | txns={} | triggered={}",
                    name, tick_count_.load(), order_count_.load(), transaction_count_.load(),
                    detector_.is_triggered() ? "yes" : "no");
     }
@@ -109,14 +109,14 @@ public:
             detector_.set_enabled(true);
             set_enabled(true);
 
-            LOG_M_INFO("========================================");
-            LOG_M_INFO("BreakoutPriceVolumeStrategy ENABLED: {}", name);
-            LOG_M_INFO("  - Breakout Price: {} ({}元)", breakout_price_, price_util::price_to_yuan(breakout_price_));
-            LOG_M_INFO("========================================");
+            LOG_M_DEBUG("========================================");
+            LOG_M_DEBUG("BreakoutPriceVolumeStrategy ENABLED: {}", name);
+            LOG_M_DEBUG("  - Breakout Price: {} ({}元)", breakout_price_, price_util::price_to_yuan(breakout_price_));
+            LOG_M_DEBUG("========================================");
         } else if (msg.type == ControlMessage::Type::DISABLE) {
             detector_.set_enabled(false);
             set_enabled(false);
-            LOG_M_INFO("BreakoutPriceVolumeStrategy DISABLED: {}", name);
+            LOG_M_DEBUG("BreakoutPriceVolumeStrategy DISABLED: {}", name);
         }
     }
 
@@ -165,14 +165,14 @@ private:
                     time_util::format_mdtime(mdtime),
                     price_util::format_price_display(price));
 
-            LOG_M_INFO("========================================");
-            LOG_M_INFO("SIGNAL TRIGGERED (BREAKOUT) at {}",
+            LOG_M_DEBUG("========================================");
+            LOG_M_DEBUG("SIGNAL TRIGGERED (BREAKOUT) at {}",
                        time_util::format_mdtime(mdtime));
-            LOG_M_INFO("Price Level: {} ({}元)",
+            LOG_M_DEBUG("Price Level: {} ({}元)",
                        price,
                        price_util::price_to_yuan(price));
-            LOG_M_INFO("Reason: breakout_price < best_ask (已突破)");
-            LOG_M_INFO("========================================");
+            LOG_M_DEBUG("Reason: breakout_price < best_ask (已突破)");
+            LOG_M_DEBUG("========================================");
         } else {
             // 情况2：delta_n >= n
             LOG_BIZ("SIGNAL",
@@ -186,17 +186,17 @@ private:
                     stats.current_volume,
                     stats.window_size);
 
-            LOG_M_INFO("========================================");
-            LOG_M_INFO("SIGNAL TRIGGERED at {}",
+            LOG_M_DEBUG("========================================");
+            LOG_M_DEBUG("SIGNAL TRIGGERED at {}",
                        time_util::format_mdtime(mdtime));
-            LOG_M_INFO("Price Level: {} ({}元)",
+            LOG_M_DEBUG("Price Level: {} ({}元)",
                        price,
                        price_util::price_to_yuan(price));
-            LOG_M_INFO("n (Avg Volume in 200ms): {:.0f}", stats.avg_volume);
-            LOG_M_INFO("delta_n (Buy Trades in 200ms): {}", stats.total_buy_qty);
-            LOG_M_INFO("Current Volume: {}", stats.current_volume);
-            LOG_M_INFO("Window Size: {} snapshots", stats.window_size);
-            LOG_M_INFO("========================================");
+            LOG_M_DEBUG("n (Avg Volume in 200ms): {:.0f}", stats.avg_volume);
+            LOG_M_DEBUG("delta_n (Buy Trades in 200ms): {}", stats.total_buy_qty);
+            LOG_M_DEBUG("Current Volume: {}", stats.current_volume);
+            LOG_M_DEBUG("Window Size: {} snapshots", stats.window_size);
+            LOG_M_DEBUG("========================================");
         }
 
         // 发送买入信号

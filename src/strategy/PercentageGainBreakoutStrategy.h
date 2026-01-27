@@ -158,17 +158,17 @@ private:
                                                    state.initial_threshold_bp,
                                                    state.breakout_threshold_bp);
 
-        LOG_M_INFO("{} 开盘: prev_close={:.4f}, open={:.4f}, 开盘涨幅={:.2f}%, gap_scenario={}",
+        LOG_M_DEBUG("{} 开盘: prev_close={:.4f}, open={:.4f}, 开盘涨幅={:.2f}%, gap_scenario={}",
                    symbol, state.prev_close, state.open_price,
                    opening_gain_bp / 100.0, gapScenarioToString(state.gap_scenario));
 
         // Handle gap scenarios
         if (state.gap_scenario == GapScenario::MODERATE_GAP) {
             state.initial_threshold_met = true;
-            LOG_M_INFO("{} 开盘已达3/5%阈值，等待顿点后追4/6", symbol);
+            LOG_M_DEBUG("{} 开盘已达3/5%阈值，等待顿点后追4/6", symbol);
         } else if (state.gap_scenario == GapScenario::LARGE_GAP) {
             state.initial_threshold_met = true;
-            LOG_M_INFO("{} 开盘已超4/6%阈值，等待顿点后追新高", symbol);
+            LOG_M_DEBUG("{} 开盘已超4/6%阈值，等待顿点后追新高", symbol);
         }
     }
 
@@ -331,7 +331,7 @@ private:
 
         if (current_gain_bp >= state.initial_threshold_bp) {
             state.initial_threshold_met = true;
-            LOG_M_INFO("{} Phase1完成: 涨幅{:.2f}%达到阈值{:.2f}%, mdtime={}",
+            LOG_M_DEBUG("{} Phase1完成: 涨幅{:.2f}%达到阈值{:.2f}%, mdtime={}",
                        symbol, current_gain_bp / 100.0, state.initial_threshold_bp / 100.0,
                        time_util::format_mdtime(stock.mdtime));
         }
@@ -357,7 +357,7 @@ private:
             state.detector_armed = true;
 
             int64_t consolidation_seconds = consolidation_duration / 1000;
-            LOG_M_INFO("{} Phase2完成: 顿点{}秒, 目标价={} ({}元), highest={:.4f}, highest_time={}, mdtime={}",
+            LOG_M_DEBUG("{} Phase2完成: 顿点{}秒, 目标价={} ({}元), highest={:.4f}, highest_time={}, mdtime={}",
                        symbol, consolidation_seconds,
                        target_price, price_util::price_to_yuan(target_price),
                        state.highest_price, time_util::format_mdtime(state.highest_timestamp_mdtime),
@@ -417,15 +417,15 @@ private:
                     stats.avg_volume, stats.total_buy_qty, scenario_str);
         }
 
-        LOG_M_INFO("========================================");
-        LOG_M_INFO("SIGNAL TRIGGERED at {} for {}", time_util::format_mdtime(mdtime), symbol);
-        LOG_M_INFO("Scenario: {}", scenario_str);
-        LOG_M_INFO("Target Price: {} ({}元)", target_price, price_util::price_to_yuan(target_price));
-        LOG_M_INFO("Order Price: {} ({}元)", order_price, price_util::price_to_yuan(order_price));
+        LOG_M_DEBUG("========================================");
+        LOG_M_DEBUG("SIGNAL TRIGGERED at {} for {}", time_util::format_mdtime(mdtime), symbol);
+        LOG_M_DEBUG("Scenario: {}", scenario_str);
+        LOG_M_DEBUG("Target Price: {} ({}元)", target_price, price_util::price_to_yuan(target_price));
+        LOG_M_DEBUG("Order Price: {} ({}元)", order_price, price_util::price_to_yuan(order_price));
         if (stats.current_volume > 0) {
-            LOG_M_INFO("n (Avg Volume): {:.0f}, delta_n (Buy Trades): {}", stats.avg_volume, stats.total_buy_qty);
+            LOG_M_DEBUG("n (Avg Volume): {:.0f}, delta_n (Buy Trades): {}", stats.avg_volume, stats.total_buy_qty);
         }
-        LOG_M_INFO("========================================");
+        LOG_M_DEBUG("========================================");
 
         // 发送买入信号
         TradeSignal signal;
