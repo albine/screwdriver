@@ -73,14 +73,19 @@ struct alignas(32) OrderNode {
 // ==========================================
 // 2. 价格档位 (Level) - POD 类型
 // ==========================================
-// 存放在 Fixed Array 中，作为链表的表头
-struct alignas(16) Level {
+// 存放在 Fixed Array 中，买卖双链表各自独立
+struct alignas(64) Level {
     uint32_t price;         // 价格 (冗余校验，实际由数组下标决定)
-    uint32_t total_volume;  // 该档位总挂单量 (聚合统计)
 
-    // 链表入口
-    int32_t head_order_idx; // 链表头 (用于撮合成交)
-    int32_t tail_order_idx; // 链表尾 (用于新单排队)
+    // 买单链表
+    uint64_t bid_volume;    // 买方挂单量
+    int32_t bid_head_idx;   // 买单链表头
+    int32_t bid_tail_idx;   // 买单链表尾
+
+    // 卖单链表
+    uint64_t ask_volume;    // 卖方挂单量
+    int32_t ask_head_idx;   // 卖单链表头
+    int32_t ask_tail_idx;   // 卖单链表尾
 };
 
 
@@ -116,8 +121,14 @@ public:
     std::optional<uint32_t> get_best_bid() const;
     std::optional<uint32_t> get_best_ask() const;
 
-    // 获取某价格档位的总挂单量
+    // 获取某价格档位的总挂单量（买+卖）
     uint64_t get_volume_at_price(uint32_t price) const;
+
+    // 获取某价格档位的买方挂单量
+    uint64_t get_bid_volume_at_price(uint32_t price) const;
+
+    // 获取某价格档位的卖方挂单量
+    uint64_t get_ask_volume_at_price(uint32_t price) const;
 
     // 计算价格区间内的累积挂单量 (用于打板策略，极速数组扫描)
     uint64_t get_ask_volume_in_range(uint32_t start_price, uint32_t end_price) const;

@@ -26,12 +26,15 @@ FastOrderBook::FastOrderBook(uint32_t code, ObjectPool<OrderNode>& pool, uint32_
     
     // 初始化 Level 状态 (全部置空)
     for (auto& lvl : levels_) {
-        lvl.total_volume = 0;
-        lvl.head_order_idx = -1;
-        lvl.tail_order_idx = -1;
+        lvl.bid_volume = 0;
+        lvl.bid_head_idx = -1;
+        lvl.bid_tail_idx = -1;
+        lvl.ask_volume = 0;
+        lvl.ask_head_idx = -1;
+        lvl.ask_tail_idx = -1;
         // lvl.price 可以在这里初始化，也可以在用的时候算，这里为了严谨设为对应价格
         // 注意：实际访问是靠下标，这个 price 字段主要用于调试或校验
-        lvl.price = 0; 
+        lvl.price = 0;
     }
     
     // 初始化游标，-1 表示当前无挂单
@@ -187,7 +190,12 @@ bool FastOrderBook::update_volume_internal(uint64_t seq, uint32_t delta_vol) {
         // 直接通过 sort_price 定位 Level，无需搜索
         lvl_ptr = get_level_ptr(node.sort_price);
         if (lvl_ptr) {
-             lvl_ptr->total_volume -= delta_vol;
+            // 根据买卖方向更新对应的 volume
+            if (node.side == Side::Buy) {
+                lvl_ptr->bid_volume -= delta_vol;
+            } else {
+                lvl_ptr->ask_volume -= delta_vol;
+            }
         }
     }
 
@@ -203,22 +211,18 @@ bool FastOrderBook::update_volume_internal(uint64_t seq, uint32_t delta_vol) {
         // 5. 关键：检查是否需要移动最优价游标
         // 只有当删除的单子属于最优价档位，且该档位变空时才需要扫描
         uint32_t lvl_idx = (node.sort_price - min_price_) / TICK_SIZE;
-        
+
         if (node.side == Side::Buy) {
             if ((int32_t)lvl_idx == best_bid_idx_) {
-                // 检查该档位是否还有买单
-                bool has_bid = (lvl_ptr->head_order_idx != -1) &&
-                               (pool_.get(lvl_ptr->head_order_idx).side == Side::Buy);
-                if (!has_bid) {
+                // 检查该档位买单是否已空
+                if (lvl_ptr->bid_volume == 0) {
                     update_best_bid_cursor(); // 触发线性扫描
                 }
             }
         } else {
             if ((int32_t)lvl_idx == best_ask_idx_) {
-                // 检查该档位是否还有卖单
-                bool has_ask = (lvl_ptr->head_order_idx != -1) &&
-                               (pool_.get(lvl_ptr->head_order_idx).side == Side::Sell);
-                if (!has_ask) {
+                // 检查该档位卖单是否已空
+                if (lvl_ptr->ask_volume == 0) {
                     update_best_ask_cursor(); // 触发线性扫描
                 }
             }
@@ -243,60 +247,98 @@ bool FastOrderBook::update_volume_internal(uint64_t seq, uint32_t delta_vol) {
 
 // 链表挂载 (O(1))
 void FastOrderBook::add_node_to_level(Level& lvl, int32_t node_idx, OrderNode& node) {
-    // 更新 Level 统计
-    lvl.total_volume += node.volume;
+    // 根据买卖方向选择不同链表
+    if (node.side == Side::Buy) {
+        // 更新买方统计
+        lvl.bid_volume += node.volume;
 
-    if (lvl.head_order_idx == -1) {
-        // 链表为空，作为头节点
-        lvl.head_order_idx = node_idx;
-        lvl.tail_order_idx = node_idx;
-        node.prev_idx = -1;
-        node.next_idx = -1;
+        if (lvl.bid_head_idx == -1) {
+            // 链表为空，作为头节点
+            lvl.bid_head_idx = node_idx;
+            lvl.bid_tail_idx = node_idx;
+            node.prev_idx = -1;
+            node.next_idx = -1;
+        } else {
+            // 挂到尾部 (Tail)
+            int32_t old_tail_idx = lvl.bid_tail_idx;
+            OrderNode& old_tail = pool_.get(old_tail_idx);
+
+            old_tail.next_idx = node_idx;
+            node.prev_idx = old_tail_idx;
+            node.next_idx = -1;
+            lvl.bid_tail_idx = node_idx;
+        }
     } else {
-        // 挂到尾部 (Tail)
-        int32_t old_tail_idx = lvl.tail_order_idx;
-        OrderNode& old_tail = pool_.get(old_tail_idx);
-        
-        old_tail.next_idx = node_idx;
-        node.prev_idx = old_tail_idx;
-        node.next_idx = -1;
-        lvl.tail_order_idx = node_idx;
+        // 更新卖方统计
+        lvl.ask_volume += node.volume;
+
+        if (lvl.ask_head_idx == -1) {
+            // 链表为空，作为头节点
+            lvl.ask_head_idx = node_idx;
+            lvl.ask_tail_idx = node_idx;
+            node.prev_idx = -1;
+            node.next_idx = -1;
+        } else {
+            // 挂到尾部 (Tail)
+            int32_t old_tail_idx = lvl.ask_tail_idx;
+            OrderNode& old_tail = pool_.get(old_tail_idx);
+
+            old_tail.next_idx = node_idx;
+            node.prev_idx = old_tail_idx;
+            node.next_idx = -1;
+            lvl.ask_tail_idx = node_idx;
+        }
     }
 }
 
 // 链表摘除 (O(1))
 void FastOrderBook::remove_node_from_level(Level& lvl, int32_t node_idx, const OrderNode& node) {
-    // 1. 处理前驱
-    if (node.prev_idx != -1) {
-        pool_.get(node.prev_idx).next_idx = node.next_idx;
-    } else {
-        // 是头节点
-        lvl.head_order_idx = node.next_idx;
-    }
+    // 根据买卖方向选择不同链表
+    if (node.side == Side::Buy) {
+        // 1. 处理前驱
+        if (node.prev_idx != -1) {
+            pool_.get(node.prev_idx).next_idx = node.next_idx;
+        } else {
+            // 是头节点
+            lvl.bid_head_idx = node.next_idx;
+        }
 
-    // 2. 处理后继
-    if (node.next_idx != -1) {
-        pool_.get(node.next_idx).prev_idx = node.prev_idx;
+        // 2. 处理后继
+        if (node.next_idx != -1) {
+            pool_.get(node.next_idx).prev_idx = node.prev_idx;
+        } else {
+            // 是尾节点
+            lvl.bid_tail_idx = node.prev_idx;
+        }
     } else {
-        // 是尾节点
-        lvl.tail_order_idx = node.prev_idx;
+        // 1. 处理前驱
+        if (node.prev_idx != -1) {
+            pool_.get(node.prev_idx).next_idx = node.next_idx;
+        } else {
+            // 是头节点
+            lvl.ask_head_idx = node.next_idx;
+        }
+
+        // 2. 处理后继
+        if (node.next_idx != -1) {
+            pool_.get(node.next_idx).prev_idx = node.prev_idx;
+        } else {
+            // 是尾节点
+            lvl.ask_tail_idx = node.prev_idx;
+        }
     }
-    
-    // total_volume 已经在外面减过了，这里只负责链表结构
+    // volume 已经在外面减过了，这里只负责链表结构
 }
 
 // 游标更新 (线性扫描 Linear Scan)
 void FastOrderBook::update_best_bid_cursor() {
-    // 只有当 best_bid_idx 指向的 Level 空了才调用这里
+    // 只有当 best_bid_idx 指向的 Level 的买单空了才调用这里
     // 买盘：价格从高向低扫
     while (best_bid_idx_ >= 0) {
         const Level& lvl = levels_[best_bid_idx_];
-        // 检查该档位是否有买单（通过链表头节点的方向判断）
-        if (lvl.total_volume > 0 && lvl.head_order_idx != -1) {
-            const OrderNode& head = pool_.get(lvl.head_order_idx);
-            if (head.side == Side::Buy) {
-                return; // 找到了新的支撑位
-            }
+        // 检查该档位是否有买单
+        if (lvl.bid_volume > 0) {
+            return; // 找到了新的支撑位
         }
         best_bid_idx_--;
     }
@@ -309,12 +351,9 @@ void FastOrderBook::update_best_ask_cursor() {
     int32_t max_idx = (int32_t)levels_.size() - 1;
     while (best_ask_idx_ <= max_idx && best_ask_idx_ != -1) {
         const Level& lvl = levels_[best_ask_idx_];
-        // 检查该档位是否有卖单（通过链表头节点的方向判断）
-        if (lvl.total_volume > 0 && lvl.head_order_idx != -1) {
-            const OrderNode& head = pool_.get(lvl.head_order_idx);
-            if (head.side == Side::Sell) {
-                return; // 找到了新的压力位
-            }
+        // 检查该档位是否有卖单
+        if (lvl.ask_volume > 0) {
+            return; // 找到了新的压力位
         }
         best_ask_idx_++;
     }
@@ -335,12 +374,27 @@ std::optional<uint32_t> FastOrderBook::get_best_ask() const {
 }
 
 // 获取某价格档位挂单量 (O(1) Array Access)
+// 返回买卖总量
 uint64_t FastOrderBook::get_volume_at_price(uint32_t price) const {
     if (price < min_price_ || price > min_price_ + (levels_.size() - 1) * TICK_SIZE) return 0;
-    return levels_[(price - min_price_) / TICK_SIZE].total_volume;
+    const Level& lvl = levels_[(price - min_price_) / TICK_SIZE];
+    return lvl.bid_volume + lvl.ask_volume;
+}
+
+// 获取某价格档位的买方挂单量
+uint64_t FastOrderBook::get_bid_volume_at_price(uint32_t price) const {
+    if (price < min_price_ || price > min_price_ + (levels_.size() - 1) * TICK_SIZE) return 0;
+    return levels_[(price - min_price_) / TICK_SIZE].bid_volume;
+}
+
+// 获取某价格档位的卖方挂单量
+uint64_t FastOrderBook::get_ask_volume_at_price(uint32_t price) const {
+    if (price < min_price_ || price > min_price_ + (levels_.size() - 1) * TICK_SIZE) return 0;
+    return levels_[(price - min_price_) / TICK_SIZE].ask_volume;
 }
 
 // 区间总量查询 (SIMD 友好的内存连续扫描)
+// 只统计卖方挂单量
 uint64_t FastOrderBook::get_ask_volume_in_range(uint32_t start_price, uint32_t end_price) const {
     // 简单的边界裁剪
     uint32_t max_price = min_price_ + (levels_.size() - 1) * TICK_SIZE;
@@ -357,7 +411,7 @@ uint64_t FastOrderBook::get_ask_volume_in_range(uint32_t start_price, uint32_t e
     // 这是一个极度紧凑的循环
     // 编译器会自动进行循环展开 (Loop Unrolling) 和 SIMD 优化
     for (uint32_t i = start_idx; i <= end_idx; ++i) {
-        total += levels_[i].total_volume;
+        total += levels_[i].ask_volume;
     }
 
     return total;
@@ -373,11 +427,8 @@ std::vector<std::pair<uint32_t, uint64_t>> FastOrderBook::get_bid_levels(int n) 
     while (idx >= 0 && (int)result.size() < n) {
         const Level& lvl = levels_[idx];
         // 检查该档位是否有买单
-        if (lvl.total_volume > 0 && lvl.head_order_idx != -1) {
-            const OrderNode& head = pool_.get(lvl.head_order_idx);
-            if (head.side == Side::Buy) {
-                result.emplace_back(min_price_ + idx * TICK_SIZE, lvl.total_volume);
-            }
+        if (lvl.bid_volume > 0) {
+            result.emplace_back(min_price_ + idx * TICK_SIZE, lvl.bid_volume);
         }
         idx--;
     }
@@ -395,11 +446,8 @@ std::vector<std::pair<uint32_t, uint64_t>> FastOrderBook::get_ask_levels(int n) 
     while (idx >= 0 && idx <= max_idx && (int)result.size() < n) {
         const Level& lvl = levels_[idx];
         // 检查该档位是否有卖单
-        if (lvl.total_volume > 0 && lvl.head_order_idx != -1) {
-            const OrderNode& head = pool_.get(lvl.head_order_idx);
-            if (head.side == Side::Sell) {
-                result.emplace_back(min_price_ + idx * TICK_SIZE, lvl.total_volume);
-            }
+        if (lvl.ask_volume > 0) {
+            result.emplace_back(min_price_ + idx * TICK_SIZE, lvl.ask_volume);
         }
         idx++;
     }
@@ -473,7 +521,7 @@ bool FastOrderBook::on_transaction(const MDTransactionStruct& txn) {
         result = update_volume_internal(txn.tradebuyno, (uint32_t)txn.tradeqty);
     }
     else {
-        // 不明：更新双方订单
+        // 集合竞价：更新双方订单
         result = on_trade(txn.tradebuyno, txn.tradesellno, (uint32_t)txn.tradeqty);
     }
 

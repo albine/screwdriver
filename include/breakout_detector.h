@@ -216,8 +216,8 @@ private:
             return 0;
         }
 
-        // 优先监控目标价档位
-        uint64_t vol = book.get_volume_at_price(target_price_);
+        // 优先监控目标价档位（卖方挂单量）
+        uint64_t vol = book.get_ask_volume_at_price(target_price_);
         if (vol > 0) return vol;
 
         // 目标价无挂单，找比目标价高的最近有挂单的档位
