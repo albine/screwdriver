@@ -63,3 +63,38 @@ set_target_properties(engine PROPERTIES
     INSTALL_RPATH "${CMAKE_SOURCE_DIR}/fastfish/libs"
     LINK_FLAGS "-Wl,-rpath,${CMAKE_SOURCE_DIR}/fastfish/libs"
 )
+
+# ============ mmap_to_clickhouse 工具 ============
+# 用于快速导出 mmap 二进制文件到 TSV 格式（供 ClickHouse 导入）
+add_executable(mmap_to_clickhouse
+    src/mmap_to_clickhouse.cpp
+)
+target_include_directories(mmap_to_clickhouse PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(mmap_to_clickhouse
+    Threads::Threads
+)
+set_target_properties(mmap_to_clickhouse PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)
+
+# ============ verify_orderbook 测试工具 ============
+# 验证 FastOrderBook 重建的十档盘口与交易所快照是否一致
+add_executable(verify_orderbook
+    test/verify_orderbook.cpp
+    src/FastOrderBook.cpp
+)
+target_include_directories(verify_orderbook PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
+)
+target_link_libraries(verify_orderbook
+    Threads::Threads
+    quill::quill
+)
+set_target_properties(verify_orderbook PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)

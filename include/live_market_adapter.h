@@ -363,6 +363,9 @@ private:
         out.tradedqty = pb_order.tradedqty();
         out.applseqnum = pb_order.applseqnum();
         out.datamultiplepowerof10 = pb_order.datamultiplepowerof10();
+
+        // 【修复】初始化 securitystatus 字段（上海专有，protobuf 中无此字段）
+        out.securitystatus[0] = '\0';
     }
 
     void convert_to_transaction_fast(const com::htsc::mdc::insight::model::MDTransaction& pb_txn, MDTransactionStruct& out) {

@@ -72,14 +72,19 @@ def get_char_field(data, length):
 
 
 def escape_tsv(value):
-    """转义 TSV 字段值"""
+    """转义 TSV 字段值 (Python 2.7 兼容，确保 ASCII 安全)"""
     if value is None:
         return '\\N'
     if isinstance(value, bytes):
         value = value.decode('utf-8', errors='ignore')
-    if isinstance(value, str):
+    # 处理字符串类型 (Python 2: str/unicode, Python 3: str)
+    if hasattr(value, 'replace'):
         # 转义特殊字符
-        return value.replace('\\', '\\\\').replace('\t', '\\t').replace('\n', '\\n')
+        value = value.replace('\\', '\\\\').replace('\t', '\\t').replace('\n', '\\n')
+        # 确保 ASCII 安全：移除非 ASCII 字符（处理未初始化的垃圾数据）
+        if hasattr(value, 'encode'):
+            return value.encode('ascii', errors='ignore').decode('ascii')
+        return value
     return str(value)
 
 
@@ -415,9 +420,12 @@ def import_tsv_to_clickhouse(tsv_path, table_name, password, host, database, dry
         'clickhouse-client',
         '--host', host,
         '--database', database,
-        '--password', password,
         '--query', 'INSERT INTO {} FORMAT TabSeparated'.format(table_name)
     ]
+    # 仅当密码非空时添加 --password 参数
+    if password:
+        cmd.insert(5, '--password')
+        cmd.insert(6, password)
 
     try:
         with open(tsv_path, 'r') as f:
@@ -499,7 +507,7 @@ Files:
     )
 
     parser.add_argument('data_dir', help='Directory containing mmap files (orders.bin, transactions.bin, ticks.bin)')
-    parser.add_argument('--password', required=True, help='ClickHouse password')
+    parser.add_argument('--password', default='', help='ClickHouse password (optional, omit for no-auth)')
     parser.add_argument('--host', default=CLICKHOUSE_HOST, help='ClickHouse host (default: localhost)')
     parser.add_argument('--database', default=CLICKHOUSE_DATABASE, help='ClickHouse database (default: default)')
     parser.add_argument('--dry-run', action='store_true', help='Parse files but do not import')

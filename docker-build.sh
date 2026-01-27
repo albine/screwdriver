@@ -89,20 +89,20 @@ docker run --name "${CONTAINER_NAME}" \
         echo '=== CMake Version ==='
         cmake --version | head -1
 
-        echo '=== Building engine (Release) ==='
+        echo '=== Building targets (Release) ==='
         mkdir -p build_centos7
         cd build_centos7
 
         # 只删除编译产物，保留 _deps 缓存
-        rm -f engine CMakeCache.txt 2>/dev/null || true
+        rm -f engine mmap_to_clickhouse verify_orderbook CMakeCache.txt 2>/dev/null || true
         rm -rf CMakeFiles 2>/dev/null || true
 
         cmake -DCMAKE_BUILD_TYPE=Release ..
-        make engine -j\$(nproc)
+        make engine mmap_to_clickhouse verify_orderbook -j\$(nproc)
 
         echo ''
         echo '=== Build completed ==='
-        ls -lh engine
+        ls -lh engine mmap_to_clickhouse verify_orderbook
 
         echo ''
         echo '=== Checking GLIBC requirements ==='
@@ -113,6 +113,8 @@ docker run --name "${CONTAINER_NAME}" \
 log_info "Copying build result..."
 mkdir -p "${SCRIPT_DIR}/build"
 cp "${SCRIPT_DIR}/build_centos7/engine" "${SCRIPT_DIR}/build/engine"
+cp "${SCRIPT_DIR}/build_centos7/mmap_to_clickhouse" "${SCRIPT_DIR}/build/mmap_to_clickhouse"
+cp "${SCRIPT_DIR}/build_centos7/verify_orderbook" "${SCRIPT_DIR}/build/verify_orderbook"
 
 # Cleanup container
 docker rm -f "${CONTAINER_NAME}" 2>/dev/null || true
