@@ -66,10 +66,9 @@ private:
     }
 
     // Constants
-    // MDTime format: HHMMSSmmm
-    // 1 second = 1000, 1 minute = 100000 (NOT 60000!)
-    static constexpr int64_t CONSOLIDATION_HOLD_TIME_MS = 27000;  // 27 seconds
-    static constexpr int64_t TEN_MINUTES_MS = 1000000 / 2;            // 5 minutes
+    // 时间常量（真实毫秒）
+    static constexpr int64_t CONSOLIDATION_HOLD_TIME_MS = 27 * 1000;  // 27 秒
+    static constexpr int64_t FIVE_MINUTES_MS = 5 * 60 * 1000;         // 5 分钟
 
     // Thresholds in basis points
     static constexpr int THRESHOLD_60_00_INITIAL = 300;   // 3%
@@ -243,7 +242,7 @@ public:
 
         // Only process within first 10 minutes of trading
         int64_t time_since_open = get_time_since_open_ms(stock.mdtime);
-        if (time_since_open > TEN_MINUTES_MS) {
+        if (time_since_open > FIVE_MINUTES_MS) {
             return;  // Window closed
         }
 
@@ -287,7 +286,7 @@ public:
 
         // Check 10-minute time limit in Phase 3
         int64_t time_since_open = get_time_since_open_ms(order.mdtime);
-        if (time_since_open > TEN_MINUTES_MS) {
+        if (time_since_open > FIVE_MINUTES_MS) {
             state.detector_armed = false;
             state.breakout_detector.set_enabled(false);
             return;
@@ -311,7 +310,7 @@ public:
 
         // Check 10-minute time limit in Phase 3
         int64_t time_since_open = get_time_since_open_ms(txn.mdtime);
-        if (time_since_open > TEN_MINUTES_MS) {
+        if (time_since_open > FIVE_MINUTES_MS) {
             state.detector_armed = false;
             state.breakout_detector.set_enabled(false);
             return;

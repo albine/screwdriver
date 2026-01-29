@@ -71,10 +71,9 @@ private:
     }
 
     // Constants
-    // MDTime format: HHMMSSmmm
-    // 1 second = 1000, 1 minute = 100000 (NOT 60000!)
-    static constexpr int64_t THIRTY_SECONDS_MS = 30000;    // 30 seconds (30 * 1000)
-    static constexpr int64_t TEN_MINUTES_MS = 1000000;     // 10 minutes (10 * 100000)
+    // 时间常量（真实毫秒）
+    static constexpr int64_t THIRTY_SECONDS_MS = 30 * 1000;       // 30 秒
+    static constexpr int64_t TEN_MINUTES_MS = 10 * 60 * 1000;     // 10 分钟
     static constexpr int THRESHOLD_60_00_CAP = 700;          // 7% in basis points
     static constexpr int THRESHOLD_30_68_CAP = 1700;         // 17% in basis points
 

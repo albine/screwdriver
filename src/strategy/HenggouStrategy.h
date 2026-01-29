@@ -68,7 +68,7 @@ private:
     static constexpr int64_t GAIN_WINDOW_MS = 90000;                       // 90秒滑动窗口
     static constexpr int64_t CONSOLIDATION_HOLD_TIME_MS = 27000;           // 27秒整理期
     static constexpr int64_t CONSOLIDATION_UPPER_LIMIT_MS = 180000;        // 3分钟横沟超时
-    static constexpr int64_t STRATEGY_DISABLE_TIME_MS = 1000000;           // 10分钟策略有效期
+    static constexpr int64_t STRATEGY_DISABLE_TIME_MS = 10 * 60 * 1000;    // 10 分钟策略有效期
 
     static constexpr int THRESHOLD_60_00_CAP = 700;   // 7%
     static constexpr int THRESHOLD_30_68_CAP = 1700;  // 17%
