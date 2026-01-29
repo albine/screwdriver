@@ -56,6 +56,7 @@ namespace logger {
 #define BIZ_POSN "POSN"  // 持仓变化
 #define BIZ_ACCT "ACCT"  // 账户/资金
 #define BIZ_STRA "STRA"  // 策略触发
+#define BIZ_STMG "STMG"  // 策略管理（添加/删除/启用/禁用）
 
 // 业务日志宏（自动使用业务日志器）
 #define LOG_BIZ(type, fmt, ...) \

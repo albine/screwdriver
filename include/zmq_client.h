@@ -430,6 +430,9 @@ private:
             if (engine_->register_strategy_runtime(result.symbol_internal, std::move(strategy))) {
                 result.success = true;
                 LOG_M_INFO("try_add_strategy: SUCCESS {}:{}", result.symbol_internal, strategy_name);
+                // 业务日志：记录策略添加
+                LOG_BIZ(BIZ_STMG, "ADD | {} | {} | params={}",
+                        result.symbol_internal, strategy_name, result.params_str);
             } else {
                 result.error_msg = "Failed to register strategy";
                 LOG_M_ERROR("try_add_strategy: {}", result.error_msg);
@@ -502,6 +505,9 @@ private:
 
         engine_->unregister_strategy(result.symbol_internal, strategy_name);
         result.success = true;
+        // 业务日志：记录策略移除
+        LOG_BIZ(BIZ_STMG, "REMOVE | {} | {}",
+                result.symbol_internal, strategy_name);
         return result;
     }
 
@@ -568,6 +574,8 @@ private:
 
         if (engine_->enable_strategy(symbol, strategy_name)) {
             LOG_M_INFO("ENABLE_STRATEGY: enabled {}:{}", symbol, strategy_name);
+            // 业务日志：记录策略启用
+            LOG_BIZ(BIZ_STMG, "ENABLE | {} | {}", symbol, strategy_name);
             send_response(dealer, req_id, "success", {
                 {"message", "Strategy enabled"},
                 {"symbol", symbol},
@@ -605,6 +613,8 @@ private:
 
         if (engine_->disable_strategy(symbol, strategy_name)) {
             LOG_M_INFO("DISABLE_STRATEGY: disabled {}:{}", symbol, strategy_name);
+            // 业务日志：记录策略禁用
+            LOG_BIZ(BIZ_STMG, "DISABLE | {} | {}", symbol, strategy_name);
             send_response(dealer, req_id, "success", {
                 {"message", "Strategy disabled"},
                 {"symbol", symbol},
