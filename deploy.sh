@@ -333,7 +333,7 @@ create_package() {
         cp "${CONFIG_DIR}/htsc-insight-cpp-config.conf" "${DEPLOY_ROOT}/config/"
     fi
 
-    # Copy strategy config files (backtest.conf, strategy_live.conf, engine.conf)
+    # Copy strategy config files (backtest.conf, strategy_live.conf, strategy_live_dealer2.conf, engine.conf)
     if [[ -d "${CONFIG_DIR}" ]]; then
         log_info "Copying strategy config files..."
         if [[ -f "${CONFIG_DIR}/backtest.conf" ]]; then
@@ -341,6 +341,9 @@ create_package() {
         fi
         if [[ -f "${CONFIG_DIR}/strategy_live.conf" ]]; then
             cp "${CONFIG_DIR}/strategy_live.conf" "${DEPLOY_ROOT}/config/"
+        fi
+        if [[ -f "${CONFIG_DIR}/strategy_live_dealer2.conf" ]]; then
+            cp "${CONFIG_DIR}/strategy_live_dealer2.conf" "${DEPLOY_ROOT}/config/"
         fi
         if [[ -f "${CONFIG_DIR}/engine.conf" ]]; then
             cp "${CONFIG_DIR}/engine.conf" "${DEPLOY_ROOT}/config/"
