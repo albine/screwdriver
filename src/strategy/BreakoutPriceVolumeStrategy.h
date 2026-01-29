@@ -38,6 +38,8 @@ private:
     // ==========================================
     uint32_t breakout_price_ = 0;    // 突破价格，例如97900表示9.79元
     uint32_t limit_up_price_ = 0;    // 涨停价（从 MDStockStruct.maxpx 获取）
+    uint32_t open_price_ = 0;        // 开盘价
+    uint32_t prev_close_ = 0;        // 昨收价
 
     // ==========================================
     // 统计信息
@@ -45,6 +47,7 @@ private:
     std::atomic<uint64_t> tick_count_{0};
     std::atomic<uint64_t> order_count_{0};
     std::atomic<uint64_t> transaction_count_{0};
+    int64_t local_recv_timestamp_ = 0;  // 本地接收时间戳
 
 public:
     // 构造函数：传入突破价格，策略默认启用
@@ -127,10 +130,17 @@ public:
         if (!is_enabled()) return;
         tick_count_++;
 
-        // 更新涨停价（从 MDStockStruct 获取）
+        // 更新价格信息（从 MDStockStruct 获取）
         if (stock.maxpx > 0) {
             limit_up_price_ = static_cast<uint32_t>(stock.maxpx);
         }
+        if (stock.openpx > 0 && open_price_ == 0) {
+            open_price_ = static_cast<uint32_t>(stock.openpx);
+        }
+        if (stock.preclosepx > 0 && prev_close_ == 0) {
+            prev_close_ = static_cast<uint32_t>(stock.preclosepx);
+        }
+        local_recv_timestamp_ = stock.local_recv_timestamp;
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
@@ -159,11 +169,14 @@ private:
 
         if (stats.current_volume == 0) {
             // 情况1：价格已突破（target_price < best_ask）
-            LOG_BIZ("SIGNAL",
-                    "BUY SIGNAL (BREAKOUT) | Time={} | Price={} | "
-                    "current_volume=0 (price below best_ask)",
-                    time_util::format_mdtime(mdtime),
-                    price_util::format_price_display(price));
+            LOG_BIZ(BIZ_STRA,
+                    "{} | BUY | MARKET_TIME={} | LOCAL_TIME={} | Price={} | Open={:.4f} | "
+                    "PrevClose={:.4f} | Reason=突破价位监控 (直接突破)",
+                    symbol, time_util::format_mdtime(mdtime),
+                    time_util::format_ns_time(local_recv_timestamp_),
+                    price_util::format_price_display(price),
+                    price_util::price_to_yuan(open_price_),
+                    price_util::price_to_yuan(prev_close_));
 
             LOG_M_DEBUG("========================================");
             LOG_M_DEBUG("SIGNAL TRIGGERED (BREAKOUT) at {}",
@@ -175,16 +188,15 @@ private:
             LOG_M_DEBUG("========================================");
         } else {
             // 情况2：delta_n >= n
-            LOG_BIZ("SIGNAL",
-                    "BUY SIGNAL | Time={} | Price={} | "
-                    "n(avg_volume)={:.0f} | delta_n(buy_trades)={} | "
-                    "current_volume={} | window_size={}",
-                    time_util::format_mdtime(mdtime),
+            LOG_BIZ(BIZ_STRA,
+                    "{} | BUY | MARKET_TIME={} | LOCAL_TIME={} | Price={} | Open={:.4f} | "
+                    "PrevClose={:.4f} | n={:.0f} | delta_n={} | Reason=突破价位监控 (动力学触发)",
+                    symbol, time_util::format_mdtime(mdtime),
+                    time_util::format_ns_time(local_recv_timestamp_),
                     price_util::format_price_display(price),
-                    stats.avg_volume,
-                    stats.total_buy_qty,
-                    stats.current_volume,
-                    stats.window_size);
+                    price_util::price_to_yuan(open_price_),
+                    price_util::price_to_yuan(prev_close_),
+                    stats.avg_volume, stats.total_buy_qty);
 
             LOG_M_DEBUG("========================================");
             LOG_M_DEBUG("SIGNAL TRIGGERED at {}",
@@ -213,6 +225,7 @@ private:
         signal.quantity = 100;
         signal.trigger_time = mdtime;
         signal.strategy_name = this->name;
+        signal.strategy_type_id = strategy_type_id;
         place_order(signal);
     }
 };
