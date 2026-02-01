@@ -371,8 +371,8 @@ private:
         uint32_t target_price = stock_state.breakout_detector.get_target_price();
         auto stats = stock_state.breakout_detector.get_stats();
 
-        // 计算下单价格 = min(target_price * 1.017, 涨停价)
-        uint32_t order_price = static_cast<uint32_t>(target_price * 1.017);
+        // 计算下单价格 = min(target_price * 1.014, 涨停价)
+        uint32_t order_price = static_cast<uint32_t>(target_price * 1.014);
         if (stock_state.limit_up_price > 0 && order_price > stock_state.limit_up_price) {
             order_price = stock_state.limit_up_price;
         }

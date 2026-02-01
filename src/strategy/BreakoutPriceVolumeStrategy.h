@@ -212,8 +212,8 @@ private:
         }
 
         // 发送买入信号
-        // 下单价格 = min(breakout_price_ * 1.017, 涨停价)
-        uint32_t order_price = static_cast<uint32_t>(price * 1.017);
+        // 下单价格 = min(breakout_price_ * 1.014, 涨停价)
+        uint32_t order_price = static_cast<uint32_t>(price * 1.014);
         if (limit_up_price_ > 0 && order_price > limit_up_price_) {
             order_price = limit_up_price_;
         }
