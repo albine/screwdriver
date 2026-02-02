@@ -32,7 +32,7 @@ from typing import Optional, Dict
 # 服务器配置 (可通过命令行参数覆盖)
 CONFIG = {
     "host": "market-m",  # SSH host (在 ~/.ssh/config 中配置)
-    "log_dir": "/home/jiace/project/trading-engine.backup.20260126_110817/logs"
+    "log_dir": "/home/jiace/project/trading-engine/logs"
 }
 
 
