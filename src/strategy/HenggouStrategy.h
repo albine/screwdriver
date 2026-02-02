@@ -260,7 +260,13 @@ public:
         else if (!state.consolidation_met) {
             checkConsolidation(stock, state, symbol);
         }
-        // Phase 3: Breakout detector is armed, handled in on_order/on_transaction
+        // Phase 3: Breakout detector is armed, use tick data as fallback trigger
+        else if (state.detector_armed && !state.expired) {
+            // 用 tick 数据保底检测突破
+            if (state.breakout_detector.on_tick(stock)) {
+                onBreakoutTriggered(state, symbol, stock.mdtime, stock.local_recv_timestamp);
+            }
+        }
 
         // Update highest price (only after Phase 1 is complete)
         updateHighestPrice(stock, state, symbol);

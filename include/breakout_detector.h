@@ -128,6 +128,27 @@ public:
         return result;
     }
 
+    // 处理 Tick 事件（使用快照卖一价保底检测）
+    // 返回值：true = 本次检测触发了突破信号
+    // 注意：on_tick 不更新滚动窗口，仅作为保底触发条件
+    bool on_tick(const MDStockStruct& stock) {
+        if (!enabled_ || triggered_) return false;
+
+        // 获取卖一价
+        uint32_t sell1_price = static_cast<uint32_t>(stock.sellpricequeue[0]);
+
+        // 卖一价大于目标价格时触发
+        if (sell1_price > target_price_) {
+            LOG_M_DEBUG("[TICK TRIGGER] symbol={} mdtime={} target={} sell1={}",
+                       stock.htscsecurityid, time_util::format_mdtime(stock.mdtime),
+                       target_price_, sell1_price);
+            trigger(stock.mdtime);
+            return true;
+        }
+
+        return false;
+    }
+
     // 处理成交事件
     // 返回值：true = 本次检测触发了突破信号
     bool on_transaction(const MDTransactionStruct& txn, const FastOrderBook& book) {

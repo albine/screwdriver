@@ -248,6 +248,14 @@ public:
             armGapUpDetector(stock, stock_state, symbol);
         }
 
+        // 检测器已 armed，用 tick 数据保底检测突破
+        if (stock_state.detector_armed) {
+            if (stock_state.breakout_detector.on_tick(stock)) {
+                onBreakoutTriggered(stock_state, symbol, stock.mdtime, stock.local_recv_timestamp);
+                return;  // 已触发，直接返回
+            }
+        }
+
         // 更新最高价（用于高开新高场景）
         int64_t consolidation_duration = time_util::calculate_time_diff_ms(
             stock_state.highest_timestamp_mdtime, stock.mdtime);
