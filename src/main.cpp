@@ -435,8 +435,8 @@ void run_live_mode(quill::Logger* logger,
         std::string data_dir = engine_cfg.persist_data_dir;
 
         // Writer 线程绑核 (绑定到最后一个 CPU)
-        int last_cpu = static_cast<int>(std::thread::hardware_concurrency()) - 1;
-        // int last_cpu = 0;
+        // int last_cpu = static_cast<int>(std::thread::hardware_concurrency()) - 1;
+        int last_cpu = -1;
 
         if (!persist->init(date, data_dir, last_cpu)) {
             LOG_MODULE_ERROR(logger, MOD_ENGINE, "Failed to initialize PersistLayer");
