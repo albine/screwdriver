@@ -264,7 +264,8 @@ public:
         else if (state.detector_armed && !state.expired) {
             // 用 tick 数据保底检测突破
             if (state.breakout_detector.on_tick(stock)) {
-                onBreakoutTriggered(state, symbol, stock.mdtime, stock.local_recv_timestamp);
+                // onBreakoutTriggered(state, symbol, stock.mdtime, stock.local_recv_timestamp);
+                LOG_M_INFO("[HG] on_tick breakout detected, symbol={}, mdtime={}", symbol, stock.mdtime);
             }
         }
 

@@ -251,7 +251,8 @@ public:
         // 检测器已 armed，用 tick 数据保底检测突破
         if (stock_state.detector_armed) {
             if (stock_state.breakout_detector.on_tick(stock)) {
-                onBreakoutTriggered(stock_state, symbol, stock.mdtime, stock.local_recv_timestamp);
+                // onBreakoutTriggered(stock_state, symbol, stock.mdtime, stock.local_recv_timestamp);
+                LOG_M_INFO("[ORB] on_tick breakout detected, symbol={}, mdtime={}", symbol, stock.mdtime);
                 return;  // 已触发，直接返回
             }
         }
