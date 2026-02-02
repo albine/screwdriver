@@ -416,7 +416,7 @@ private:
         uint32_t target_price = state.breakout_detector.get_target_price();
         auto stats = state.breakout_detector.get_stats();
 
-        // Calculate order price = min(target_price * 1.01, limit_up_price)
+        // Calculate order price = min(target_price * 1.014, limit_up_price)
         uint32_t order_price = static_cast<uint32_t>(target_price * 1.014);
         if (state.limit_up_price > 0 && order_price > state.limit_up_price) {
             order_price = state.limit_up_price;
