@@ -470,4 +470,124 @@ Claude should:
 
 ---
 
-Last Updated: 2026-01-15
+## SSH Connection to Production Server
+
+### Connecting to market-m
+
+When Claude needs to connect to the production server (market-m), use the following approach:
+
+**Step 1: Find and use existing SSH agent**
+```bash
+# Check if SSH_AUTH_SOCK is already set
+echo $SSH_AUTH_SOCK
+
+# If not set, find existing agent socket
+export SSH_AUTH_SOCK=$(find /tmp/ssh-* -name 'agent.*' 2>/dev/null | head -1)
+
+# Verify agent is working
+ssh-add -l
+```
+
+**Step 2: Connect to server**
+```bash
+# Interactive login
+ssh -F ~/.ssh/config market-m
+
+# Run a command
+ssh -F ~/.ssh/config market-m "ls -la /home/jiace/project/trading-engine"
+```
+
+### Claude's SSH Automation
+
+When Claude needs to execute commands on market-m:
+
+1. **First, set up SSH agent** (if SSH_AUTH_SOCK is not set):
+   ```bash
+   export SSH_AUTH_SOCK=$(find /tmp/ssh-* -name 'agent.*' 2>/dev/null | head -1)
+   ```
+
+2. **Execute remote commands**:
+   ```bash
+   ssh -F ~/.ssh/config market-m "command here"
+   ```
+
+3. **Common remote operations**:
+   ```bash
+   # Check engine status
+   ssh -F ~/.ssh/config market-m "ps aux | grep engine"
+
+   # View logs
+   ssh -F ~/.ssh/config market-m "tail -100 /home/jiace/project/trading-engine/logs/engine.log"
+
+   # Run backtest on server
+   ssh -F ~/.ssh/config market-m "cd /home/jiace/project/trading-engine && ./run.sh backtest"
+   ```
+
+### Important Notes
+
+- **SSH config**: Uses `~/.ssh/config` which contains the market-m host definition
+- **SSH agent**: Must have a running SSH agent with the correct key loaded
+- **Remote path**: Default deployment path is `/home/jiace/project/trading-engine`
+
+---
+
+## ClickHouse Database Operations
+
+### Connecting to ClickHouse on market-m
+
+ClickHouse 运行在 market-m 服务器上，通过 SSH 连接后使用 clickhouse-client 访问。
+
+**登录命令**:
+```bash
+# 在服务器上执行（交互式）
+ssh -F ~/.ssh/config market-m "clickhouse-client --password=\$CLICKHOUSE_PASSWORD -d default"
+
+# 执行单条查询
+ssh -F ~/.ssh/config market-m "clickhouse-client --password=\$CLICKHOUSE_PASSWORD -d default -q 'SELECT 1'"
+```
+
+**注意**: 使用 `\$CLICKHOUSE_PASSWORD` 确保变量在远程服务器上展开，而不是本地。
+
+### Claude's ClickHouse Automation
+
+When Claude needs to query ClickHouse:
+
+1. **Execute single query**:
+   ```bash
+   ssh -F ~/.ssh/config market-m "clickhouse-client --password=\$CLICKHOUSE_PASSWORD -d default -q 'YOUR_QUERY_HERE'"
+   ```
+
+2. **Execute multi-line query** (use heredoc):
+   ```bash
+   ssh -F ~/.ssh/config market-m "clickhouse-client --password=\$CLICKHOUSE_PASSWORD -d default -q \"
+   SELECT *
+   FROM your_table
+   WHERE date = today()
+   LIMIT 10
+   \""
+   ```
+
+3. **Common queries**:
+   ```bash
+   # List all tables
+   ssh -F ~/.ssh/config market-m "clickhouse-client --password=\$CLICKHOUSE_PASSWORD -d default -q 'SHOW TABLES'"
+
+   # Describe table structure
+   ssh -F ~/.ssh/config market-m "clickhouse-client --password=\$CLICKHOUSE_PASSWORD -d default -q 'DESCRIBE TABLE table_name'"
+
+   # Check table row count
+   ssh -F ~/.ssh/config market-m "clickhouse-client --password=\$CLICKHOUSE_PASSWORD -d default -q 'SELECT count() FROM table_name'"
+   ```
+
+### ClickHouse Connection Details
+
+| Parameter | Value |
+|-----------|-------|
+| Host | localhost (on market-m) |
+| Database | `default` |
+| Password | `$CLICKHOUSE_PASSWORD` (server env var) |
+| Client | `clickhouse-client` |
+
+---
+
+Last Updated: 2026-01-28
