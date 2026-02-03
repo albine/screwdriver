@@ -420,6 +420,17 @@ private:
     void onBreakoutTriggered(HGState& state, const std::string& symbol, int32_t mdtime, int64_t local_recv_timestamp) {
         state.buy_signal_triggered = true;
 
+        // 检查行情延迟，超过5秒则不下单
+        int64_t delay_ms = time_util::calculate_time_diff_ms(mdtime, time_util::now_mdtime());
+        if (delay_ms > 5000) {
+            LOG_BIZ(BIZ_STRA,
+                    "{} | SKIP | MARKET_TIME={} | LOCAL_TIME={} | Reason=横沟突破信号延迟过大 (delay={}ms > 5000ms)",
+                    symbol, time_util::format_mdtime(mdtime),
+                    time_util::format_ns_time(local_recv_timestamp), delay_ms);
+            LOG_M_INFO("{} 横沟突破信号因延迟过大被跳过: delay={}ms", symbol, delay_ms);
+            return;
+        }
+
         uint32_t target_price = state.breakout_detector.get_target_price();
         auto stats = state.breakout_detector.get_stats();
 

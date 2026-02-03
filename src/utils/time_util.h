@@ -72,6 +72,24 @@ inline std::string format_mdtime(int32_t mdtime) {
 // 高精度时间戳
 // ==========================================
 
+// 获取当前本地时间的 MDTime 格式 (HHMMSSMMM)
+// 用于与行情时间比较延迟
+inline int32_t now_mdtime() {
+    auto now = std::chrono::system_clock::now();
+    auto now_c = std::chrono::system_clock::to_time_t(now);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()
+    ).count() % 1000;
+
+    std::tm local_tm;
+    localtime_r(&now_c, &local_tm);
+
+    return local_tm.tm_hour * 10000000 +
+           local_tm.tm_min * 100000 +
+           local_tm.tm_sec * 1000 +
+           static_cast<int32_t>(ms);
+}
+
 // 获取当前时间的纳秒时间戳（自 Unix 纪元以来）
 // 用于记录本地接收时间，计算网络延迟
 inline int64_t now_ns() {

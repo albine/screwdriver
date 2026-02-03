@@ -389,6 +389,18 @@ private:
     void onBreakoutTriggered(PGBState& state, const std::string& symbol, int32_t mdtime, int64_t local_recv_timestamp) {
         state.buy_signal_triggered = true;
 
+        // 检查行情延迟，超过5秒则不下单
+        int64_t delay_ms = time_util::calculate_time_diff_ms(mdtime, time_util::now_mdtime());
+        if (delay_ms > 5000) {
+            const char* scenario_str = (state.gap_scenario == GapScenario::LARGE_GAP) ? "追新高" : "追4/6";
+            LOG_BIZ(BIZ_STRA,
+                    "{} | SKIP | MARKET_TIME={} | LOCAL_TIME={} | Reason={}信号延迟过大 (delay={}ms > 5000ms)",
+                    symbol, time_util::format_mdtime(mdtime),
+                    time_util::format_ns_time(local_recv_timestamp), scenario_str, delay_ms);
+            LOG_M_INFO("{} {}信号因延迟过大被跳过: delay={}ms", symbol, scenario_str, delay_ms);
+            return;
+        }
+
         uint32_t target_price = state.breakout_detector.get_target_price();
         auto stats = state.breakout_detector.get_stats();
 

@@ -98,3 +98,20 @@ set_target_properties(verify_orderbook PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
 )
+
+# ============ test_time_util 测试工具 ============
+# 测试 time_util 模块的时间计算函数
+add_executable(test_time_util
+    test/test_time_util.cpp
+)
+target_include_directories(test_time_util PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
+)
+target_link_libraries(test_time_util
+    Threads::Threads
+)
+set_target_properties(test_time_util PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)

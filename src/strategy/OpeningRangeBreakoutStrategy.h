@@ -377,6 +377,19 @@ private:
                              int64_t local_recv_timestamp) {
         stock_state.buy_signal_triggered = true;
 
+        // 检查行情延迟，超过5秒则不下单
+        int64_t delay_ms = time_util::calculate_time_diff_ms(mdtime, time_util::now_mdtime());
+        if (delay_ms > 5000) {
+            const char* reason = (stock_state.armed_scenario == BreakoutScenario::GAP_DOWN_RECOVERY)
+                                 ? "弱转强绿开翻红" : "弱转强高开新高";
+            LOG_BIZ(BIZ_STRA,
+                    "{} | SKIP | MARKET_TIME={} | LOCAL_TIME={} | Reason={}信号延迟过大 (delay={}ms > 5000ms)",
+                    symbol, time_util::format_mdtime(mdtime),
+                    time_util::format_ns_time(local_recv_timestamp), reason, delay_ms);
+            LOG_M_INFO("{} {}信号因延迟过大被跳过: delay={}ms", symbol, reason, delay_ms);
+            return;
+        }
+
         uint32_t target_price = stock_state.breakout_detector.get_target_price();
         auto stats = stock_state.breakout_detector.get_stats();
 
