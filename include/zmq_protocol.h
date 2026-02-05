@@ -30,6 +30,10 @@ namespace Action {
     // 策略启用/禁用
     constexpr const char* ENABLE_STRATEGY = "enable_strategy";
     constexpr const char* DISABLE_STRATEGY = "disable_strategy";
+
+    // Hot Henggou 策略管理
+    constexpr const char* ADD_HOT_HENGGOU = "add_hot_henggou";
+    constexpr const char* REMOVE_HOT_HENGGOU = "remove_hot_henggou";
 }
 
 // ========== 消息结构体 ==========

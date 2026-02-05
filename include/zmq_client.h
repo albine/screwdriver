@@ -361,6 +361,12 @@ private:
         } else if (action == zmq_ht_proto::Action::DISABLE_STRATEGY) {
             handle_disable_strategy(dealer, req_id, payload);
 
+        } else if (action == zmq_ht_proto::Action::ADD_HOT_HENGGOU) {
+            handle_add_hot_henggou_ht(dealer, req_id, payload);
+
+        } else if (action == zmq_ht_proto::Action::REMOVE_HOT_HENGGOU) {
+            handle_remove_hot_henggou_ht(dealer, req_id, payload);
+
         } else {
             LOG_M_WARNING("Unknown action (DEALER{}): {}", dealer.index, action);
         }
@@ -666,6 +672,54 @@ private:
             LOG_M_INFO("remove_hot_stock: removed {}:{}", result.symbol_internal, result.strategy_name);
         } else {
             LOG_M_WARNING("remove_hot_stock: {}", result.error_msg);
+        }
+    }
+
+    // ==========================================
+    // add_hot_henggou / remove_hot_henggou 处理
+    // ==========================================
+
+    void handle_add_hot_henggou_ht(DealerConnection& dealer, const std::string& req_id, const json& payload) {
+        // 消息格式: { "action": "add_hot_henggou", "symbol": "600000" }
+        std::string symbol = payload.value("symbol", "");
+        if (symbol.empty()) {
+            LOG_M_WARNING("add_hot_henggou: missing symbol");
+            return;
+        }
+
+        auto result = try_add_strategy(symbol, "HotHenggouStrategy", json{});
+
+        if (result.success) {
+            // 记录 symbol 来源通道（用于下单时路由）
+            {
+                std::unique_lock lock(symbol_dealer_mutex_);
+                symbol_dealer_map_[result.symbol_internal] = dealer.index;
+            }
+            LOG_M_INFO("add_hot_henggou: added {} via DEALER{}", result.symbol_internal, dealer.index);
+        } else {
+            LOG_M_WARNING("add_hot_henggou: {}", result.error_msg);
+        }
+    }
+
+    void handle_remove_hot_henggou_ht(DealerConnection& dealer, const std::string& req_id, const json& payload) {
+        // 消息格式: { "action": "remove_hot_henggou", "symbol": "600000" }
+        std::string symbol = payload.value("symbol", "");
+        if (symbol.empty()) {
+            LOG_M_WARNING("remove_hot_henggou: missing symbol");
+            return;
+        }
+
+        auto result = try_remove_strategy(symbol, "HotHenggouStrategy");
+
+        if (result.success) {
+            // 移除 symbol 来源记录
+            {
+                std::unique_lock lock(symbol_dealer_mutex_);
+                symbol_dealer_map_.erase(result.symbol_internal);
+            }
+            LOG_M_INFO("remove_hot_henggou: removed {}", result.symbol_internal);
+        } else {
+            LOG_M_WARNING("remove_hot_henggou: {}", result.error_msg);
         }
     }
 
