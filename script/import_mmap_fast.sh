@@ -97,7 +97,7 @@ if [[ ! -d "$DATA_DIR" ]]; then
 fi
 
 # Check for binary
-BINARY="$PROJECT_ROOT/build/mmap_to_clickhouse"
+BINARY="$PROJECT_ROOT/bin/mmap_to_clickhouse"
 if [[ ! -x "$BINARY" ]]; then
     echo "Error: Binary not found: $BINARY"
     echo "Please build first: ./build.sh mmap_to_clickhouse"
