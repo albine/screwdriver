@@ -25,6 +25,7 @@ SSH_CONF="$HOME/.ssh/config"
 REMOTE_HOST="market-m"
 REMOTE_DEST="/home/jiace/project/trading-engine"
 PACK_ONLY=false
+CONFIG_COMMIT_ID=""
 
 # Source directories
 BUILD_DIR="${SCRIPT_DIR}/build"
@@ -74,6 +75,7 @@ Usage: $0 [options]
 Options:
     -h, --host HOST       Remote server alias in ~/.ssh/config (default: market-m)
     -d, --dest PATH       Remote deployment path (default: /home/jiace/project/trading-engine)
+    -c, --commit ID       Use specific git commit ID for config sync (default: today's date)
     -p, --pack-only       Only create package, don't upload
     -n, --dryrun          Dry run mode: sync config and create package, but don't upload
     --help                Show this help message
@@ -82,6 +84,7 @@ Examples:
     $0 --pack-only                           # Only create package
     $0 --dryrun                              # Sync config + create package, no upload
     $0                                       # Deploy to market-m (default)
+    $0 --commit abc1234                      # Use specific config commit
     $0 --host other-server                   # Deploy to other server
 
 Note: SSH connection uses ~/.ssh/config, same as fastfish/sync.sh
@@ -116,17 +119,24 @@ sync_strategy_config() {
     log_info "Cloning config repository (shallow)..."
     git clone --branch "${CONFIG_REPO_BRANCH}" --single-branch --depth 50 "${CONFIG_REPO_URL}" "${CONFIG_REPO_DIR}" --quiet
 
-    # Find commit with today's date in message format "{yyyymmdd}配置文件"
     cd "${CONFIG_REPO_DIR}"
-    COMMIT_MSG_PATTERN="${TODAY_DATE}配置文件"
-    TARGET_COMMIT=$(git log --oneline --grep="${COMMIT_MSG_PATTERN}" --format="%H" | head -1)
 
-    if [[ -z "${TARGET_COMMIT}" ]]; then
-        cd "${SCRIPT_DIR}"
-        rm -rf "${CONFIG_REPO_DIR}"
-        log_error "No commit found with message pattern '${COMMIT_MSG_PATTERN}'"
+    if [[ -n "${CONFIG_COMMIT_ID}" ]]; then
+        # 使用指定的 commit ID
+        TARGET_COMMIT="${CONFIG_COMMIT_ID}"
+        log_info "Using specified config commit: ${TARGET_COMMIT}"
+    else
+        # Find commit with today's date in message format "{yyyymmdd}配置文件"
+        COMMIT_MSG_PATTERN="${TODAY_DATE}配置文件"
+        TARGET_COMMIT=$(git log --oneline --grep="${COMMIT_MSG_PATTERN}" --format="%H" | head -1)
+
+        if [[ -z "${TARGET_COMMIT}" ]]; then
+            cd "${SCRIPT_DIR}"
+            rm -rf "${CONFIG_REPO_DIR}"
+            log_error "No commit found with message pattern '${COMMIT_MSG_PATTERN}'"
+        fi
+        log_info "Found config commit: ${TARGET_COMMIT} (${COMMIT_MSG_PATTERN})"
     fi
-    log_info "Found config commit: ${TARGET_COMMIT} (${COMMIT_MSG_PATTERN})"
 
     # Checkout the target commit
     git checkout "${TARGET_COMMIT}" --quiet
@@ -135,6 +145,8 @@ sync_strategy_config() {
     declare -A CONFIG_MAPPINGS=(
         ["data/config/linux/99998/strategy_config.csv"]="${CONFIG_DIR}/strategy_live.conf"
         ["data/config/linux/99999/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer2.conf"
+        ["data/config/linux/ccyf1/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer3.conf"
+        ["data/config/linux/qgyf1/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer4.conf"
     )
 
     # Process each config file
@@ -333,21 +345,14 @@ create_package() {
         cp "${CONFIG_DIR}/htsc-insight-cpp-config.conf" "${DEPLOY_ROOT}/config/"
     fi
 
-    # Copy strategy config files (backtest.conf, strategy_live.conf, strategy_live_dealer2.conf, engine.conf)
+    # Copy strategy config files
     if [[ -d "${CONFIG_DIR}" ]]; then
         log_info "Copying strategy config files..."
-        if [[ -f "${CONFIG_DIR}/backtest.conf" ]]; then
-            cp "${CONFIG_DIR}/backtest.conf" "${DEPLOY_ROOT}/config/"
-        fi
-        if [[ -f "${CONFIG_DIR}/strategy_live.conf" ]]; then
-            cp "${CONFIG_DIR}/strategy_live.conf" "${DEPLOY_ROOT}/config/"
-        fi
-        if [[ -f "${CONFIG_DIR}/strategy_live_dealer2.conf" ]]; then
-            cp "${CONFIG_DIR}/strategy_live_dealer2.conf" "${DEPLOY_ROOT}/config/"
-        fi
-        if [[ -f "${CONFIG_DIR}/engine.conf" ]]; then
-            cp "${CONFIG_DIR}/engine.conf" "${DEPLOY_ROOT}/config/"
-        fi
+        for conf_file in backtest.conf strategy_live.conf strategy_live_dealer2.conf strategy_live_dealer3.conf strategy_live_dealer4.conf engine.conf; do
+            if [[ -f "${CONFIG_DIR}/${conf_file}" ]]; then
+                cp "${CONFIG_DIR}/${conf_file}" "${DEPLOY_ROOT}/config/"
+            fi
+        done
     fi
 
     # Copy certificates
@@ -501,6 +506,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -d|--dest)
             REMOTE_DEST="$2"
+            shift 2
+            ;;
+        -c|--commit)
+            CONFIG_COMMIT_ID="$2"
             shift 2
             ;;
         -p|--pack-only)
