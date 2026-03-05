@@ -3,7 +3,7 @@
 Mock ZMQ ROUTER for testing trading engine's ZMQ client.
 
 Usage:
-    python script/mock_zmq_router.py [--port1 13380] [--port2 13381]
+    python script/mock_zmq_router.py [--port1 13380] [--port2 13381] [--port3 13382] [--port4 13383]
 
 Architecture:
     This script acts as two ROUTER sockets:
@@ -180,7 +180,9 @@ def print_help():
   Target port selection:
     1 <cmd>                    - Send to port 13380 only
     2 <cmd>                    - Send to port 13381 only
-    <cmd>                      - Send to both ports (default)
+    3 <cmd>                    - Send to port 13382 only
+    4 <cmd>                    - Send to port 13383 only
+    <cmd>                      - Send to all ports (default)
 
   System:
     clients                    - Show connected DEALER clients
@@ -196,6 +198,8 @@ def print_help():
     remove 600000              - Send remove_hot_stock_ht to both ports
     1 add 600000 98.50         - Send add_hot_stock_ht to port 13380 only
     2 remove 600000            - Send remove_hot_stock_ht to port 13381 only
+    3 add 000001 15.00         - Send add_hot_stock_ht to port 13382 only
+    4 add 000002 20.00         - Send add_hot_stock_ht to port 13383 only
     raw {"action": "add_hot_stock_ht", "symbol": "600000.SH", "target_price": 98.5}
 ===========================================================================
 """)
@@ -205,30 +209,35 @@ def main():
     parser = argparse.ArgumentParser(description="Mock ZMQ ROUTER for testing trading engine")
     parser.add_argument("--port1", type=int, default=13380, help="First ROUTER port (default: 13380)")
     parser.add_argument("--port2", type=int, default=13381, help="Second ROUTER port (default: 13381)")
+    parser.add_argument("--port3", type=int, default=13382, help="Third ROUTER port (default: 13382)")
+    parser.add_argument("--port4", type=int, default=13383, help="Fourth ROUTER port (default: 13383)")
     args = parser.parse_args()
 
-    # Create two ROUTER sockets
-    router1 = MockZmqRouter(port=args.port1, name="ROUTER1")
-    router2 = MockZmqRouter(port=args.port2, name="ROUTER2")
+    # Create four ROUTER sockets
+    routers = {
+        "1": MockZmqRouter(port=args.port1, name="ROUTER1"),
+        "2": MockZmqRouter(port=args.port2, name="ROUTER2"),
+        "3": MockZmqRouter(port=args.port3, name="ROUTER3"),
+        "4": MockZmqRouter(port=args.port4, name="ROUTER4"),
+    }
 
-    router1.start()
-    router2.start()
+    for r in routers.values():
+        r.start()
 
-    print(f"[INFO] Both ROUTER sockets started (ports {args.port1}, {args.port2})")
+    ports_str = ", ".join(str(getattr(args, f"port{i}")) for i in range(1, 5))
+    print(f"[INFO] All ROUTER sockets started (ports {ports_str})")
     print(f"[INFO] Waiting for DEALER connections...")
     print()
 
     print_help()
 
-    def broadcast_to_routers(payload: dict, target: str = "both"):
+    def broadcast_to_routers(payload: dict, target: str = "all"):
         """Send to specified router(s)."""
-        if target == "1":
-            router1.broadcast(payload)
-        elif target == "2":
-            router2.broadcast(payload)
-        else:  # both
-            router1.broadcast(payload)
-            router2.broadcast(payload)
+        if target in routers:
+            routers[target].broadcast(payload)
+        else:  # all
+            for r in routers.values():
+                r.broadcast(payload)
 
     try:
         while True:
@@ -240,13 +249,10 @@ def main():
             if not cmd:
                 continue
 
-            # Check for target prefix (1 or 2)
-            target = "both"
-            if cmd.startswith("1 "):
-                target = "1"
-                cmd = cmd[2:].strip()
-            elif cmd.startswith("2 "):
-                target = "2"
+            # Check for target prefix (1, 2, 3, or 4)
+            target = "all"
+            if len(cmd) >= 2 and cmd[0] in "1234" and cmd[1] == " ":
+                target = cmd[0]
                 cmd = cmd[2:].strip()
 
             parts = cmd.split(maxsplit=1)
@@ -260,23 +266,15 @@ def main():
                 print_help()
 
             elif action == "clients":
-                print(f"\n[ROUTER1:{router1.port}] clients:")
-                clients1 = router1.get_clients()
-                if not clients1:
-                    print("  No clients connected")
-                else:
-                    for identity, info in clients1.items():
-                        ago = time.time() - info["last_seen"]
-                        print(f"  - {identity} (last seen {ago:.1f}s ago)")
-
-                print(f"\n[ROUTER2:{router2.port}] clients:")
-                clients2 = router2.get_clients()
-                if not clients2:
-                    print("  No clients connected")
-                else:
-                    for identity, info in clients2.items():
-                        ago = time.time() - info["last_seen"]
-                        print(f"  - {identity} (last seen {ago:.1f}s ago)")
+                for name, router in routers.items():
+                    print(f"\n[ROUTER{name}:{router.port}] clients:")
+                    clients = router.get_clients()
+                    if not clients:
+                        print("  No clients connected")
+                    else:
+                        for identity, info in clients.items():
+                            ago = time.time() - info["last_seen"]
+                            print(f"  - {identity} (last seen {ago:.1f}s ago)")
                 print()
 
             elif action == "add":
@@ -335,8 +333,8 @@ def main():
     except KeyboardInterrupt:
         print("\nShutting down...")
 
-    router1.stop()
-    router2.stop()
+    for r in routers.values():
+        r.stop()
     print("Bye!")
 
 

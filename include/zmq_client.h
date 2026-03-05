@@ -26,13 +26,19 @@ using json = nlohmann::json;
 class ZmqClient {
 public:
     explicit ZmqClient(const std::string& endpoint1 = "tcp://localhost:13380",
-                       const std::string& endpoint2 = "tcp://localhost:13381")
+                       const std::string& endpoint2 = "tcp://localhost:13381",
+                       const std::string& endpoint3 = "tcp://localhost:13382",
+                       const std::string& endpoint4 = "tcp://localhost:13383")
         : running_(false), context_(nullptr), engine_(nullptr) {
-        // 初始化两个连接配置
+        // 初始化四个连接配置
         dealers_[0].endpoint = endpoint1;
         dealers_[0].index = 1;
         dealers_[1].endpoint = endpoint2;
         dealers_[1].index = 2;
+        dealers_[2].endpoint = endpoint3;
+        dealers_[2].index = 3;
+        dealers_[3].endpoint = endpoint4;
+        dealers_[3].index = 4;
     }
 
     // 设置策略引擎引用（用于动态策略管理）
@@ -73,12 +79,14 @@ public:
         // 启动心跳线程（只对主连接）
         heartbeat_thread_ = std::thread(&ZmqClient::heartbeat_loop, this);
 
-        // 启动第二个 DEALER
-        if (!start_dealer(dealers_[1])) {
-            LOG_M_WARNING("DEALER2 failed to start, continuing without it");
+        // 启动其余 DEALER（DEALER2~4）
+        for (int i = 1; i < static_cast<int>(dealers_.size()); ++i) {
+            if (!start_dealer(dealers_[i])) {
+                LOG_M_WARNING("DEALER{} failed to start, continuing without it", dealers_[i].index);
+            }
         }
 
-        LOG_M_INFO("ZMQ client started with heartbeat every 60s");
+        LOG_M_INFO("ZMQ client started with {} dealers, heartbeat every 60s", dealers_.size());
         return true;
     }
 
@@ -695,7 +703,7 @@ private:
         return "";
     }
 
-    std::array<DealerConnection, 2> dealers_;
+    std::array<DealerConnection, 4> dealers_;
     std::atomic<bool> running_;
     void* context_;
     std::thread heartbeat_thread_;
