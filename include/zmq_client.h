@@ -11,6 +11,8 @@
 #include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
+#include <vector>
+#include <algorithm>
 #include <array>
 #include "logger.h"
 #include "zmq_protocol.h"
@@ -128,30 +130,34 @@ public:
 
     bool is_running() const { return running_; }
 
-    // 设置 symbol 对应的 dealer 映射（用于配置文件加载的策略）
+    // 设置 symbol 对应的 dealer 映射（用于配置文件加载的策略，一对多）
     void set_symbol_dealer(const std::string& symbol, int dealer_index) {
         std::unique_lock lock(symbol_dealer_mutex_);
-        symbol_dealer_map_[symbol] = dealer_index;
+        auto& dealers = symbol_dealer_map_[symbol];
+        // 避免重复添加
+        if (std::find(dealers.begin(), dealers.end(), dealer_index) == dealers.end()) {
+            dealers.push_back(dealer_index);
+        }
     }
 
     // 发送下单消息到 ROUTER（股票代码去掉后缀）
-    // 根据 symbol 查找对应的 dealer 发送（确保使用 add_hot_stock_ht 时的同一通道）
+    // 根据 symbol 查找对应的所有 dealer 发送（一对多路由）
     void send_place_order(const std::string& symbol, double price, const std::string& strategy_name) {
         static int order_seq = 0;
 
-        // 查找该 symbol 应该使用的通道
-        LOG_M_INFO("send_place_order lookup: symbol={}", symbol);      
-        int dealer_index = 1;  // 默认使用 DEALER1
+        // 查找该 symbol 应该使用的所有通道
+        LOG_M_INFO("send_place_order lookup: symbol={}", symbol);
+        std::vector<int> dealer_indices;
         {
             std::shared_lock lock(symbol_dealer_mutex_);
             auto it = symbol_dealer_map_.find(symbol);
             if (it != symbol_dealer_map_.end()) {
-                dealer_index = it->second;
+                dealer_indices = it->second;
             }
         }
-
-        // 使用对应的 dealer 发送（index 1/2 对应数组下标 0/1）
-        DealerConnection& dealer = dealers_[dealer_index - 1];
+        if (dealer_indices.empty()) {
+            dealer_indices.push_back(1);  // 默认使用 DEALER1
+        }
 
         std::string symbol_no_suffix = symbol_utils::strip_suffix(symbol);
         json payload;
@@ -163,16 +169,20 @@ public:
         payload["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
 
-        std::string req_id = "order_" + std::to_string(++order_seq);
+        // 向每个 dealer 发送（各自独立的 req_id）
+        for (int dealer_index : dealer_indices) {
+            std::string req_id = "order_" + std::to_string(++order_seq);
 
-        // 打印完整消息便于调试
-        json full_msg;
-        full_msg["req_id"] = req_id;
-        full_msg["payload"] = payload;
-        LOG_M_INFO("place_order JSON: {}", full_msg.dump());
+            // 打印完整消息便于调试
+            json full_msg;
+            full_msg["req_id"] = req_id;
+            full_msg["payload"] = payload;
+            LOG_M_INFO("place_order JSON: {}", full_msg.dump());
 
-        send_via(dealer, req_id, payload);
-        LOG_M_INFO("Sent place_order: symbol={}, price={:.4f}, strategy={}, dealer={}", symbol_no_suffix, price, strategy_name, dealer_index);
+            DealerConnection& dealer = dealers_[dealer_index - 1];
+            send_via(dealer, req_id, payload);
+            LOG_M_INFO("Sent place_order: symbol={}, price={:.4f}, strategy={}, dealer={}", symbol_no_suffix, price, strategy_name, dealer_index);
+        }
     }
 
 private:
@@ -647,10 +657,13 @@ private:
         auto result = try_add_strategy(symbol, strategy_name, params);
 
         if (result.success) {
-            // 记录 symbol 来源通道（用于下单时路由）
+            // 记录 symbol 来源通道（用于下单时路由，一对多）
             {
                 std::unique_lock lock(symbol_dealer_mutex_);
-                symbol_dealer_map_[result.symbol_internal] = dealer.index;
+                auto& dealers = symbol_dealer_map_[result.symbol_internal];
+                if (std::find(dealers.begin(), dealers.end(), dealer.index) == dealers.end()) {
+                    dealers.push_back(dealer.index);
+                }
             }
             LOG_M_INFO("add_hot_stock: added {}:{}, params={}, dealer={}", result.symbol_internal, result.strategy_name, result.params_str, dealer.index);
         } else {
@@ -666,12 +679,19 @@ private:
         auto result = try_remove_strategy(symbol, strategy_name);
 
         if (result.success) {
-            // 移除 symbol 来源记录
+            // 移除该 dealer 的映射（仅移除当前 dealer，保留其他 dealer 的映射）
             {
                 std::unique_lock lock(symbol_dealer_mutex_);
-                symbol_dealer_map_.erase(result.symbol_internal);
+                auto it = symbol_dealer_map_.find(result.symbol_internal);
+                if (it != symbol_dealer_map_.end()) {
+                    auto& dealers = it->second;
+                    dealers.erase(std::remove(dealers.begin(), dealers.end(), dealer.index), dealers.end());
+                    if (dealers.empty()) {
+                        symbol_dealer_map_.erase(it);
+                    }
+                }
             }
-            LOG_M_INFO("remove_hot_stock: removed {}:{}", result.symbol_internal, result.strategy_name);
+            LOG_M_INFO("remove_hot_stock: removed {}:{}, dealer={}", result.symbol_internal, result.strategy_name, dealer.index);
         } else {
             LOG_M_WARNING("remove_hot_stock: {}", result.error_msg);
         }
@@ -709,9 +729,9 @@ private:
     std::thread heartbeat_thread_;
     StrategyEngine* engine_;
 
-    // symbol → dealer 映射（用于按通道路由下单消息）
-    std::unordered_map<std::string, int> symbol_dealer_map_;  // symbol(带后缀) → dealer index
-    mutable std::shared_mutex symbol_dealer_mutex_;           // 读写锁
+    // symbol → dealer 映射（用于按通道路由下单消息，一对多）
+    std::unordered_map<std::string, std::vector<int>> symbol_dealer_map_;  // symbol(带后缀) → dealer indices
+    mutable std::shared_mutex symbol_dealer_mutex_;                        // 读写锁
 };
 
 #undef LOG_MODULE
