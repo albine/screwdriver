@@ -283,6 +283,15 @@ public:
         auto& state = it->second;
         if (state.buy_signal_triggered || !state.detector_armed || state.expired) return;
 
+        // Check 10-minute strategy window
+        int64_t time_since_open = get_time_since_open_ms(order.mdtime);
+        if (time_since_open > STRATEGY_DISABLE_TIME_MS) {
+            state.expired = true;
+            state.detector_armed = false;
+            state.breakout_detector.set_enabled(false);
+            return;
+        }
+
         // Check expiration in Phase 3 (consolidation > 3 minutes from highest price time)
         int64_t time_since_highest = time_util::calculate_time_diff_ms(
             state.highest_timestamp_mdtime, order.mdtime);
@@ -308,6 +317,15 @@ public:
 
         auto& state = it->second;
         if (state.buy_signal_triggered || !state.detector_armed || state.expired) return;
+
+        // Check 10-minute strategy window
+        int64_t time_since_open = get_time_since_open_ms(txn.mdtime);
+        if (time_since_open > STRATEGY_DISABLE_TIME_MS) {
+            state.expired = true;
+            state.detector_armed = false;
+            state.breakout_detector.set_enabled(false);
+            return;
+        }
 
         // Check expiration in Phase 3 (consolidation > 3 minutes from highest price time)
         int64_t time_since_highest = time_util::calculate_time_diff_ms(
@@ -363,7 +381,7 @@ private:
         // Must be red (highest > prev_close)
         bool is_red = state.highest_price > state.prev_close;
         if (!is_red) {
-            LOG_M_DEBUG("{} 最高价{:.4f} <= 前收{:.4f}，不满足红盘条件",
+            LOG_M_INFO("{} 最高价{:.4f} <= 前收{:.4f}，不满足红盘条件",
                         symbol, state.highest_price, state.prev_close);
             return;
         }
