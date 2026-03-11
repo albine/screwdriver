@@ -270,12 +270,23 @@ private:
     // ==========================================
     void sync_from_book(const FastOrderBook& book) {
         book_synced_ = true;
-        book.for_each_bid_order_at_price(limit_up_price_, [this](uint64_t seq, uint32_t volume) {
+        uint64_t synced_volume = 0;
+        uint64_t book_bid_volume = book.get_bid_volume_at_price(limit_up_price_);
+        size_t synced_count = 0;
+        book.for_each_bid_order_at_price(limit_up_price_, [this, &synced_volume, &synced_count](uint64_t seq, uint32_t volume) {
             limit_up_bid_orders_[seq] = static_cast<uint64_t>(volume);
+            synced_volume += static_cast<uint64_t>(volume);
+            ++synced_count;
         });
-        LOG_M_INFO("{} | synced {} bid orders from OrderBook at limit_up_price={}",
-                   symbol, limit_up_bid_orders_.size(),
-                   price_util::format_price_display(limit_up_price_));
+        LOG_M_INFO("{} | synced {} bid orders from OrderBook at limit_up_price={} | synced_volume={} | book_bid_volume={}",
+                   symbol, synced_count,
+                   price_util::format_price_display(limit_up_price_),
+                   synced_volume, book_bid_volume);
+        if (synced_volume != book_bid_volume) {
+            LOG_M_WARNING("{} | sync mismatch at limit_up_price={} | synced_count={} | synced_volume={} | book_bid_volume={}",
+                          symbol, price_util::format_price_display(limit_up_price_),
+                          synced_count, synced_volume, book_bid_volume);
+        }
     }
 
     // ==========================================

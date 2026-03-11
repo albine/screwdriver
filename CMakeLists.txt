@@ -115,3 +115,22 @@ set_target_properties(test_time_util PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
 )
+
+# ============ test_for_each_bid_order_at_price ============
+# 定向验证 FastOrderBook::for_each_bid_order_at_price
+add_executable(test_for_each_bid_order_at_price
+    test/test_for_each_bid_order_at_price.cpp
+    src/FastOrderBook.cpp
+)
+target_include_directories(test_for_each_bid_order_at_price PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
+)
+target_link_libraries(test_for_each_bid_order_at_price
+    Threads::Threads
+    quill::quill
+)
+set_target_properties(test_for_each_bid_order_at_price PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)

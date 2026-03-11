@@ -69,6 +69,8 @@ Targets:
     engine                      Main trading engine
     test_logger                 Logger functionality tests
     test_fastorderbook          OrderBook replay tests
+    test_for_each_bid_order_at_price
+                                Focused FastOrderBook bid-level iteration test
     test_data_order             Data ordering verification
     test_price_level_strategy   Price level monitoring tests
     (no target)                 Build all targets
@@ -145,7 +147,7 @@ print_status "Build completed successfully!"
 print_status "Executable locations:"
 
 # 列出所有可执行文件
-for target in engine test_logger test_fastorderbook test_data_order test_price_level_strategy; do
+for target in engine test_logger test_fastorderbook test_for_each_bid_order_at_price test_data_order test_price_level_strategy; do
     if [ -f "$BUILD_DIR/$target" ]; then
         SIZE=$(du -h "$BUILD_DIR/$target" | cut -f1)
         echo "  ✓ $target ($SIZE)"
