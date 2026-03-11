@@ -95,6 +95,9 @@ struct alignas(64) Level {
 // ==========================================
 class FastOrderBook {
 public:
+    // 价格档位间隔：0.01元 * 10000 = 100
+    static constexpr uint32_t TICK_SIZE = 100;
+
     // 构造函数：需要传入全剧唯一的内存池引用
     // min_price/max_price 用于预分配 Level 数组的大小 (Offset Mapping)
     FastOrderBook(uint32_t code, ObjectPool<OrderNode>& pool, uint32_t min_price, uint32_t max_price);
@@ -136,6 +139,20 @@ public:
     // 获取买卖N档数据 (价格, 量)
     std::vector<std::pair<uint32_t, uint64_t>> get_bid_levels(int n) const;
     std::vector<std::pair<uint32_t, uint64_t>> get_ask_levels(int n) const;
+
+    // 遍历指定价格档位的所有买单，对每个订单调用 fn(seq, volume)
+    // 零分配、可内联，用于策略初始化时从 OrderBook 同步订单状态
+    template<typename Fn>
+    void for_each_bid_order_at_price(uint32_t price, Fn&& fn) const {
+        if (price < min_price_ || price > min_price_ + (levels_.size() - 1) * TICK_SIZE) return;
+        const Level& lvl = levels_[(price - min_price_) / TICK_SIZE];
+        int32_t idx = lvl.bid_head_idx;
+        while (idx != -1) {
+            const OrderNode& node = pool_.get(idx);
+            fn(node.seq, node.volume);
+            idx = node.next_idx;
+        }
+    }
 
     // 打印N档盘口信息（用于调试）
     void print_orderbook(int n = 10, const std::string& context = "") const;

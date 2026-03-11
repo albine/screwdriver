@@ -142,7 +142,8 @@ public:
 
     // 发送下单消息到 ROUTER（股票代码去掉后缀）
     // 根据 symbol 查找对应的所有 dealer 发送（一对多路由）
-    void send_place_order(const std::string& symbol, double price, const std::string& strategy_name) {
+    void send_place_order(const std::string& symbol, double price, const std::string& strategy_name,
+                          const std::string& side = "buy") {
         static int order_seq = 0;
 
         // 查找该 symbol 应该使用的所有通道
@@ -164,7 +165,7 @@ public:
         payload["action"] = zmq_ht_proto::Action::PLACE_ORDER;
         payload["symbol"] = symbol_no_suffix;
         payload["price"] = price;
-        payload["side"] = "buy";
+        payload["side"] = side;
         payload["strategy"] = strategy_name;
         payload["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
@@ -706,16 +707,20 @@ private:
         } else if (params.is_number()) {
             // 数值直接作为内部格式
             return std::to_string(params.get<int64_t>());
-        } else if (params.is_object() && !params.empty() && params.contains("breakout_price")) {
-            auto& bp = params["breakout_price"];
-            if (bp.is_number()) {
-                // breakout_price 以元为单位，转换为内部格式（乘以 10000）
-                double price_yuan = bp.get<double>();
-                uint32_t price_int = static_cast<uint32_t>(price_yuan * 10000);
-                return std::to_string(price_int);
-            } else if (bp.is_string()) {
-                return bp.get<std::string>();
+        } else if (params.is_object() && !params.empty()) {
+            if (params.contains("breakout_price")) {
+                // BreakoutPriceVolumeStrategy 专用: breakout_price 以元为单位转内部格式
+                auto& bp = params["breakout_price"];
+                if (bp.is_number()) {
+                    double price_yuan = bp.get<double>();
+                    uint32_t price_int = static_cast<uint32_t>(price_yuan * 10000);
+                    return std::to_string(price_int);
+                } else if (bp.is_string()) {
+                    return bp.get<std::string>();
+                }
             }
+            // 其他策略: JSON 对象直接序列化透传
+            return params.dump();
         }
         return "";
     }

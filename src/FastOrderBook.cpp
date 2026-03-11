@@ -5,9 +5,8 @@
 // 日志模块
 #define LOG_MODULE MOD_ORDERBOOK
 
-// 价格档位间隔：0.01元 * 10000 = 100
-// 例如：9.99元 = 99900，10.00元 = 100000，间隔100
-constexpr uint32_t TICK_SIZE = 100;
+// 使用类中定义的 TICK_SIZE
+constexpr uint32_t TICK_SIZE = FastOrderBook::TICK_SIZE;
 
 // 确保价格在合法范围内
 #define CHECK_PRICE_RANGE(p) \

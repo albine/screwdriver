@@ -39,6 +39,7 @@ AVAILABLE_STRATEGIES = [
     "BreakoutPriceVolumeStrategy_v2",
     "HenggouStrategy",
     "TestOrderbookStrategy",
+    "LimitUpBreakSellStrategy",
 ]
 
 

@@ -13,6 +13,7 @@ namespace StrategyIds {
 constexpr uint8_t UNKNOWN                         = 0;
 constexpr uint8_t OPENING_RANGE_BREAKOUT          = 1;
 constexpr uint8_t BREAKOUT_PRICE_VOLUME           = 5;
+constexpr uint8_t LIMIT_UP_BREAK_SELL            = 7;
 constexpr uint8_t HENGGOU                        = 4;
 constexpr uint8_t PERCENTAGE_GAIN_BREAKOUT        = 3;
 constexpr uint8_t TEST_ORDERBOOK                  = 2;
@@ -25,6 +26,7 @@ inline uint8_t name_to_id(const std::string& name) {
     static const std::unordered_map<std::string, uint8_t> map = {
         {"OpeningRangeBreakoutStrategy", OPENING_RANGE_BREAKOUT},
         {"BreakoutPriceVolumeStrategy", BREAKOUT_PRICE_VOLUME},
+        {"LimitUpBreakSellStrategy", LIMIT_UP_BREAK_SELL},
         {"HenggouStrategy", HENGGOU},
         {"PercentageGainBreakoutStrategy", PERCENTAGE_GAIN_BREAKOUT},
         {"TestOrderbookStrategy", TEST_ORDERBOOK},
@@ -38,6 +40,7 @@ inline const char* id_to_name(uint8_t id) {
     switch (id) {
         case OPENING_RANGE_BREAKOUT:   return "OpeningRangeBreakoutStrategy";
         case BREAKOUT_PRICE_VOLUME:    return "BreakoutPriceVolumeStrategy";
+        case LIMIT_UP_BREAK_SELL:return "LimitUpBreakSellStrategy";
         case HENGGOU:           return "HenggouStrategy";
         case PERCENTAGE_GAIN_BREAKOUT: return "PercentageGainBreakoutStrategy";
         case TEST_ORDERBOOK:           return "TestOrderbookStrategy";
