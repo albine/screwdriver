@@ -657,13 +657,10 @@ private:
         auto result = try_add_strategy(symbol, strategy_name, params);
 
         if (result.success) {
-            // 记录 symbol 来源通道（用于下单时路由，一对多）
+            // 记录 symbol 来源通道（独占：仅发给请求的 dealer）
             {
                 std::unique_lock lock(symbol_dealer_mutex_);
-                auto& dealers = symbol_dealer_map_[result.symbol_internal];
-                if (std::find(dealers.begin(), dealers.end(), dealer.index) == dealers.end()) {
-                    dealers.push_back(dealer.index);
-                }
+                symbol_dealer_map_[result.symbol_internal] = {dealer.index};
             }
             LOG_M_INFO("add_hot_stock: added {}:{}, params={}, dealer={}", result.symbol_internal, result.strategy_name, result.params_str, dealer.index);
         } else {
