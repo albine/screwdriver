@@ -23,6 +23,7 @@
 #include "strategy/HenggouStrategy.h"
 #include "strategy/PercentageGainBreakoutStrategy.h"
 #include "strategy/TestOrderbookStrategy.h"
+// #include "strategy/HotHenggouStrategy.h"  // TODO: 尚未完成
 
 // 引入配置和策略工厂
 #include "backtest_config.h"
@@ -111,6 +112,8 @@ void register_all_strategies() {
             strat->strategy_type_id = StrategyIds::LIMIT_UP_BREAK_SELL;
             return strat;
         });
+
+    // TODO: HotHenggouStrategy 尚未完成，暂不注册
 }
 
 
