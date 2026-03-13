@@ -59,6 +59,7 @@ private:
     uint32_t flow_threshold_pct_ = 60;  // 封单流出触发阈值 (百分比)
     int32_t flow_window_ms_ = 300;      // 滑动窗口长度 (毫秒)
     uint64_t min_bid_volume_ = 1000;    // 封单量下限 (低于此值直接触发)
+    double cancel_weight_ = 0.2;        // 撤单量权重 (撤单量 * 权重 计入流出)
 
     // ==========================================
     // 涨停价买单追踪
@@ -99,6 +100,7 @@ public:
                 if (j.contains("threshold"))  flow_threshold_pct_ = j["threshold"].get<uint32_t>();
                 if (j.contains("window_ms"))  flow_window_ms_ = j["window_ms"].get<int32_t>();
                 if (j.contains("min_bid"))    min_bid_volume_ = j["min_bid"].get<uint64_t>();
+                if (j.contains("cancel_weight")) cancel_weight_ = j["cancel_weight"].get<double>();
                 if (j.contains("start_time")) {
                     // 支持 "13:30" 格式或 MDTime 整数
                     auto& st = j["start_time"];
@@ -122,8 +124,8 @@ public:
     virtual ~LimitUpBreakSellStrategy() = default;
 
     void on_start() override {
-        LOG_M_INFO("LimitUpBreakSellStrategy started: {} | symbol={} | threshold={}% | window={}ms | min_bid={} | start_time={}",
-                   name, symbol, flow_threshold_pct_, flow_window_ms_, min_bid_volume_,
+        LOG_M_INFO("LimitUpBreakSellStrategy started: {} | symbol={} | threshold={}% | window={}ms | min_bid={} | cancel_weight={:.2f} | start_time={}",
+                   name, symbol, flow_threshold_pct_, flow_window_ms_, min_bid_volume_, cancel_weight_,
                    time_util::format_mdtime(start_time_));
     }
 
@@ -201,7 +203,7 @@ public:
                 auto it = limit_up_bid_orders_.find(order_id);
                 if (it != limit_up_bid_orders_.end()) {
                     uint64_t cancel_vol = it->second;
-                    flow_window_.push_back({order.mdtime, cancel_vol});
+                    flow_window_.push_back({order.mdtime, static_cast<uint64_t>(cancel_vol * cancel_weight_)});
                     flow_event_count_++;
                     limit_up_bid_orders_.erase(it);
                     check_flow_condition(order.mdtime, book);
@@ -250,7 +252,7 @@ public:
             auto it = limit_up_bid_orders_.find(static_cast<uint64_t>(txn.tradebuyno));
             if (it != limit_up_bid_orders_.end()) {
                 uint64_t cancel_vol = static_cast<uint64_t>(txn.tradeqty);
-                flow_window_.push_back({txn.mdtime, cancel_vol});
+                flow_window_.push_back({txn.mdtime, static_cast<uint64_t>(cancel_vol * cancel_weight_)});
                 flow_event_count_++;
 
                 if (cancel_vol >= it->second) {
