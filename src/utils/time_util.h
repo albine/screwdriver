@@ -119,6 +119,26 @@ inline std::string format_ns_time(int64_t ns_timestamp) {
     return std::string(buf);
 }
 
+// 将纳秒时间戳转为 MDTime 格式（本地时间）
+// 例如: 1737509451535123456 -> 093051535
+inline int32_t ns_to_mdtime(int64_t ns_timestamp) {
+    auto seconds = static_cast<time_t>(ns_timestamp / 1000000000LL);
+    auto ms = static_cast<int32_t>((ns_timestamp / 1000000LL) % 1000);
+    std::tm local_tm;
+    localtime_r(&seconds, &local_tm);
+    return local_tm.tm_hour * 10000000 +
+           local_tm.tm_min * 100000 +
+           local_tm.tm_sec * 1000 + ms;
+}
+
+// 判断行情是否延迟超过指定毫秒数
+// local_recv_ns: 本地接收纳秒时间戳, mdtime: 行情时间, threshold_ms: 阈值
+inline bool is_delayed(int64_t local_recv_ns, int32_t mdtime, int64_t threshold_ms) {
+    int32_t recv_mdtime = ns_to_mdtime(local_recv_ns);
+    int64_t diff = calculate_time_diff_ms(mdtime, recv_mdtime);
+    return diff > threshold_ms;
+}
+
 } // namespace time_util
 
 #endif // TIME_UTIL_H

@@ -324,6 +324,11 @@ create_package() {
         cp "${SCRIPT_DIR}/script/verify_orderbook_rebuild.sh" "${DEPLOY_ROOT}/script/"
         chmod +x "${DEPLOY_ROOT}/script/verify_orderbook_rebuild.sh"
     fi
+    if [[ -f "${SCRIPT_DIR}/script/add_daban_to_configs.sh" ]]; then
+        log_info "Copying add_daban_to_configs script to config/..."
+        cp "${SCRIPT_DIR}/script/add_daban_to_configs.sh" "${DEPLOY_ROOT}/config/"
+        chmod +x "${DEPLOY_ROOT}/config/add_daban_to_configs.sh"
+    fi
 
     # Copy shared libraries
     log_info "Copying shared libraries..."
