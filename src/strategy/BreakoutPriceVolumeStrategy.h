@@ -141,6 +141,11 @@ public:
             prev_close_ = static_cast<uint32_t>(stock.preclosepx);
         }
         local_recv_timestamp_ = stock.local_recv_timestamp;
+
+        // tick 保底检测突破
+        if (!detector_.is_triggered()) {
+            detector_.on_tick(stock);
+        }
     }
 
     void on_order(const MDOrderStruct& order, const FastOrderBook& book) override {
@@ -164,6 +169,17 @@ private:
     // 突破触发回调
     // ==========================================
     void on_breakout_triggered(uint32_t price, int32_t mdtime) {
+        // 检查行情延迟，超过5秒则不下单
+        int64_t delay_ms = time_util::calculate_time_diff_ms(mdtime, time_util::now_mdtime());
+        if (delay_ms > 5000) {
+            LOG_BIZ(BIZ_STRA,
+                    "{} | SKIP | MARKET_TIME={} | LOCAL_TIME={} | Reason=突破价位监控信号延迟过大 (delay={}ms > 5000ms)",
+                    symbol, time_util::format_mdtime(mdtime),
+                    time_util::format_ns_time(local_recv_timestamp_), delay_ms);
+            LOG_M_INFO("{} 突破价位监控信号因延迟过大被跳过: delay={}ms", symbol, delay_ms);
+            return;
+        }
+
         // 获取统计信息用于日志
         auto stats = detector_.get_stats();
 
