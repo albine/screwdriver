@@ -215,7 +215,8 @@ public:
         }
 
         // POSITIONED 阶段: tick 级别炸板检测
-        if (state_ == State::POSITIONED && limit_up_price_ > 0) {
+        // 使用 else if: 防止同一 tick 内 BUY 触发后立即进入 SELL 检测
+        else if (state_ == State::POSITIONED && limit_up_price_ > 0) {
             int64_t bid1_qty = stock.buyorderqtyqueue[0];
             int64_t bid1_price = stock.buypricequeue[0];
             bool at_limit_up = (bid1_price == static_cast<int64_t>(limit_up_price_));
