@@ -147,6 +147,7 @@ sync_strategy_config() {
         ["data/config/linux/99999/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer2.conf"
         ["data/config/linux/ccyf1/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer3.conf"
         ["data/config/linux/qgyf1/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer4.conf"
+        ["data/config/linux/ndf1/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer5.conf"
     )
 
     # Process each config file
@@ -353,7 +354,7 @@ create_package() {
     # Copy strategy config files
     if [[ -d "${CONFIG_DIR}" ]]; then
         log_info "Copying strategy config files..."
-        for conf_file in backtest.conf strategy_live.conf strategy_live_dealer2.conf strategy_live_dealer3.conf strategy_live_dealer4.conf engine.conf; do
+        for conf_file in backtest.conf strategy_live.conf strategy_live_dealer2.conf strategy_live_dealer3.conf strategy_live_dealer4.conf strategy_live_dealer5.conf engine.conf; do
             if [[ -f "${CONFIG_DIR}/${conf_file}" ]]; then
                 cp "${CONFIG_DIR}/${conf_file}" "${DEPLOY_ROOT}/config/"
             fi

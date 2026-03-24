@@ -30,9 +30,10 @@ public:
     explicit ZmqClient(const std::string& endpoint1 = "tcp://localhost:13380",
                        const std::string& endpoint2 = "tcp://localhost:13381",
                        const std::string& endpoint3 = "tcp://localhost:13382",
-                       const std::string& endpoint4 = "tcp://localhost:13383")
+                       const std::string& endpoint4 = "tcp://localhost:13383",
+                       const std::string& endpoint5 = "tcp://localhost:13384")
         : running_(false), context_(nullptr), engine_(nullptr) {
-        // 初始化四个连接配置
+        // 初始化五个连接配置
         dealers_[0].endpoint = endpoint1;
         dealers_[0].index = 1;
         dealers_[1].endpoint = endpoint2;
@@ -41,6 +42,8 @@ public:
         dealers_[2].index = 3;
         dealers_[3].endpoint = endpoint4;
         dealers_[3].index = 4;
+        dealers_[4].endpoint = endpoint5;
+        dealers_[4].index = 5;
     }
 
     // 设置策略引擎引用（用于动态策略管理）
@@ -731,7 +734,7 @@ private:
         return "";
     }
 
-    std::array<DealerConnection, 4> dealers_;
+    std::array<DealerConnection, 5> dealers_;
     std::atomic<bool> running_;
     void* context_;
     std::thread heartbeat_thread_;

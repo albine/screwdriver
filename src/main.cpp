@@ -297,6 +297,7 @@ void run_live_mode(quill::Logger* logger,
         {2, engine_cfg.strategy_config_file2},
         {3, engine_cfg.strategy_config_file3},
         {4, engine_cfg.strategy_config_file4},
+        {5, engine_cfg.strategy_config_file5},
     };
 
     for (const auto& dc : dealer_configs) {
@@ -382,15 +383,17 @@ void run_live_mode(quill::Logger* logger,
     } else {
         g_zmq_client = std::make_unique<ZmqClient>(
             engine_cfg.zmq_endpoint, engine_cfg.zmq_endpoint2,
-            engine_cfg.zmq_endpoint3, engine_cfg.zmq_endpoint4);
+            engine_cfg.zmq_endpoint3, engine_cfg.zmq_endpoint4,
+            engine_cfg.zmq_endpoint5);
 
         // 注入策略引擎引用（支持运行时动态添加/删除策略）
         g_zmq_client->set_engine(&engine);
 
         if (g_zmq_client->start()) {
-            LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client started, DEALER1: {}, DEALER2: {}, DEALER3: {}, DEALER4: {}",
+            LOG_MODULE_INFO(logger, MOD_ENGINE, "ZMQ client started, DEALER1: {}, DEALER2: {}, DEALER3: {}, DEALER4: {}, DEALER5: {}",
                            engine_cfg.zmq_endpoint, engine_cfg.zmq_endpoint2,
-                           engine_cfg.zmq_endpoint3, engine_cfg.zmq_endpoint4);
+                           engine_cfg.zmq_endpoint3, engine_cfg.zmq_endpoint4,
+                           engine_cfg.zmq_endpoint5);
             LOG_MODULE_INFO(logger, MOD_ENGINE, "Runtime strategy management enabled via ZMQ");
 
             // 创建实盘上下文并设置给所有策略
