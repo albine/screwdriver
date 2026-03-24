@@ -23,6 +23,7 @@
 #include "strategy/HenggouStrategy.h"
 #include "strategy/PercentageGainBreakoutStrategy.h"
 #include "strategy/TestOrderbookStrategy.h"
+#include "strategy/DabanStrategy.h"
 // #include "strategy/HotHenggouStrategy.h"  // TODO: 尚未完成
 
 // 引入配置和策略工厂
@@ -110,6 +111,13 @@ void register_all_strategies() {
         [](const std::string& symbol, const std::string& params) -> std::unique_ptr<Strategy> {
             auto strat = std::make_unique<LimitUpBreakSellStrategy>(symbol + "_LUB", symbol, params);
             strat->strategy_type_id = StrategyIds::LIMIT_UP_BREAK_SELL;
+            return strat;
+        });
+
+    factory.register_strategy("DabanStrategy",
+        [](const std::string& symbol, const std::string& /*params*/) -> std::unique_ptr<Strategy> {
+            auto strat = std::make_unique<DabanStrategy>(symbol + "_DB", symbol);
+            strat->strategy_type_id = StrategyIds::DABAN;
             return strat;
         });
 

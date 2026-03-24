@@ -181,8 +181,14 @@ public:
             LOG_M_INFO("place_order JSON: {}", full_msg.dump());
 
             DealerConnection& dealer = dealers_[dealer_index - 1];
-            send_via(dealer, req_id, payload);
-            LOG_M_INFO("Sent place_order: symbol={}, price={:.4f}, strategy={}, dealer={}", symbol_no_suffix, price, strategy_name, dealer_index);
+            bool ok = send_via(dealer, req_id, payload);
+            if (ok) {
+                LOG_M_INFO("Sent place_order: symbol={}, price={:.4f}, strategy={}, dealer={}", symbol_no_suffix, price, strategy_name, dealer_index);
+            } else {
+                LOG_M_ERROR("ALERT: place_order SEND FAILED: symbol={}, side={}, strategy={}, dealer={}", symbol_no_suffix, side, strategy_name, dealer_index);
+                LOG_BIZ(BIZ_RJCT, "SEND_FAIL | {} | {} | side={} | dealer={} | ZMQ发送失败，信号可能丢失",
+                        symbol_no_suffix, strategy_name, side, dealer_index);
+            }
         }
     }
 

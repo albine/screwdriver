@@ -18,6 +18,7 @@ constexpr uint8_t HENGGOU                        = 4;
 constexpr uint8_t PERCENTAGE_GAIN_BREAKOUT        = 3;
 constexpr uint8_t TEST_ORDERBOOK                  = 2;
 constexpr uint8_t BREAKOUT_PRICE_VOLUME_V2        = 6;
+constexpr uint8_t DABAN                           = 8;
 
 // ==========================================
 // 策略名称 <-> ID 映射
@@ -31,6 +32,7 @@ inline uint8_t name_to_id(const std::string& name) {
         {"PercentageGainBreakoutStrategy", PERCENTAGE_GAIN_BREAKOUT},
         {"TestOrderbookStrategy", TEST_ORDERBOOK},
         {"BreakoutPriceVolumeStrategy_v2", BREAKOUT_PRICE_VOLUME_V2},
+        {"DabanStrategy", DABAN},
     };
     auto it = map.find(name);
     return (it != map.end()) ? it->second : UNKNOWN;
@@ -45,6 +47,7 @@ inline const char* id_to_name(uint8_t id) {
         case PERCENTAGE_GAIN_BREAKOUT: return "PercentageGainBreakoutStrategy";
         case TEST_ORDERBOOK:           return "TestOrderbookStrategy";
         case BREAKOUT_PRICE_VOLUME_V2: return "BreakoutPriceVolumeStrategy_v2";
+        case DABAN:                    return "DabanStrategy";
         default:                       return "Unknown";
     }
 }

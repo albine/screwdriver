@@ -7,10 +7,9 @@
 #include "logger.h"
 #include "utils/time_util.h"
 #include "utils/price_util.h"
+#include "utils/limit_up_flow_detector.h"
 #include <nlohmann/json.hpp>
 #include <string>
-#include <unordered_map>
-#include <deque>
 
 #define LOG_MODULE MOD_STRATEGY
 
@@ -53,32 +52,14 @@ private:
     int64_t last_px_ = 0;           // 最新价
 
     // ==========================================
-    // 可配置参数 (可通过 params JSON 覆盖)
+    // 可配置参数
     // ==========================================
     int32_t start_time_ = 133000000;    // 监控开始时间 (MDTime格式, 默认13:30)
-    uint32_t flow_threshold_pct_ = 60;  // 封单流出触发阈值 (百分比)
-    int32_t flow_window_ms_ = 300;      // 滑动窗口长度 (毫秒)
-    uint64_t min_bid_volume_ = 1000;    // 封单量下限 (低于此值直接触发)
-    double cancel_weight_ = 0.2;        // 撤单量权重 (撤单量 * 权重 计入流出)
 
     // ==========================================
-    // 涨停价买单追踪
+    // 封单流出检测器
     // ==========================================
-    std::unordered_map<uint64_t, uint64_t> limit_up_bid_orders_;  // orderno -> volume
-
-    // ==========================================
-    // 200ms 滑动窗口: 封单流出事件
-    // ==========================================
-    struct FlowEvent {
-        int32_t time;       // MDTime
-        uint64_t volume;    // 撤单量或成交量
-    };
-    std::deque<FlowEvent> flow_window_;
-
-    // ==========================================
-    // OrderBook 同步标记
-    // ==========================================
-    bool book_synced_ = false;  // 进入 MONITORING 后是否已从 OrderBook 同步
+    LimitUpFlowDetector detector_;
 
     // ==========================================
     // 统计
@@ -86,7 +67,6 @@ private:
     uint64_t tick_count_ = 0;
     uint64_t order_count_ = 0;
     uint64_t txn_count_ = 0;
-    uint64_t flow_event_count_ = 0;
 
 public:
     explicit LimitUpBreakSellStrategy(const std::string& strategy_name,
@@ -94,13 +74,21 @@ public:
                                       const std::string& params = "") {
         this->name = strategy_name;
         this->symbol = sym;
+
+        // 默认检测器参数
+        LimitUpFlowDetector::Config detector_config;
+        detector_config.flow_threshold_pct = 60;
+        detector_config.flow_window_ms = 300;
+        detector_config.min_bid_volume = 1000;
+        detector_config.cancel_weight = 0.2;
+
         if (!params.empty()) {
             try {
                 auto j = nlohmann::json::parse(params);
-                if (j.contains("threshold"))  flow_threshold_pct_ = j["threshold"].get<uint32_t>();
-                if (j.contains("window_ms"))  flow_window_ms_ = j["window_ms"].get<int32_t>();
-                if (j.contains("min_bid"))    min_bid_volume_ = j["min_bid"].get<uint64_t>();
-                if (j.contains("cancel_weight")) cancel_weight_ = j["cancel_weight"].get<double>();
+                if (j.contains("threshold"))  detector_config.flow_threshold_pct = j["threshold"].get<uint32_t>();
+                if (j.contains("window_ms"))  detector_config.flow_window_ms = j["window_ms"].get<int32_t>();
+                if (j.contains("min_bid"))    detector_config.min_bid_volume = j["min_bid"].get<uint64_t>();
+                if (j.contains("cancel_weight")) detector_config.cancel_weight = j["cancel_weight"].get<double>();
                 if (j.contains("start_time")) {
                     // 支持 "13:30" 格式或 MDTime 整数
                     auto& st = j["start_time"];
@@ -119,19 +107,22 @@ public:
                 // params 不是有效 JSON，使用默认值
             }
         }
+
+        detector_ = LimitUpFlowDetector(detector_config);
     }
 
     virtual ~LimitUpBreakSellStrategy() = default;
 
     void on_start() override {
+        auto& cfg = detector_.config();
         LOG_M_INFO("LimitUpBreakSellStrategy started: {} | symbol={} | threshold={}% | window={}ms | min_bid={} | cancel_weight={:.2f} | start_time={}",
-                   name, symbol, flow_threshold_pct_, flow_window_ms_, min_bid_volume_, cancel_weight_,
+                   name, symbol, cfg.flow_threshold_pct, cfg.flow_window_ms, cfg.min_bid_volume, cfg.cancel_weight,
                    time_util::format_mdtime(start_time_));
     }
 
     void on_stop() override {
         LOG_M_INFO("LimitUpBreakSellStrategy stopped: {} | ticks={} | orders={} | txns={} | flows={} | state={}",
-                   name, tick_count_, order_count_, txn_count_, flow_event_count_,
+                   name, tick_count_, order_count_, txn_count_, detector_.flow_event_count(),
                    state_ == State::TRIGGERED ? "TRIGGERED" :
                    state_ == State::MONITORING ? "MONITORING" : "INACTIVE");
     }
@@ -187,31 +178,20 @@ public:
         if (limit_up_price_ == 0) return;
 
         // 首次进入 MONITORING: 从 OrderBook 同步涨停价上的已有买单
-        if (!book_synced_) sync_from_book(book);
+        if (!detector_.is_synced()) {
+            detector_.sync_from_book(book, limit_up_price_, symbol);
+        }
 
-        // 买单 at 涨停价 -> 记录
-        if (order.orderbsflag == 1 &&  // 买方向
-            static_cast<uint32_t>(order.orderprice) == limit_up_price_) {
+        detector_.on_order(order, limit_up_price_);
 
-            // 订单 ID: SZ 用 orderindex, SH 用 orderno（与 FastOrderBook 一致）
-            uint64_t order_id = (order.orderno != 0)
-                ? static_cast<uint64_t>(order.orderno)
-                : static_cast<uint64_t>(order.orderindex);
-
-            if (order.ordertype == 10) {
-                // 上海撤单 (ordertype == 10): 查 order_id，命中则加入 flow_window_
-                auto it = limit_up_bid_orders_.find(order_id);
-                if (it != limit_up_bid_orders_.end()) {
-                    uint64_t cancel_vol = it->second;
-                    flow_window_.push_back({order.mdtime, static_cast<uint64_t>(cancel_vol * cancel_weight_)});
-                    flow_event_count_++;
-                    limit_up_bid_orders_.erase(it);
-                    check_flow_condition(order.mdtime, book);
-                }
-            } else {
-                // 新买单: 记录到 limit_up_bid_orders_
-                limit_up_bid_orders_[order_id] = static_cast<uint64_t>(order.orderqty);
-            }
+        if (detector_.check(order.mdtime, book, limit_up_price_)) {
+            uint64_t current_bid = book.get_bid_volume_at_price(limit_up_price_);
+            uint64_t flow_sum = detector_.get_flow_sum(order.mdtime);
+            LOG_M_INFO("{} | FLOW TRIGGER | flow_sum={} | current_bid={} | ratio={:.1f}% | events={}",
+                       symbol, flow_sum, current_bid,
+                       current_bid > 0 ? (flow_sum * 100.0 / current_bid) : 100.0,
+                       detector_.flow_event_count());
+            emit_sell_signal(order.mdtime);
         }
     }
 
@@ -226,104 +206,24 @@ public:
         if (limit_up_price_ == 0) return;
 
         // 首次进入 MONITORING: 从 OrderBook 同步涨停价上的已有买单
-        if (!book_synced_) sync_from_book(book);
+        if (!detector_.is_synced()) {
+            detector_.sync_from_book(book, limit_up_price_, symbol);
+        }
 
-        if (txn.tradetype == 0) {
-            // 成交 at 涨停价 -> 加入 flow_window_
-            if (static_cast<uint32_t>(txn.tradeprice) == limit_up_price_) {
-                flow_window_.push_back({txn.mdtime, static_cast<uint64_t>(txn.tradeqty)});
-                flow_event_count_++;
+        detector_.on_transaction(txn, limit_up_price_);
 
-                // 更新买单剩余量
-                auto it = limit_up_bid_orders_.find(static_cast<uint64_t>(txn.tradebuyno));
-                if (it != limit_up_bid_orders_.end()) {
-                    uint64_t traded = static_cast<uint64_t>(txn.tradeqty);
-                    if (traded >= it->second) {
-                        limit_up_bid_orders_.erase(it);
-                    } else {
-                        it->second -= traded;
-                    }
-                }
-
-                check_flow_condition(txn.mdtime, book);
-            }
-        } else {
-            // 深圳撤单 (tradetype != 0): 查 tradebuyno，命中则加入 flow_window_
-            auto it = limit_up_bid_orders_.find(static_cast<uint64_t>(txn.tradebuyno));
-            if (it != limit_up_bid_orders_.end()) {
-                uint64_t cancel_vol = static_cast<uint64_t>(txn.tradeqty);
-                flow_window_.push_back({txn.mdtime, static_cast<uint64_t>(cancel_vol * cancel_weight_)});
-                flow_event_count_++;
-
-                if (cancel_vol >= it->second) {
-                    limit_up_bid_orders_.erase(it);
-                } else {
-                    it->second -= cancel_vol;
-                }
-
-                check_flow_condition(txn.mdtime, book);
-            }
+        if (detector_.check(txn.mdtime, book, limit_up_price_)) {
+            uint64_t current_bid = book.get_bid_volume_at_price(limit_up_price_);
+            uint64_t flow_sum = detector_.get_flow_sum(txn.mdtime);
+            LOG_M_INFO("{} | FLOW TRIGGER | flow_sum={} | current_bid={} | ratio={:.1f}% | events={}",
+                       symbol, flow_sum, current_bid,
+                       current_bid > 0 ? (flow_sum * 100.0 / current_bid) : 100.0,
+                       detector_.flow_event_count());
+            emit_sell_signal(txn.mdtime);
         }
     }
 
 private:
-    // ==========================================
-    // 从 OrderBook 同步涨停价上的已有买单
-    // ==========================================
-    void sync_from_book(const FastOrderBook& book) {
-        book_synced_ = true;
-        uint64_t synced_volume = 0;
-        uint64_t book_bid_volume = book.get_bid_volume_at_price(limit_up_price_);
-        size_t synced_count = 0;
-        book.for_each_bid_order_at_price(limit_up_price_, [this, &synced_volume, &synced_count](uint64_t seq, uint32_t volume) {
-            limit_up_bid_orders_[seq] = static_cast<uint64_t>(volume);
-            synced_volume += static_cast<uint64_t>(volume);
-            ++synced_count;
-        });
-        LOG_M_INFO("{} | synced {} bid orders from OrderBook at limit_up_price={} | synced_volume={} | book_bid_volume={}",
-                   symbol, synced_count,
-                   price_util::format_price_display(limit_up_price_),
-                   synced_volume, book_bid_volume);
-        if (synced_volume != book_bid_volume) {
-            LOG_M_WARNING("{} | sync mismatch at limit_up_price={} | synced_count={} | synced_volume={} | book_bid_volume={}",
-                          symbol, price_util::format_price_display(limit_up_price_),
-                          synced_count, synced_volume, book_bid_volume);
-        }
-    }
-
-    // ==========================================
-    // 检查封单流出触发条件
-    // ==========================================
-    void check_flow_condition(int32_t current_time, const FastOrderBook& book) {
-        if (state_ != State::MONITORING) return;
-
-        // 清理窗口外的条目
-        while (!flow_window_.empty()) {
-            if (time_util::is_within_ms(flow_window_.front().time, current_time, flow_window_ms_)) {
-                break;
-            }
-            flow_window_.pop_front();
-        }
-
-        // 计算窗口内流出总量
-        uint64_t flow_sum = 0;
-        for (const auto& ev : flow_window_) {
-            flow_sum += ev.volume;
-        }
-
-        // 获取当前 OrderBook 涨停价买委托量
-        uint64_t current_bid = book.get_bid_volume_at_price(limit_up_price_);
-
-        // 触发条件: current_bid <= min_bid_volume_ OR flow_sum > current_bid * threshold%
-        if (current_bid <= min_bid_volume_ || flow_sum * 100 > current_bid * flow_threshold_pct_) {
-            LOG_M_INFO("{} | FLOW TRIGGER | flow_sum={} | current_bid={} | ratio={:.1f}% | window_size={}",
-                       symbol, flow_sum, current_bid,
-                       current_bid > 0 ? (flow_sum * 100.0 / current_bid) : 100.0,
-                       flow_window_.size());
-            emit_sell_signal(current_time);
-        }
-    }
-
     // ==========================================
     // 发出卖出信号
     // ==========================================
@@ -341,7 +241,7 @@ private:
         LOG_M_INFO("SELL SIGNAL TRIGGERED: {}", symbol);
         LOG_M_INFO("  - Time: {}", time_util::format_mdtime(trigger_time));
         LOG_M_INFO("  - Price: {}", price_util::format_price_display(limit_up_price_));
-        LOG_M_INFO("  - Flow events: {}", flow_event_count_);
+        LOG_M_INFO("  - Flow events: {}", detector_.flow_event_count());
         LOG_M_INFO("========================================");
 
         TradeSignal signal;

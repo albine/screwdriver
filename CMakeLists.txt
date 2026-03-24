@@ -134,3 +134,23 @@ set_target_properties(test_for_each_bid_order_at_price PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
 )
+
+# ============ test_daban_engine_state ============
+# 最小验证 DabanStrategy 的 engine 状态机重构
+add_executable(test_daban_engine_state
+    test/test_daban_engine_state.cpp
+    src/FastOrderBook.cpp
+)
+target_include_directories(test_daban_engine_state PRIVATE
+    ${CMAKE_SOURCE_DIR}/test
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
+)
+target_link_libraries(test_daban_engine_state
+    Threads::Threads
+    quill::quill
+)
+set_target_properties(test_daban_engine_state PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)

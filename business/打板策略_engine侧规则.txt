@@ -1,0 +1,43 @@
+打板策略 Engine 侧业务规则
+
+Engine 只负责盯行情、发 BUY/SELL 信号，不维护订单状态和持仓。
+
+1. 通用规则
+1.1 9:30:00 之前不允许发信号
+1.2 14:57:00 及以后统一进入 DONE（收盘集合竞价开始）
+
+2. 状态机：SLEEPING ↔ ACTIVE → EXIT_ARMED → DONE
+
+2.1 初始状态为 SLEEPING，SLEEPING 状态不允许触发任何信号
+
+2.2 SLEEPING ↔ ACTIVE 切换（两条路径并行）
+  逐笔路径（on_order/on_transaction）：
+    SLEEPING → ACTIVE：10ms 窗口内有成交价涨幅 > 8%
+    ACTIVE → SLEEPING：10ms 窗口内所有成交价涨幅 < 7%
+  快照保底路径（on_tick）：
+    SLEEPING → ACTIVE：卖一价涨幅 > 8%，或卖一价为 0 且买一价 == 涨停价
+    ACTIVE → SLEEPING：卖一价涨幅 < 7%（卖一价为 0 时不触发休眠）
+  其中涨幅 = 价格 / 昨收价 - 1
+
+2.3 ACTIVE → EXIT_ARMED
+  在 ACTIVE 状态，满足买入触发条件后：
+    构造 BUY_SIGNAL，调用 place_order 发送给 dealer
+    状态切到 EXIT_ARMED
+  BUY_SIGNAL 发出后不再发第二个 BUY_SIGNAL
+  engine 不等待 dealer 确认即进入 EXIT_ARMED
+
+2.4 EXIT_ARMED → DONE
+  满足炸板卖出条件时：
+    构造 SELL_SIGNAL，调用 place_order 发送给 dealer
+    状态切到 DONE
+  收盘时：直接进 DONE
+  DONE 表示 engine 本轮信号已发完，后续执行由 dealer 负责
+
+2.5 进入 EXIT_ARMED 后不再参与 SLEEPING ↔ ACTIVE 切换
+
+3. engine 不负责的事
+  不判断是否已报/已成
+  不判断当前是否有仓位
+  不做撤单/补单/重试
+  不聚合多通道回报
+  不处理人工复位

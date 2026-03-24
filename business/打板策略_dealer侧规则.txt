@@ -1,0 +1,58 @@
+打板策略 Dealer 侧业务规则
+
+Dealer 是执行真相的唯一维护方，负责订单状态、持仓和异常处理。
+
+1. 输入
+  从 engine 接收 BUY_SIGNAL 和 SELL_SIGNAL
+  BUY_SIGNAL = "engine 认为现在应该买入"
+  SELL_SIGNAL = "engine 认为本轮应该退出"（终止性退出意图，不可丢弃）
+
+2. 状态机
+
+  IDLE
+    └─ 收到 BUY_SIGNAL → BUY_WORKING
+
+  BUY_WORKING
+    ├─ BUY 已成 → HOLDING
+    ├─ BUY 废单/错误/超时 → DONE_NO_FILL
+    └─ 收到 SELL_SIGNAL → BUY_WORKING_EXIT_PENDING
+
+  BUY_WORKING_EXIT_PENDING
+    ├─ BUY 已成 → SELL_WORKING（立即卖出）
+    ├─ BUY 废单/错误/超时 → DONE_NO_FILL
+    └─ 收盘 → ERROR
+
+  HOLDING
+    ├─ 收到 SELL_SIGNAL → SELL_WORKING
+    └─ 收盘 → EOD_HANDOFF（隔夜，交日终流程）
+
+  SELL_WORKING
+    ├─ SELL 已成 → DONE
+    ├─ SELL 废单/错误/超时 → ERROR
+    └─ 收盘 → ERROR
+
+  终态：DONE, DONE_NO_FILL, EOD_HANDOFF
+  异常态：ERROR（需人工处理）
+
+3. 关键规则
+
+3.1 SELL_SIGNAL 不可丢弃
+  如果 BUY 尚未成交时收到 SELL_SIGNAL，dealer 必须记住退出意图：
+    BUY 成交后立即卖出
+    BUY 失败后结束本轮周期
+  不能因为"当时没仓位"就忽略 SELL_SIGNAL
+
+3.2 防御性检查
+  收到 BUY_SIGNAL 但已有仓位 → 拒绝并记日志
+  收到 SELL_SIGNAL 但无仓位且无在途买单 → 忽略并记日志
+
+3.3 收盘处理
+  BUY_WORKING / BUY_WORKING_EXIT_PENDING → 尝试撤单，状态不明则进 ERROR
+  HOLDING → EOD_HANDOFF
+  SELL_WORKING → 未成交则进 ERROR
+
+4. 人工操作能力
+  查询执行状态和真实持仓
+  强制取消挂单
+  强制卖出
+  将 ERROR 标记为已处理

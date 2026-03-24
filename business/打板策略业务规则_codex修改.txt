@@ -1,0 +1,33 @@
+打板策略业务规则：
+
+1.术语：下面把我方（打板策略）称为engine，对方（zmq dealer）称为dealer
+
+2.状态机
+2.1 9:30:00之前不允许下单
+2.2 初始状态为sleeping状态，sleeping状态不允许触发信号
+2.3 sleeping - active 切换
+除了现有的on_order/on_transaction切换逻辑，由于开盘前10分钟order/transaction行情延迟，必须在on_tick中做保底逻辑。
+保底逻辑是：当卖一价大于8%时进入active状态，当卖一价小于7%时进入sleeping状态。
+2.4 active状态和买入后状态切换
+买入信号可以由on_order/on_transaction触发，或者由on_tick保底触发。
+在active状态，触发买入信号后，推送给dealer，进入PENDING_BUY状态
+dealer回复已报/已成则进入positioned状态，只有此状态下允许触发卖出信号
+dealer回复废单/错误则回到active状态
+其他dealer回复，停留在PENDING_BUY状态。
+在PENDING_BUY状态停留20秒，进入error_buy状态。进入error_buy状态后，必须人工复位，才能回到active状态
+2.5 positioned状态和卖出后状态切换
+卖出信号可以由on_order/on_transaction触发，或者由on_tick保底触发。
+卖出信号触发后从positioned状态进入PENDING_SELL状态。
+dealer回复已成则进入done状态。
+dealer回复已报/废单/错误则进入error_sell状态。进入error_sell状态后，必须人工复位，才能进入done_with_error状态。
+在PENDING_SELL状态停留20秒，进入error_sell状态。进入error_sell状态后，必须人工复位，才能回到done_with_error状态
+
+2.6 收盘
+sleep或者active进done
+收盘时positioned状态进done，留给eod处理。
+收盘时pending_buy进error_buy，pending_sell进error_sell
+error_buy，error_sell，done，done_with_error不变
+
+2.7 终止状态为done状态或者done_with_error状态。
+
+2.8 进入pending buy后不参与SLEEPING ↔ ACTIVE切换
