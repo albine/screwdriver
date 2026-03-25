@@ -174,7 +174,8 @@ public:
         // 初始化价格信息（从 MDStockStruct 获取）
         if (prev_close_ == 0 && stock.preclosepx > 0) {
             prev_close_ = static_cast<uint32_t>(stock.preclosepx);
-            limit_up_price_ = calculate_limit_up_price(prev_close_);
+            // 涨停价直接从行情获取（maxpx），避免手动计算 10%/20% 的错误
+            limit_up_price_ = static_cast<uint32_t>(stock.maxpx);
             activate_price_ = calculate_threshold_price(prev_close_, activate_threshold_);
             sleep_price_ = calculate_threshold_price(prev_close_, sleep_threshold_);
 
@@ -831,14 +832,6 @@ private:
     }
 
     // ============ 价格计算 ============
-
-    static uint32_t calculate_limit_up_price(uint32_t prev_close) {
-        // 昨收×1.1，四舍五入
-        // 内部格式是 ×10000，所以直接乘以 1.1
-        uint64_t temp = static_cast<uint64_t>(prev_close) * 110;
-        uint32_t result = static_cast<uint32_t>((temp + 50) / 100);
-        return result;
-    }
 
     static uint32_t calculate_threshold_price(uint32_t prev_close, double percent) {
         // 昨收×(1+percent)，四舍五入
