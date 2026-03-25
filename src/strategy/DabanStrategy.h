@@ -59,6 +59,9 @@ private:
     double exit_volume_ratio_ = 0.5;         // 成交量/买一量 阈值（默认50%）
     double exit_min_bid_amount_ = 5000000.0; // 买一金额下限（元，默认500万）
 
+    // ============ 出场冷却 ============
+    int32_t exit_cooldown_ms_ = 3000;        // BUY 后冷却期（ms），期间不检测 SELL
+
     // ============ 延迟过滤 ============
     int64_t max_delay_ms_ = 3000;            // 行情延迟阈值（ms，超过则跳过）
 
@@ -101,6 +104,10 @@ private:
     uint32_t limit_up_price_ = 0;     // 涨停价
     uint32_t activate_price_ = 0;     // 激活阈值价格（涨幅 > 8% 的价格边界）
     uint32_t sleep_price_ = 0;        // 休眠阈值价格
+
+    // ============ tick 成交量增量 ============
+    int64_t prev_total_volume_ = 0;      // 上一个 tick 的 totalvolumetrade
+    int64_t tick_volume_delta_ = 0;      // 当前 tick 的成交量增量
 
     // ============ 周期性任务管理 ============
     int32_t last_tick_time_ = 0;
@@ -181,22 +188,29 @@ public:
         }
 
         // 过滤集合竞价（9:30前不触发任何交易逻辑）
-        if (stock.mdtime < MARKET_OPEN_TIME) return;
+        if (stock.mdtime < MARKET_OPEN_TIME) {
+            prev_total_volume_ = stock.totalvolumetrade;
+            return;
+        }
         if (check_close(stock.mdtime)) return;
+
+        // 计算 tick 间成交量增量
+        tick_volume_delta_ = stock.totalvolumetrade - prev_total_volume_;
+        prev_total_volume_ = stock.totalvolumetrade;
 
         if (state_ == State::SLEEPING || state_ == State::ACTIVE) {
             check_tick_state_switch(stock);
 
             // 入场阶段保底触发（逐笔行情开盘前可能延迟）
             if (state_ == State::ACTIVE && limit_up_price_ > 0 && !signal_triggered_) {
-                // 条件1: 卖一价==涨停价 且 成交量 > 卖一量 * exit_volume_ratio_
+                // 条件1: 卖一价==涨停价 且 tick增量成交量 > 卖一量 * exit_volume_ratio_
                 if (stock.sellpricequeue[0] == static_cast<int64_t>(limit_up_price_) &&
                     stock.sellorderqtyqueue[0] > 0 &&
-                    stock.totalvolumetrade > static_cast<int64_t>(stock.sellorderqtyqueue[0] * exit_volume_ratio_)) {
+                    tick_volume_delta_ > static_cast<int64_t>(stock.sellorderqtyqueue[0] * exit_volume_ratio_)) {
                     LOG_M_INFO("DabanStrategy BACKUP BUY (tick cond1): {} | "
-                              "ask1_price={} == limit_up | volume={} > ask1_qty={}*{:.0f}%",
+                              "ask1_price={} == limit_up | tick_delta={} > ask1_qty={}*{:.0f}%",
                               symbol, stock.sellpricequeue[0],
-                              stock.totalvolumetrade, stock.sellorderqtyqueue[0], exit_volume_ratio_ * 100);
+                              tick_volume_delta_, stock.sellorderqtyqueue[0], exit_volume_ratio_ * 100);
                     emit_buy_signal_from_tick(stock.mdtime);
                 }
                 // 条件2: 卖一价==涨停价 且 卖一金额 <= exit_min_bid_amount_
@@ -224,17 +238,19 @@ public:
 
         // EXIT_ARMED 阶段: tick 级别炸板检测
         // 使用 else if: 防止同一 tick 内 BUY 触发后立即进入 SELL 检测
-        else if (state_ == State::EXIT_ARMED && limit_up_price_ > 0) {
+        // 冷却期内不检测 SELL（防止跨事件立刻卖出）
+        else if (state_ == State::EXIT_ARMED && limit_up_price_ > 0 &&
+                 (stock.mdtime - signal_triggered_time_) >= exit_cooldown_ms_) {
             int64_t bid1_qty = stock.buyorderqtyqueue[0];
             int64_t bid1_price = stock.buypricequeue[0];
             bool at_limit_up = (bid1_price == static_cast<int64_t>(limit_up_price_));
 
-            // 条件1: 在涨停，但成交量 > 买一量 * exit_volume_ratio_（封单被快速消耗）
+            // 条件1: 在涨停，但 tick增量成交量 > 买一量 * exit_volume_ratio_（封单被快速消耗）
             if (at_limit_up && bid1_qty > 0 &&
-                stock.totalvolumetrade > static_cast<int64_t>(bid1_qty * exit_volume_ratio_)) {
+                tick_volume_delta_ > static_cast<int64_t>(bid1_qty * exit_volume_ratio_)) {
                 LOG_M_INFO("DabanStrategy BREAK (tick cond1): {} | "
-                          "volume={} > bid1_qty={}*{:.0f}%",
-                          symbol, stock.totalvolumetrade, bid1_qty, exit_volume_ratio_ * 100);
+                          "tick_delta={} > bid1_qty={}*{:.0f}%",
+                          symbol, tick_volume_delta_, bid1_qty, exit_volume_ratio_ * 100);
                 emit_sell_signal(stock.mdtime);
             }
             // 条件2: 在涨停，但买一金额 <= exit_min_bid_amount_
@@ -278,7 +294,9 @@ public:
                 flow_detector_.sync_from_book(book, limit_up_price_, symbol);
             }
             flow_detector_.on_order(order, limit_up_price_);
-            if (flow_detector_.check(current_time, book, limit_up_price_)) {
+            // 冷却期内只喂数据，不检测卖出
+            if ((current_time - signal_triggered_time_) >= exit_cooldown_ms_ &&
+                flow_detector_.check(current_time, book, limit_up_price_)) {
                 uint64_t current_bid = book.get_bid_volume_at_price(limit_up_price_);
                 uint64_t flow_sum = flow_detector_.get_flow_sum(current_time);
                 LOG_M_INFO("DabanStrategy FLOW TRIGGER: {} | flow_sum={} | current_bid={} | ratio={:.1f}%",
@@ -324,7 +342,9 @@ public:
                 flow_detector_.sync_from_book(book, limit_up_price_, symbol);
             }
             flow_detector_.on_transaction(txn, limit_up_price_);
-            if (flow_detector_.check(current_time, book, limit_up_price_)) {
+            // 冷却期内只喂数据，不检测卖出
+            if ((current_time - signal_triggered_time_) >= exit_cooldown_ms_ &&
+                flow_detector_.check(current_time, book, limit_up_price_)) {
                 uint64_t current_bid = book.get_bid_volume_at_price(limit_up_price_);
                 uint64_t flow_sum = flow_detector_.get_flow_sum(current_time);
                 LOG_M_INFO("DabanStrategy FLOW TRIGGER: {} | flow_sum={} | current_bid={} | ratio={:.1f}%",
