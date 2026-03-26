@@ -147,7 +147,7 @@ sync_strategy_config() {
         ["data/config/linux/99999/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer2.conf"
         ["data/config/linux/ccyf1/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer3.conf"
         ["data/config/linux/qgyf1/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer4.conf"
-        ["data/config/linux/ndf1/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer5.conf"
+        ["data/config/linux/cx/strategy_config.csv"]="${CONFIG_DIR}/strategy_live_dealer5.conf"
     )
 
     # Process each config file
